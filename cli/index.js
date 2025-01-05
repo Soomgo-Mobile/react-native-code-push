@@ -32,6 +32,11 @@ require('./commands/createHistoryCommand');
  */
 require('./commands/updateHistoryCommand');
 
+/**
+ * npx code-push release
+ */
+require('./commands/releaseCommand');
+
 require('./commands/uploadCommand');
 
 program.parse();

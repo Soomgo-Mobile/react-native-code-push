@@ -83,6 +83,9 @@
     "typescript-eslint": "^8.11.0",
     "yazl": "^3.3.1"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "rnpm": {
     "android": {
       "packageInstance": "new CodePush(getResources().getString(R.string.CodePushDeploymentKey), getApplicationContext(), BuildConfig.DEBUG)"

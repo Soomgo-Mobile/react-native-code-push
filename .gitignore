@@ -192,3 +192,6 @@ Examples/testapp_rn
 
 # Android debug build files (conflict ignoring #Visual Studio files)
 !android/app/src/debug/
+
+# prevent CLI code ignored (ignored by "[Rr]elease*/")
+!cli/commands/releaseCommand/
