@@ -13,20 +13,6 @@ export interface UpdateCheckRequest {
     package_hash?: string;
 }
 
-type SortingMethod = (a: ReleaseVersion, b: ReleaseVersion) => number;
-
-export abstract class BaseVersioning {
-    constructor(releaseHistory: ReleaseHistoryInterface, sortingMethod?: SortingMethod)
-    protected originalReleaseHistory: ReleaseHistoryInterface;
-    protected sortedReleaseHistory: [ReleaseVersion, ReleaseInfo][];
-    protected get sortedMandatoryReleaseHistory(): [ReleaseVersion, ReleaseInfo][];
-    protected get sortedEnabledReleaseHistory(): [ReleaseVersion, ReleaseInfo][];
-    protected shouldRollback: (runtimeVersion: ReleaseVersion) => boolean;
-    findLatestRelease: (releaseHistory: ReleaseHistoryInterface) => [ReleaseVersion, ReleaseInfo];
-    checkIsMandatory: (runtimeVersion: ReleaseVersion) => boolean;
-    shouldRollbackToBinary: (runtimeVersion: ReleaseVersion) => boolean;
-}
-
 /**
  * Alias for a string representing a released CodePush update version.
  */
@@ -62,31 +48,7 @@ export interface UpdateCheckResponse {
     is_mandatory?: boolean;
 }
 
-interface CodePushSharedOptions {
-    /**
-     * Specifies the location of the update's file. It should include the http scheme and host.
-     * It is used for self-hosting.
-     * Defaults to AppCenter storage.
-     */
-    bundleHost?: string;
-    /**
-     * Specifies the version of the app that is currently running.
-     * It can be the version from package.json (or another source).
-     */
-    runtimeVersion: string;
-    /**
-     * Specifies versioning policy.
-     * Defaults to `SemverVersioning`
-     */
-    versioning?: typeof BaseVersioning;
-}
-
-export interface CodePushConfigFile extends CodePushSharedOptions {
-    awsCredential: string;
-    // TODO: More fields
-}
-
-export interface CodePushOptions extends CodePushSharedOptions, SyncOptions {
+export interface CodePushOptions extends SyncOptions {
     /**
      * Specifies when you would like to synchronize updates with the CodePush server.
      * Defaults to codePush.CheckFrequency.ON_APP_START.
@@ -405,12 +367,6 @@ declare namespace CodePush {
      */
     function sync(options?: SyncOptions, syncStatusChangedCallback?: SyncStatusChangedCallback, downloadProgressCallback?: DownloadProgressCallback, handleBinaryVersionMismatchCallback?: HandleBinaryVersionMismatchCallback): Promise<SyncStatus>;
 
-    const Versioning: {
-        BASE: typeof BaseVersioning,
-        SEMVER: typeof BaseVersioning,
-        INCREMENTAL: typeof BaseVersioning,
-    };
-
     /**
      * Indicates when you would like an installed update to actually be applied.
      */
@@ -555,3 +511,62 @@ declare namespace CodePush {
 }
 
 export default CodePush;
+
+/**
+ * Interface for the config file required for `npx code-push` CLI operation.
+ *
+ * Please refer to the example code for implementation guidance.
+ */
+export interface CliConfigInterface {
+    /**
+     * Interface that must be implemented to upload CodePush bundle files to an arbitrary infrastructure.
+     *
+     * Used in the `release` command, and must return a URL that allows downloading the file after the upload is completed.
+     * The URL is recorded in the ReleaseHistory, and the CodePush runtime library downloads the bundle file from this address.
+     *
+     * @param source The relative path of the generated bundle file. (e.g., ./2f156929-e474-46cd-9c9c-27a841043d98)
+     * @param platform The target platform of the bundle file. This is the string passed when executing the CLI command. ('ios'/'android')
+     * @param identifier An additional identifier string. This can be used to distinguish execution environments by incorporating it into the upload path or file name. This string is passed when executing the CLI command.
+     */
+    bundleUploader: (
+        source: string,
+        platform: "ios" | "android",
+        identifier?: string,
+    ) => Promise<{downloadUrl: string}>;
+
+    /**
+     * Interface that must be implemented to retrieve ReleaseHistory information.
+     *
+     * Use `fetch`, `axios`, or similar methods to fetch the data and return it.
+     *
+     * @param targetBinaryVersion The target binary app version for which ReleaseHistory information is retrieved. This string is passed when executing the CLI command. (e.g., '1.0.0')
+     * @param platform The target platform for which the information is retrieved. This string is passed when executing the CLI command. ('ios'/'android')
+     * @param identifier An additional identifier string. This string is passed when executing the CLI command.
+     */
+    getReleaseHistory: (
+        targetBinaryVersion: string,
+        platform: "ios" | "android",
+        identifier?: string,
+    ) => Promise<ReleaseHistoryInterface>;
+
+    /**
+     * Interface that must be implemented to create or update ReleaseHistory information.
+     *
+     * Used in the `create-history`, `release`, and `update-history` commands.
+     * The created or modified object and the JSON file path containing the result of the command execution are provided.
+     * Implement this function to upload the file or call a REST API to update the release history.
+     *
+     * @param targetBinaryVersion The target binary app version for the ReleaseHistory. This string is passed when executing the CLI command. (e.g., '1.0.0')
+     * @param jsonFilePath The absolute path to a JSON file following the `ReleaseHistoryInterface` structure. The file is created in the project's root directory and deleted when the command execution completes.
+     * @param releaseInfo A plain object following the `ReleaseHistoryInterface` structure.
+     * @param platform The target platform. This string is passed when executing the CLI command. ('ios'/'android')
+     * @param identifier An additional identifier string. This string is passed when executing the CLI command.
+     */
+    setReleaseHistory: (
+        targetBinaryVersion: string,
+        jsonFilePath: string,
+        releaseInfo: ReleaseHistoryInterface,
+        platform: "ios" | "android",
+        identifier?: string,
+    ) => Promise<void>;
+}

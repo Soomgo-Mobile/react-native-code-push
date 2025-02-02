@@ -3,8 +3,6 @@ import { AppState, Platform } from "react-native";
 import log from "./logging";
 import hoistStatics from 'hoist-non-react-statics';
 import { SemverVersioning } from './versioning/SemverVersioning'
-import { IncrementalVersioning } from "./versioning/IncrementalVersioning";
-import { BaseVersioning } from "./versioning/BaseVersioning";
 
 let NativeCodePush = require("react-native").NativeModules.CodePush;
 const PackageMixins = require("./package-mixins")(NativeCodePush);
@@ -70,15 +68,12 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
 
       /**
        * `runtimeVersion`
-       * (In our case, it's a package.json version.)
-       * @type {string}
+       * The version of currently running CodePush update. (It can be undefined if the app is running without CodePush update.)
+       * @type {string|undefined}
        */
-      const runtimeVersion = sharedCodePushOptions.runtimeVersion;
+      const runtimeVersion = updateRequest.label;
 
-      /**
-       * @type {BaseVersioning}
-       */
-      const versioning = new sharedCodePushOptions.versioning(releaseHistory);
+      const versioning = new SemverVersioning(releaseHistory);
 
       const shouldRollbackToBinary = versioning.shouldRollbackToBinary(runtimeVersion)
       if (shouldRollbackToBinary) {
@@ -88,7 +83,7 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
         CodePush.restartApp();
       }
 
-      const [, latestReleaseInfo] = versioning.findLatestRelease();
+      const [latestVersion, latestReleaseInfo] = versioning.findLatestRelease();
       const isMandatory = versioning.checkIsMandatory(runtimeVersion);
 
       /**
@@ -106,8 +101,11 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
         // 조회한 업데이트가 현재 바이너리를 타겟하는가? 를 API 서버에서 판단한 다음, 해당 된다면 런타임 바이너리 버전을 그대로 돌려주던 것임.
         // 우리는 updateChecker 조회 결과가 넘어왔다면 해당 정보는 현재 런타임 바이너리에 호환됨을 전제로 하고있음.
         target_binary_range: updateRequest.app_version,
-        // 현재는 텔레메트리 외에 유의미한 사용처가 없음.
-        label: runtimeVersion,
+        /**
+         * Retrieve the update version from the ReleaseHistory and store it in the label.
+         * This information can be accessed at runtime through the CodePush bundle metadata.
+         */
+        label: latestVersion,
         // false 전달해야 정상 동작함
         update_app_version: false,
         // 그닥 쓸모 없음
@@ -141,18 +139,11 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
         downloadUrl: updateInfo.download_url ?? '',
       };
     } catch (error) {
-      log(`An error has occurred at update checker : ${error.stack}`);
+      log(`An error has occurred at update checker :`, error);
       // update will not happen
       return undefined;
     }
   })();
-
-  if (sharedCodePushOptions.bundleHost && update) {
-    const fileName = typeof update.downloadUrl === 'string' ? update.downloadUrl.split('/').pop() : null;
-    if (fileName) {
-      update.downloadUrl = sharedCodePushOptions.bundleHost + fileName;
-    }
-  }
 
   /*
    * There are four cases where checkForUpdate will resolve to null:
@@ -572,37 +563,11 @@ let CodePush;
 /**
  * If you pass options once when calling `codePushify`, they will be shared with related functions.
  * @type {{
- *   bundleHost: string | undefined,
- *   setBundleHost(host: string): void,
  *   releaseHistoryFetcher: releaseHistoryFetcher | undefined,
  *   setReleaseHistoryFetcher(releaseHistoryFetcherFunction: releaseHistoryFetcher): void,
- *   runtimeVersion: string,
- *   setRuntimeVersion(version: string): void,
- *   versioning: Versioning
- *   setVersioning(versioning: Versioning): void
  * }}
  */
 const sharedCodePushOptions = {
-  bundleHost: undefined,
-  setBundleHost(host) {
-    if (host && typeof host !== 'string') throw new Error('pass a string to setBundleHost');
-    if (typeof host === 'string' && host.slice(-1) !== '/') {
-      host += '/';
-    }
-    this.bundleHost = host;
-  },
-  runtimeVersion: undefined,
-  setRuntimeVersion(version) {
-    // TODO: validation Semver / Incremental Format
-    this.runtimeVersion = version;
-  },
-  versioning: undefined,
-  setVersioning(versioning) {
-    if (!(versioning instanceof BaseVersioning)) {
-      throw new Error('Versioning object must inherit class `BaseVersioning`')
-    }
-    this.versioning = versioning
-  },
   releaseHistoryFetcher: undefined,
   setReleaseHistoryFetcher(releaseHistoryFetcherFunction) {
     if (!releaseHistoryFetcherFunction || typeof releaseHistoryFetcherFunction !== 'function') throw new Error('pass a function to releaseHistoryFetcher');
@@ -630,9 +595,6 @@ function codePushify(options = {}) {
     );
   }
 
-  sharedCodePushOptions.setVersioning(options.versioning ?? SemverVersioning);
-  sharedCodePushOptions.setBundleHost(options.bundleHost);
-  sharedCodePushOptions.setRuntimeVersion(options.runtimeVersion);
   sharedCodePushOptions.setReleaseHistoryFetcher(options.releaseHistoryFetcher);
 
   const decorator = (RootComponent) => {
@@ -766,11 +728,6 @@ if (NativeCodePush) {
       delayInHours: 24,
       maxRetryAttempts: 1
     },
-    Versioning: {
-      BASE: BaseVersioning,
-      SEMVER: SemverVersioning,
-      INCREMENTAL: IncrementalVersioning,
-    }
   });
 } else {
   log("The CodePush module doesn't appear to be properly installed. Please double-check that everything is setup correctly.");

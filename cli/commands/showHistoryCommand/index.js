@@ -1,13 +1,12 @@
 const { program, Option } = require("commander");
 const { findAndReadConfigFile } = require("../../utils/fsUtils");
-const { createReleaseHistory } = require("./createReleaseHistory");
 
-program.command('create-history')
-    .description('Creates a new release history for the binary app.')
-    .requiredOption('-b, --binary-version <string>', '(Required) The target binary version')
+program.command('show-history')
+    .description('Retrieves and prints the release history of a specific binary version.\n`getReleaseHistory` function should be implemented in the config file.')
+    .requiredOption('-b, --binary-version <string>', '(Required) The target binary version for retrieving the release history.')
     .addOption(new Option('-p, --platform <type>', 'platform').choices(['ios', 'android']).default('ios'))
     .option('-i, --identifier <string>', 'reserved characters to distinguish the release.')
-    .option('-c, --config <path>', 'set config file name (JS/TS)', 'code-push.config.ts')
+    .option('-c, --config <path>', 'configuration file name (JS/TS)', 'code-push.config.ts')
     /**
      * @param {Object} options
      * @param {string} options.binaryVersion
@@ -19,10 +18,11 @@ program.command('create-history')
     .action(async (options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
-        await createReleaseHistory(
+        const releaseHistory = await config.getReleaseHistory(
             options.binaryVersion,
-            config.setReleaseHistory,
             options.platform,
             options.identifier
         );
+
+        console.log(JSON.stringify(releaseHistory, null, 2));
     });

@@ -2,7 +2,7 @@ const { program, Option } = require("commander");
 const { bundleCodePush } = require("./bundleCodePush");
 
 program.command('bundle')
-    .description('Creating CodePush bundle file. (assumes that Hermes is enabled.)')
+    .description('Creates a CodePush bundle file (assumes Hermes is enabled).')
     .addOption(new Option('-p, --platform <type>', 'platform').choices(['ios', 'android']).default('ios'))
     .option('-o, --output-path <string>', 'path to output root directory', 'build')
     .option('-e, --entry-file <string>', 'path to JS/TS entry file', 'index.ts')

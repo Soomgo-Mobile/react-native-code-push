@@ -58,33 +58,42 @@ class BaseVersioning {
 
   /**
    * check if the update is mandatory
-   * @param {ReleaseVersion} runtimeVersion
+   * @param {ReleaseVersion|undefined} runtimeVersion
    * @return {boolean}
    */
   checkIsMandatory(runtimeVersion) {
+    if (this.shouldRollback(runtimeVersion)) {
+      // rollback is always mandatory
+      return true;
+    }
+
     if (this.sortedMandatoryReleaseHistory.length === 0) {
       return false;
     }
 
-    const shouldRollback = this.shouldRollback(runtimeVersion);
-    const [latestMandatoryVersion, _] = this.sortedMandatoryReleaseHistory[0];
-    const [larger] = [latestMandatoryVersion, runtimeVersion].sort(
-      this.sortingMethod
-    );
+    if (!runtimeVersion) {
+      // This means that there is at least one mandatory update, but the update has not been installed yet.
+      // So, the update is mandatory.
+      return true;
+    }
 
-    return (
-      shouldRollback ||
-      (runtimeVersion !== latestMandatoryVersion &&
-        larger === latestMandatoryVersion)
-    );
+    const [latestMandatoryVersion, _] = this.sortedMandatoryReleaseHistory[0];
+    const [larger] = [latestMandatoryVersion, runtimeVersion].sort(this.sortingMethod);
+
+    return runtimeVersion !== latestMandatoryVersion && larger === latestMandatoryVersion;
   }
 
   /**
    * determine whether to rollback and execute it
-   * @param {ReleaseVersion} runtimeVersion
+   * @param {ReleaseVersion|undefined} runtimeVersion
    * @return {boolean}
    */
   shouldRollback(runtimeVersion) {
+    if (!runtimeVersion) {
+      // Rollback is not possible because no updates have been installed.
+      return false;
+    }
+
     const [latestRelease] = this.findLatestRelease();
     const [larger] = [latestRelease, runtimeVersion].sort(this.sortingMethod);
 
@@ -98,15 +107,20 @@ class BaseVersioning {
    * @return {boolean}
    */
   shouldRollbackToBinary(runtimeVersion) {
+    if (!runtimeVersion) {
+      // Rollback is not possible because no updates have been installed.
+      return false;
+    }
+
     const [latestReleaseVersion] = this.findLatestRelease();
-    const [firstMajorRelease] = this.sortedReleaseHistory.at(-1);
+    const [binaryAppVersion] = this.sortedReleaseHistory.at(-1);
 
     return (
       runtimeVersion !== latestReleaseVersion &&
       this.shouldRollback(runtimeVersion) &&
-      latestReleaseVersion === firstMajorRelease
+      latestReleaseVersion === binaryAppVersion
     );
   }
 }
 
-module.exports = { BaseVersioning };
+module.exports = { BaseVersioning: BaseVersioning };

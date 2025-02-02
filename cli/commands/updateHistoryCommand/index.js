@@ -3,10 +3,11 @@ const { findAndReadConfigFile } = require("../../utils/fsUtils");
 const { updateReleaseHistory } = require("./updateReleaseHistory");
 
 program.command('update-history')
-    .requiredOption('-v, --app-version <string>', 'The app version for which update information is to be modified.')
-    .requiredOption('-b, --binary-version <string>', 'The target binary version of the app for which update information is to be modified.')
+    .description('Updates the release history for a specific binary version.\n`getReleaseHistory`, `setReleaseHistory` functions should be implemented in the config file.')
+    .requiredOption('-v, --app-version <string>', '(Required) The app version for which update information is to be modified.')
+    .requiredOption('-b, --binary-version <string>', '(Required) The target binary version of the app for which update information is to be modified.')
     .addOption(new Option('-p, --platform <type>', 'platform').choices(['ios', 'android']).default('ios'))
-    .option('-i, --identifier <string>', 'additional characters to identify the release')
+    .option('-i, --identifier <string>', 'reserved characters to distinguish the release.')
     .option('-c, --config <path>', 'set config file name (JS/TS)', 'code-push.config.ts')
     .option('-m, --mandatory <bool>', 'make the release to be mandatory', parseBoolean, undefined)
     .option('-e, --enable <bool>', 'make the release to be enabled', parseBoolean, undefined)

@@ -57,10 +57,10 @@ describe('Semver Versioning Test', () => {
                 const RELEASED_BUNDLES = {
                     '1.0.0': FIRST_RELEASE_INFO,
                 };
-        
+
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory(RUNTIME_VERSION)).toBe(false);
             });
-        
+
             it('should consider not-mandatory when latest version is running', () => {
                 const RUNTIME_VERSION = '1.1.1';
                 const RELEASED_BUNDLES = {
@@ -68,7 +68,7 @@ describe('Semver Versioning Test', () => {
                     '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
                     '1.1.1': { enabled: true, mandatory: true, ...MOCK_INFOS },
                 };
-        
+
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory(RUNTIME_VERSION)).toBe(false);
             });
 
@@ -78,7 +78,7 @@ describe('Semver Versioning Test', () => {
                     '1.0.0': FIRST_RELEASE_INFO,
                     '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
                 };
-        
+
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory(RUNTIME_VERSION)).toBe(false);
             });
 
@@ -89,7 +89,7 @@ describe('Semver Versioning Test', () => {
                     '1.0.1': { enabled: true, mandatory: true, ...MOCK_INFOS },
                     '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
                 };
-        
+
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory(RUNTIME_VERSION)).toBe(false);
             });
         })
@@ -101,7 +101,7 @@ describe('Semver Versioning Test', () => {
                     '1.0.0': FIRST_RELEASE_INFO,
                     '1.0.1': { enabled: true, mandatory: true, ...MOCK_INFOS },
                 };
-        
+
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory(RUNTIME_VERSION)).toBe(true);
             });
 
@@ -121,8 +121,9 @@ describe('Semver Versioning Test', () => {
                     '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
                 };
                 const currentVersion = '1.2.0'
-    
+
                 expect(new SemverVersioning(RELEASED_BUNDLES).shouldRollback(currentVersion)).toBe(true)
+                expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory(currentVersion)).toBe(true)
             })
         })
 
