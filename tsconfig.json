@@ -10,5 +10,9 @@
         "rootDir": "test",
         "outDir": "bin",
         "removeComments": true
-    }
+    },
+    "exclude": [
+        "Examples/CodePushDemoApp",
+        "code-push.config.example.*"
+    ]
 }
