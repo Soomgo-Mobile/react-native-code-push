@@ -2,12 +2,10 @@ export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 export type SyncStatusChangedCallback = (status: CodePush.SyncStatus) => void;
 export type HandleBinaryVersionMismatchCallback = (update: RemotePackage) => void;
 
-// from code-push SDK
 export interface UpdateCheckRequest {
     /** The native version, not in package.json. */
     app_version: string;
     client_unique_id?: string;
-    deployment_key: string;
     is_companion?: boolean;
     label?: string;
     package_hash?: string;

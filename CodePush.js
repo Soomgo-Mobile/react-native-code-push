@@ -7,7 +7,9 @@ import { SemverVersioning } from './versioning/SemverVersioning'
 let NativeCodePush = require("react-native").NativeModules.CodePush;
 const PackageMixins = require("./package-mixins")(NativeCodePush);
 
-async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchCallback = null) {
+const DEPLOYMENT_KEY = 'deprecated_deployment_key';
+
+async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
   /*
    * Before we ask the server if an update exists, we
    * need to retrieve three pieces of information from the
@@ -18,14 +20,6 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
    * different from the CodePush update they have already installed.
    */
   const nativeConfig = await getConfiguration();
-  /*
-   * If a deployment key was explicitly provided,
-   * then let's override the one we retrieved
-   * from the native-side of the app. This allows
-   * dynamically "redirecting" end-users at different
-   * deployments (e.g. an early access deployment for insiders).
-   */
-  const config = deploymentKey ? { ...nativeConfig, ...{ deploymentKey } } : nativeConfig;
 
   // Use dynamically overridden getCurrentPackage() during tests.
   const localPackage = await module.exports.getCurrentPackage();
@@ -42,22 +36,20 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
   if (localPackage) {
     queryPackage = localPackage;
   } else {
-    queryPackage = { appVersion: config.appVersion };
-    if (Platform.OS === "ios" && config.packageHash) {
-      queryPackage.packageHash = config.packageHash;
+    queryPackage = { appVersion: nativeConfig.appVersion };
+    if (Platform.OS === "ios" && nativeConfig.packageHash) {
+      queryPackage.packageHash = nativeConfig.packageHash;
     }
   }
 
   const update = await (async () => {
     try {
-      // refer to `UpdateCheckRequest` type inside code-push SDK
       const updateRequest = {
-        deployment_key: config.deploymentKey,
         app_version: queryPackage.appVersion,
         package_hash: queryPackage.packageHash,
-        is_companion: config.ignoreAppVersion,
+        is_companion: nativeConfig.ignoreAppVersion,
         label: queryPackage.label,
-        client_unique_id: config.clientUniqueId,
+        client_unique_id: nativeConfig.clientUniqueId,
       };
 
       /**
@@ -68,7 +60,7 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
       if (updateChecker) {
         const { update_info } = await updateChecker(updateRequest);
 
-        return mapToRemotePackageMetadata(update_info, config.deploymentKey);
+        return mapToRemotePackageMetadata(update_info);
       } else {
         /**
          * `releaseHistory`
@@ -128,7 +120,7 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
           should_run_binary_version: false,
         }
 
-        return mapToRemotePackageMetadata(updateInfo, config.deploymentKey);
+        return mapToRemotePackageMetadata(updateInfo);
       }
     } catch (error) {
       log(`An error has occurred at update checker :`);
@@ -158,7 +150,7 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
    */
   if (!update || update.updateAppVersion ||
       localPackage && (update.packageHash === localPackage.packageHash) ||
-      (!localPackage || localPackage._isDebugOnly) && config.packageHash === update.packageHash) {
+      (!localPackage || localPackage._isDebugOnly) && nativeConfig.packageHash === update.packageHash) {
     if (update && update.updateAppVersion) {
       log("An update is available but it is not targeting the binary version of your app.");
       if (handleBinaryVersionMismatchCallback && typeof handleBinaryVersionMismatchCallback === "function") {
@@ -170,17 +162,15 @@ async function checkForUpdate(deploymentKey = null, handleBinaryVersionMismatchC
   } else {
     const remotePackage = { ...update, ...PackageMixins.remote() };
     remotePackage.failedInstall = await NativeCodePush.isFailedUpdate(remotePackage.packageHash);
-    remotePackage.deploymentKey = deploymentKey || nativeConfig.deploymentKey;
     return remotePackage;
   }
 }
 
 /**
  * @param updateInfo {UpdateCheckResponse}
- * @param deploymentKey {string}
  * @return {RemotePackage | null}
  */
-function mapToRemotePackageMetadata(updateInfo, deploymentKey) {
+function mapToRemotePackageMetadata(updateInfo) {
   if (!updateInfo) {
     return null;
   } else if (!updateInfo.download_url) {
@@ -192,7 +182,7 @@ function mapToRemotePackageMetadata(updateInfo, deploymentKey) {
 
   // refer to `RemotePackage` type inside code-push SDK
   return {
-    deploymentKey: deploymentKey,
+    deploymentKey: DEPLOYMENT_KEY,
     description: updateInfo.description ?? '',
     label: updateInfo.label ?? '',
     appVersion: updateInfo.target_binary_range ?? '',
@@ -253,15 +243,9 @@ async function notifyApplicationReadyInternal() {
 }
 
 async function tryReportStatus(statusReport, retryOnAppResume) {
-  const config = await getConfiguration();
-
   try {
     if (statusReport.appVersion) {
       log(`Reporting binary update (${statusReport.appVersion})`);
-
-      if (!config.deploymentKey) {
-        throw new Error("Deployment key is missed");
-      }
     } else {
       const label = statusReport.package.label;
       if (statusReport.status === "DeploymentSucceeded") {
@@ -275,6 +259,7 @@ async function tryReportStatus(statusReport, retryOnAppResume) {
     NativeCodePush.recordStatusReported(statusReport);
     retryOnAppResume && retryOnAppResume.remove();
   } catch (e) {
+    log(`${e}`)
     log(`Report status failed: ${JSON.stringify(statusReport)}`);
     NativeCodePush.saveStatusReportForRetry(statusReport);
     // Try again when the app resumes
@@ -480,7 +465,7 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     await CodePush.notifyApplicationReady();
 
     syncStatusChangeCallback(CodePush.SyncStatus.CHECKING_FOR_UPDATE);
-    const remotePackage = await checkForUpdate(syncOptions.deploymentKey, handleBinaryVersionMismatchCallback);
+    const remotePackage = await checkForUpdate(handleBinaryVersionMismatchCallback);
 
     const doDownloadAndInstall = async () => {
       syncStatusChangeCallback(CodePush.SyncStatus.DOWNLOADING_PACKAGE);
