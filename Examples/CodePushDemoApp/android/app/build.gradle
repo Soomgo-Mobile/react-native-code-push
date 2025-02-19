@@ -83,7 +83,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
     }
     signingConfigs {
         debug {
@@ -117,3 +117,5 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush.gradle"

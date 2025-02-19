@@ -1,5 +1,11 @@
 PODS:
+  - Base64 (1.1.2)
   - boost (1.84.0)
+  - CodePush (9.0.0.4):
+    - Base64 (~> 1.1)
+    - JWT (~> 3.0.0-beta.12)
+    - React-Core
+    - SSZipArchive (~> 2.2.2)
   - DoubleConversion (1.1.6)
   - fast_float (6.1.4)
   - FBLazyVector (0.77.1)
@@ -8,6 +14,8 @@ PODS:
   - hermes-engine (0.77.0):
     - hermes-engine/Pre-built (= 0.77.0)
   - hermes-engine/Pre-built (0.77.0)
+  - JWT (3.0.0-beta.14):
+    - Base64 (~> 1.1.2)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -1500,10 +1508,12 @@ PODS:
     - React-perflogger (= 0.77.1)
     - React-utils (= 0.77.1)
   - SocketRocket (0.7.1)
+  - SSZipArchive (2.2.3)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
+  - "CodePush (from `../node_modules/@bravemobile/react-native-code-push`)"
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
@@ -1574,11 +1584,16 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - Base64
+    - JWT
     - SocketRocket
+    - SSZipArchive
 
 EXTERNAL SOURCES:
   boost:
     :podspec: "../node_modules/react-native/third-party-podspecs/boost.podspec"
+  CodePush:
+    :path: "../node_modules/@bravemobile/react-native-code-push"
   DoubleConversion:
     :podspec: "../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec"
   fast_float:
@@ -1712,13 +1727,16 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  Base64: cecfb41a004124895a7bcee567a89bae5a89d49b
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
+  CodePush: 3e821758507fccf63f1ce571e1dcd97386213298
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: 79c4b7ec726447eec5f8593379466bd9fde1aa14
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: eb93e2f488219332457c3c4eafd2738ddc7e80b8
   hermes-engine: 1f783c3d53940aed0d2c84586f0b7a85ab7827ef
+  JWT: ef71dfb03e1f842081e64dc42eef0e164f35d251
   RCT-Folly: 36fe2295e44b10d831836cc0d1daec5f8abcf809
   RCTDeprecation: 664055db806cce35c3c1b43c84414dd66e117ae6
   RCTRequired: dc9a83fa1012054f94430d210337ca3a1afe6fc0
@@ -1778,6 +1796,7 @@ SPEC CHECKSUMS:
   ReactCodegen: 8c6710db5ccee603fa0475978465b606abe1ed77
   ReactCommon: 8da6c58517fa560d0fc7a9da83093457303ae9f8
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  SSZipArchive: 62d4947b08730e4cda640473b0066d209ff033c9
   Yoga: 2957d0e744897870b5a377f26522e3f08cadd7ac
 
 PODFILE CHECKSUM: fde46685cfbbaf765ff8a1df9fe5a6dd0e38bbd5

@@ -8,6 +8,7 @@
 import React from "react";
 import type {PropsWithChildren} from "react";
 import {
+  Button,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -16,14 +17,12 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import CodePush, {
+  ReleaseHistoryInterface,
+} from "@bravemobile/react-native-code-push";
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from "react-native/Libraries/NewAppScreen";
+import {Colors, Header} from "react-native/Libraries/NewAppScreen";
+import SyncStatus = CodePush.SyncStatus;
 
 type SectionProps = PropsWithChildren<{
   title: string;
@@ -77,19 +76,17 @@ function App(): React.JSX.Element {
             backgroundColor: isDarkMode ? Colors.black : Colors.white,
           }}>
           <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
+            <Button
+              title={"Check for updates"}
+              onPress={async () => {
+                const result = await CodePush.sync();
+                const status = Object.entries(SyncStatus).find(
+                  ([key, value]) => value === result,
+                );
+                console.log("SyncStatus", status?.at(0));
+              }}
+            />
           </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -115,4 +112,19 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+export default CodePush({
+  checkFrequency: CodePush.CheckFrequency.MANUAL,
+  releaseHistoryFetcher: async (
+    updateRequest,
+  ): Promise<ReleaseHistoryInterface> => {
+    console.log("updateRequest", updateRequest);
+    return {
+      "1.0.0": {
+        enabled: true,
+        mandatory: false,
+        downloadUrl: "",
+        packageHash: "",
+      },
+    };
+  },
+})(App);
