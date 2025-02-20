@@ -19,10 +19,12 @@ import {
 } from "react-native";
 import CodePush, {
   ReleaseHistoryInterface,
+  UpdateCheckRequest,
 } from "@bravemobile/react-native-code-push";
+import axios from "axios";
+import {getPlatform, trackError} from "./utils";
 
 import {Colors, Header} from "react-native/Libraries/NewAppScreen";
-import SyncStatus = CodePush.SyncStatus;
 
 type SectionProps = PropsWithChildren<{
   title: string;
@@ -80,7 +82,7 @@ function App(): React.JSX.Element {
               title={"Check for updates"}
               onPress={async () => {
                 const result = await CodePush.sync();
-                const status = Object.entries(SyncStatus).find(
+                const status = Object.entries(CodePush.SyncStatus).find(
                   ([key, value]) => value === result,
                 );
                 console.log("SyncStatus", status?.at(0));
@@ -112,19 +114,36 @@ const styles = StyleSheet.create({
   },
 });
 
+const CDN_HOST = "https://your.cdn.provider.com";
+
+async function releaseHistoryFetcher(
+  updateRequest: UpdateCheckRequest,
+): Promise<ReleaseHistoryInterface> {
+  const identifier = "staging";
+  const jsonFileName = `${updateRequest.app_version}.json`;
+  try {
+    // ❗️ URL of release history JSON file uploaded using `npx code-push` command. (code-push.config.ts)
+    const releaseHistoryUrl = `${CDN_HOST}/histories/${getPlatform()}/${identifier}/${jsonFileName}`;
+
+    const {data: releaseHistory} = await axios.get<ReleaseHistoryInterface>(
+      releaseHistoryUrl,
+      {
+        headers: {
+          Accept: "application/json",
+          "Cache-Control": "no-cache",
+        },
+      },
+    );
+
+    console.log("releaseHistory response", releaseHistory);
+    return releaseHistory;
+  } catch (error: unknown) {
+    trackError(error);
+    throw error;
+  }
+}
+
 export default CodePush({
   checkFrequency: CodePush.CheckFrequency.MANUAL,
-  releaseHistoryFetcher: async (
-    updateRequest,
-  ): Promise<ReleaseHistoryInterface> => {
-    console.log("updateRequest", updateRequest);
-    return {
-      "1.0.0": {
-        enabled: true,
-        mandatory: false,
-        downloadUrl: "",
-        packageHash: "",
-      },
-    };
-  },
+  releaseHistoryFetcher: releaseHistoryFetcher,
 })(App);
