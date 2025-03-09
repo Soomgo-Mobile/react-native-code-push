@@ -50,15 +50,18 @@ public class CodePush implements ReactPackage {
     private static ReactInstanceHolder mReactInstanceHolder;
     private static CodePush mCurrentInstance;
 
-    public CodePush(Context context) {
-        this(context, false);
-    }
-
     public static String getServiceUrl() {
         return mServerUrl;
     }
 
-    public CodePush(Context context, boolean isDebugMode) {
+    public static synchronized CodePush getInstance(Context context, boolean isDebugMode) {
+        if (mCurrentInstance == null) {
+            mCurrentInstance = new CodePush(context, isDebugMode);
+        }
+        return mCurrentInstance;
+    }
+
+    private CodePush(Context context, boolean isDebugMode) {
         mContext = context.getApplicationContext();
 
         mUpdateManager = new CodePushUpdateManager(context.getFilesDir().getAbsolutePath());
@@ -86,27 +89,6 @@ public class CodePush implements ReactPackage {
 
         clearDebugCacheIfNeeded(null);
         initializeUpdateAfterRestart();
-    }
-
-    public CodePush(Context context, boolean isDebugMode, String serverUrl) {
-        this(context, isDebugMode);
-        mServerUrl = serverUrl;
-    }
-
-    public CodePush(Context context, boolean isDebugMode, int publicKeyResourceDescriptor) {
-        this(context, isDebugMode);
-
-        mPublicKey = getPublicKeyByResourceDescriptor(publicKeyResourceDescriptor);
-    }
-
-    public CodePush(Context context, boolean isDebugMode, String serverUrl, Integer publicKeyResourceDescriptor) {
-        this(context, isDebugMode);
-
-        if (publicKeyResourceDescriptor != null) {
-            mPublicKey = getPublicKeyByResourceDescriptor(publicKeyResourceDescriptor);
-        }
-
-        mServerUrl = serverUrl;
     }
 
     private String getPublicKeyByResourceDescriptor(int publicKeyResourceDescriptor){

@@ -9,7 +9,9 @@ import android.provider.Settings;
 import android.view.View;
 
 import com.facebook.react.ReactApplication;
+import com.facebook.react.ReactDelegate;
 import com.facebook.react.ReactInstanceManager;
+import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactRootView;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.JSBundleLoader;
@@ -30,6 +32,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -156,12 +159,19 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                 @Override
                 public void run() {
                     try {
-                        // We don't need to resetReactRootViews anymore 
-                        // due the issue https://github.com/facebook/react-native/issues/14533
-                        // has been fixed in RN 0.46.0
-                        //resetReactRootViews(instanceManager);
-
-                        instanceManager.recreateReactContextInBackground();
+                        // reload method introduced in RN 0.74 (https://github.com/reactwg/react-native-new-architecture/discussions/174)
+                        // so, we need to check if reload method exists and call it
+                        try {
+                            ReactDelegate reactDelegate = CodePushNativeModule.this.resolveReactDelegate();
+                            if (reactDelegate == null) {
+                                throw new NoSuchMethodException("ReactDelegate doesn't have reload method in RN < 0.74");
+                            }
+                            Method reloadMethod = reactDelegate.getClass().getMethod("reload");
+                            reloadMethod.invoke(reactDelegate);
+                        } catch (NoSuchMethodException e) {
+                            // RN < 0.74 calls ReactInstanceManager.recreateReactContextInBackground() directly
+                            instanceManager.recreateReactContextInBackground();
+                        }
                         mCodePush.initializeUpdateAfterRestart();
                     } catch (Exception e) {
                         // The recreation method threw an unknown exception
@@ -198,6 +208,21 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         if (mLifecycleEventListener != null) {
             getReactApplicationContext().removeLifecycleEventListener(mLifecycleEventListener);
             mLifecycleEventListener = null;
+        }
+    }
+
+    private ReactDelegate resolveReactDelegate() {
+        ReactActivity currentActivity = (ReactActivity) getCurrentActivity();
+        if (currentActivity == null) {
+            return null;
+        }
+
+        try {
+            Method getReactDelegateMethod = currentActivity.getClass().getMethod("getReactDelegate");
+            return (ReactDelegate) getReactDelegateMethod.invoke(currentActivity);
+        } catch (Exception e) {
+            // RN < 0.74 doesn't have getReactDelegate method
+            return null;
         }
     }
 
@@ -492,7 +517,7 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                             return null;
                         }
                     }
-                    
+
                     promise.resolve("");
                 } catch(CodePushUnknownException e) {
                     CodePushUtils.log(e);
