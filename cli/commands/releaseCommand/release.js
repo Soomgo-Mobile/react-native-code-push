@@ -33,6 +33,7 @@ const { addToReleaseHistory } = require("./addToReleaseHistory");
  * @param jsBundleName {string}
  * @param mandatory {boolean}
  * @param enable {boolean}
+ * @param rollout {number}
  * @param skipBundle {boolean}
  * @param skipCleanup {boolean}
  * @param bundleDirectory {string}
@@ -52,6 +53,7 @@ async function release(
     jsBundleName,
     mandatory,
     enable,
+    rollout,
     skipBundle,
     skipCleanup,
     bundleDirectory,
@@ -82,6 +84,7 @@ async function release(
         identifier,
         mandatory,
         enable,
+        rollout,
     )
 
     if (!skipCleanup) {

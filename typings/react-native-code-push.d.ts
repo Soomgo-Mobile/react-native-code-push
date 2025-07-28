@@ -29,6 +29,7 @@ export interface ReleaseInfo {
     mandatory: boolean;
     downloadUrl: string;
     packageHash: string;
+    rollout: number;
 }
 
 // from code-push SDK
@@ -93,6 +94,10 @@ export interface CodePushOptions extends SyncOptions {
      * Callback function that is called when sync process failed.
      */
     onSyncError?: (label: string, error: Error) => void;
+    /**
+     * Callback function that is called when rollout is skipped.
+     */
+    onRolloutSkipped?: (label: string, error: Error) => void;
 }
 
 export interface DownloadProgress {
@@ -342,9 +347,11 @@ declare namespace CodePush {
     /**
      * Asks the CodePush service whether the configured app deployment has an update available.
      *
+     * @param deploymentKey The deployment key to use to query the CodePush server for an update.
+     *
      * @param handleBinaryVersionMismatchCallback An optional callback for handling target binary version mismatch
      */
-    function checkForUpdate(handleBinaryVersionMismatchCallback?: HandleBinaryVersionMismatchCallback): Promise<RemotePackage | null>;
+    function checkForUpdate(deploymentKey?: string, handleBinaryVersionMismatchCallback?: HandleBinaryVersionMismatchCallback): Promise<RemotePackage | null>;
 
     /**
      * Retrieves the metadata for an installed update (e.g. description, mandatory).

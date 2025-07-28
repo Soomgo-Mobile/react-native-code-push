@@ -23,6 +23,7 @@ const path = require('path');
  * @param identifier {string?}
  * @param mandatory {boolean?}
  * @param enable {boolean?}
+ * @param rollout {number?}
  * @returns {Promise<void>}
  */
 async function updateReleaseHistory(
@@ -34,6 +35,7 @@ async function updateReleaseHistory(
     identifier,
     mandatory,
     enable,
+    rollout
 ) {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
@@ -42,6 +44,7 @@ async function updateReleaseHistory(
 
     if (typeof mandatory === "boolean") updateInfo.mandatory = mandatory;
     if (typeof enable === "boolean") updateInfo.enabled = enable;
+    if (typeof rollout === "number") updateInfo.rollout = rollout;
 
     try {
         const JSON_FILE_NAME = `${binaryVersion}.json`;

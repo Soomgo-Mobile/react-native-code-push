@@ -25,6 +25,7 @@ const fs = require("fs");
  * @param identifier {string?}
  * @param mandatory {boolean?}
  * @param enable {boolean?}
+ * @param rollout {number?}
  * @returns {Promise<void>}
  */
 async function addToReleaseHistory(
@@ -38,6 +39,7 @@ async function addToReleaseHistory(
     identifier,
     mandatory,
     enable,
+    rollout
 ) {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
@@ -54,6 +56,7 @@ async function addToReleaseHistory(
         mandatory: mandatory,
         downloadUrl: bundleDownloadUrl,
         packageHash: packageHash,
+        rollout: rollout
     }
 
     try {

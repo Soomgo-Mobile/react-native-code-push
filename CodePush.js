@@ -6,8 +6,66 @@ import { SemverVersioning } from './versioning/SemverVersioning'
 
 let NativeCodePush = require("react-native").NativeModules.CodePush;
 const PackageMixins = require("./package-mixins")(NativeCodePush);
+const RolloutStorage = require("react-native").NativeModules.RolloutStorage;
 
-const DEPLOYMENT_KEY = 'deprecated_deployment_key';
+const DEPLOYMENT_KEY = 'deprecated_deployment_key',
+      ROLLOUT_CACHE_PREFIX = 'CodePushRolloutDecision_',
+      ROLLOUT_CACHE_KEY = 'CodePushRolloutKey';
+
+function hashDeviceId(deviceId) {
+  let hash = 0;
+  for (let i = 0; i < deviceId.length; i++) {
+    hash = ((hash << 5) - hash) + deviceId.charCodeAt(i);
+    hash |= 0; // Convert to 32bit int
+  }
+  return Math.abs(hash);
+}
+
+function getRolloutKey(label, rollout) {
+  return `${ROLLOUT_CACHE_PREFIX}${label}_rollout_${rollout ?? 'full'}`;
+}
+
+function getBucket(clientId) {
+  const hash = hashDeviceId(clientId); // assume defined elsewhere
+  return Math.abs(hash) % 100;
+}
+
+export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRolloutSkipped) {
+  if (remotePackage.rollout === undefined || remotePackage.rollout >= 100) {
+    return true;
+  }
+
+  const rolloutKey = getRolloutKey(remotePackage.label, remotePackage.rollout);
+  const cachedDecision = await RolloutStorage.getItem(rolloutKey);
+
+  if (cachedDecision != null) {
+    const shouldApply = cachedDecision === 'true';
+    if (!shouldApply) {
+      console.log(`[CodePush] Skipping update — rollout cached: NOT in rollout`);
+      onRolloutSkipped?.(remotePackage.label);
+    }
+    return shouldApply;
+  }
+
+  const bucket = getBucket(clientId);
+  const inRollout = bucket < remotePackage.rollout;
+
+  console.log(`[CodePush] Bucket: ${bucket}, rollout: ${remotePackage.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
+  const prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
+
+  if(prevRolloutCacheKey)
+    await RolloutStorage.removeItem(prevRolloutCacheKey);
+
+  await RolloutStorage.setItem(ROLLOUT_CACHE_KEY, rolloutKey);
+  await RolloutStorage.setItem(rolloutKey, inRollout.toString());
+
+  if (!inRollout) {
+    console.log(`[CodePush] Skipping update due to rollout. Bucket ${bucket} >= rollout ${remotePackage.rollout}`);
+    onRolloutSkipped?.(remotePackage.label);
+  }
+
+  return inRollout;
+}
 
 async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
   /*
@@ -121,6 +179,7 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
           package_size: 0,
           // not used at runtime.
           should_run_binary_version: false,
+          rollout: latestReleaseInfo.rollout
         };
 
         return mapToRemotePackageMetadata(updateInfo);
@@ -163,7 +222,14 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
 
     return null;
   } else {
-    const remotePackage = { ...update, ...PackageMixins.remote() };
+    const remotePackage = { ...PackageMixins.remote(), ...update };
+
+    // Rollout filtering
+    const shouldApply = await shouldApplyCodePushUpdate(remotePackage, nativeConfig.clientUniqueId, sharedCodePushOptions?.onRolloutSkipped);
+
+    if(!shouldApply && !remotePackage.enabled)
+        return { skipRollout: true };
+
     remotePackage.failedInstall = await NativeCodePush.isFailedUpdate(remotePackage.packageHash);
     return remotePackage;
   }
@@ -193,6 +259,7 @@ function mapToRemotePackageMetadata(updateInfo) {
     packageHash: updateInfo.package_hash ?? '',
     packageSize: updateInfo.package_size ?? 0,
     downloadUrl: updateInfo.download_url ?? '',
+    rollout: updateInfo.rollout ?? 100,
   };
 }
 
@@ -443,6 +510,9 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
           case CodePush.SyncStatus.INSTALLING_UPDATE:
             log("Installing update.");
             break;
+          case CodePush.SyncStatus.CODEPUSH_SKIPPED:
+            log("Codepush Skipped.");
+            break;
           case CodePush.SyncStatus.UP_TO_DATE:
             log("App is up to date.");
             break;
@@ -492,6 +562,11 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
 
       return CodePush.SyncStatus.UPDATE_INSTALLED;
     };
+
+    if(remotePackage?.skipRollout){
+      syncStatusChangeCallback(CodePush.SyncStatus.UNKNOWN_ERROR);
+      return CodePush.SyncStatus.UNKNOWN_ERROR;
+    }
 
     const updateShouldBeIgnored = await shouldUpdateBeIgnored(remotePackage, syncOptions);
 
@@ -609,6 +684,9 @@ let CodePush;
  *
  *   onSyncError: (label: string, error: Error) => void | undefined,
  *   setOnSyncError(onSyncErrorFunction: (label: string, error: Error) => void | undefined): void,
+ * 
+ *   onRolloutSkipped: (label: string, error: Error) => void | undefined,
+ *   setOnRolloutSkipped(onRolloutSkippedFunction: (label: string, error: Error) => void | undefined): void,
  * }}
  */
 const sharedCodePushOptions = {
@@ -653,6 +731,12 @@ const sharedCodePushOptions = {
     if (typeof onSyncErrorFunction !== 'function') throw new Error('Please pass a function to onSyncError');
     this.onSyncError = onSyncErrorFunction;
   },
+  onRolloutSkipped: undefined,
+  setOnRolloutSkipped(onRolloutSkippedFunction) {
+    if (!onRolloutSkippedFunction) return;
+    if (typeof onRolloutSkippedFunction !== 'function') throw new Error('Please pass a function to onRolloutSkipped');
+    this.onRolloutSkipped = onRolloutSkippedFunction;
+  }
 }
 
 function codePushify(options = {}) {
@@ -688,6 +772,7 @@ function codePushify(options = {}) {
   sharedCodePushOptions.setOnDownloadStart(options.onDownloadStart);
   sharedCodePushOptions.setOnDownloadSuccess(options.onDownloadSuccess);
   sharedCodePushOptions.setOnSyncError(options.onSyncError);
+  sharedCodePushOptions.setOnRolloutSkipped(options.onRolloutSkipped);
 
   const decorator = (RootComponent) => {
     class CodePushComponent extends React.Component {
@@ -790,7 +875,8 @@ if (NativeCodePush) {
       CHECKING_FOR_UPDATE: 5,
       AWAITING_USER_ACTION: 6,
       DOWNLOADING_PACKAGE: 7,
-      INSTALLING_UPDATE: 8
+      INSTALLING_UPDATE: 8,
+      CODEPUSH_SKIPPED: 9
     },
     CheckFrequency: {
       ON_APP_START: 0,

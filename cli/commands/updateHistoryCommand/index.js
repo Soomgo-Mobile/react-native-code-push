@@ -12,6 +12,7 @@ program.command('update-history')
     .option('-c, --config <path>', 'set config file name (JS/TS)', CONFIG_FILE_NAME)
     .option('-m, --mandatory <bool>', 'make the release to be mandatory', parseBoolean, undefined)
     .option('-e, --enable <bool>', 'make the release to be enabled', parseBoolean, undefined)
+    .option('--rollout <number>', 'rollout percentage (0-100)', parseFloat, undefined)
     /**
      * @param {Object} options
      * @param {string} options.appVersion
@@ -21,6 +22,7 @@ program.command('update-history')
      * @param {string} options.config
      * @param {string} options.mandatory
      * @param {string} options.enable
+     * @param {number} options.rollout
      * @return {void}
      */
     .action(async (options) => {
@@ -40,6 +42,7 @@ program.command('update-history')
             options.identifier,
             options.mandatory,
             options.enable,
+            options.rollout
         )
     });
 

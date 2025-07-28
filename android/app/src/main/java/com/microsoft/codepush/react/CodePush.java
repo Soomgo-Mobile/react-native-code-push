@@ -10,6 +10,7 @@ import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.JavaScriptModule;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.microsoft.codepush.react.RolloutStorageModule;
 import com.facebook.react.devsupport.interfaces.DevSupportManager;
 import com.facebook.react.modules.debug.interfaces.DeveloperSettings;
 import com.facebook.react.uimanager.ViewManager;
@@ -404,10 +405,12 @@ public class CodePush implements ReactPackage {
     public List<NativeModule> createNativeModules(ReactApplicationContext reactApplicationContext) {
         CodePushNativeModule codePushModule = new CodePushNativeModule(reactApplicationContext, this, mUpdateManager, mTelemetryManager, mSettingsManager);
         CodePushDialog dialogModule = new CodePushDialog(reactApplicationContext);
+        RolloutStorageModule rolloutStorageModule = new RolloutStorageModule(reactApplicationContext);
 
         List<NativeModule> nativeModules = new ArrayList<>();
         nativeModules.add(codePushModule);
         nativeModules.add(dialogModule);
+        nativeModules.add(rolloutStorageModule);
         return nativeModules;
     }
 
