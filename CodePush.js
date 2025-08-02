@@ -25,9 +25,11 @@ function getRolloutKey(label, rollout) {
   return `${ROLLOUT_CACHE_PREFIX}${label}_rollout_${rollout ?? 'full'}`;
 }
 
-function getBucket(clientId) {
-  const hash = hashDeviceId(clientId); // assume defined elsewhere
-  return Math.abs(hash) % 100;
+function getBucket(clientId, packageHash) {
+  const hash = hashDeviceId(`${clientId ?? ''}_${packageHash ?? ''}`),
+        randomFactor = Math.floor(Math.random() * 100); // 0-99 value
+
+  return ((Math.abs(hash) % 100) * randomFactor) % 100;
 }
 
 export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRolloutSkipped) {
@@ -35,23 +37,19 @@ export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRollo
     return true;
   }
 
-  const rolloutKey = getRolloutKey(remotePackage.label, remotePackage.rollout);
-  const cachedDecision = await RolloutStorage.getItem(rolloutKey);
+  const rolloutKey = getRolloutKey(remotePackage.label, remotePackage.rollout),
+        cachedDecision = await RolloutStorage.getItem(rolloutKey);
 
   if (cachedDecision != null) {
-    const shouldApply = cachedDecision === 'true';
-    if (!shouldApply) {
-      console.log(`[CodePush] Skipping update — rollout cached: NOT in rollout`);
-      onRolloutSkipped?.(remotePackage.label);
-    }
-    return shouldApply;
+    // should apply if cachedDecision is true
+    return cachedDecision === 'true';
   }
 
-  const bucket = getBucket(clientId);
-  const inRollout = bucket < remotePackage.rollout;
+  const bucket = getBucket(clientId, remotePackage.packageHash),
+        inRollout = bucket < remotePackage.rollout,
+        prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
 
   console.log(`[CodePush] Bucket: ${bucket}, rollout: ${remotePackage.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
-  const prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
 
   if(prevRolloutCacheKey)
     await RolloutStorage.removeItem(prevRolloutCacheKey);

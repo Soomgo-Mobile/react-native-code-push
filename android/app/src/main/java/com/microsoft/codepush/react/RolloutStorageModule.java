@@ -1,4 +1,3 @@
-// RolloutStorageModule.java
 package com.microsoft.codepush.react;
 
 import android.content.Context;
