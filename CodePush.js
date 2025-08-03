@@ -26,10 +26,8 @@ function getRolloutKey(label, rollout) {
 }
 
 function getBucket(clientId, packageHash) {
-  const hash = hashDeviceId(`${clientId ?? ''}_${packageHash ?? ''}`),
-        randomFactor = Math.floor(Math.random() * 100); // 0-99 value
-
-  return ((Math.abs(hash) % 100) * randomFactor) % 100;
+  const hash = hashDeviceId(`${clientId ?? ''}_${packageHash ?? ''}`);
+  return (Math.abs(hash) % 100);
 }
 
 export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRolloutSkipped) {
