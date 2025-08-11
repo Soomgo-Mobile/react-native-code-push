@@ -223,8 +223,8 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
     // Rollout filtering
     const shouldApply = await shouldApplyCodePushUpdate(remotePackage, nativeConfig.clientUniqueId, sharedCodePushOptions?.onRolloutSkipped);
 
-    if(!shouldApply && !update)
-        return { skipRollout: true };
+    if(!shouldApply)
+      return { skipRollout: true };
 
     remotePackage.failedInstall = await NativeCodePush.isFailedUpdate(remotePackage.packageHash);
     return remotePackage;
