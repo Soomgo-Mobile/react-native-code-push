@@ -22,7 +22,7 @@ function hashDeviceId(deviceId) {
 }
 
 function getRolloutKey(label, rollout) {
-  return `${ROLLOUT_CACHE_PREFIX}${label}_rollout_${rollout ?? 'full'}`;
+  return `${ROLLOUT_CACHE_PREFIX}${label}_rollout_${rollout ?? 100}`;
 }
 
 function getBucket(clientId, packageHash) {
@@ -218,12 +218,12 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
 
     return null;
   } else {
-    const remotePackage = { ...PackageMixins.remote(), ...update };
+    const remotePackage = { ...update, ...PackageMixins.remote() };
 
     // Rollout filtering
     const shouldApply = await shouldApplyCodePushUpdate(remotePackage, nativeConfig.clientUniqueId, sharedCodePushOptions?.onRolloutSkipped);
 
-    if(!shouldApply && !remotePackage.enabled)
+    if(!shouldApply && !update)
         return { skipRollout: true };
 
     remotePackage.failedInstall = await NativeCodePush.isFailedUpdate(remotePackage.packageHash);
@@ -560,8 +560,8 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     };
 
     if(remotePackage?.skipRollout){
-      syncStatusChangeCallback(CodePush.SyncStatus.UNKNOWN_ERROR);
-      return CodePush.SyncStatus.UNKNOWN_ERROR;
+      syncStatusChangeCallback(CodePush.SyncStatus.CODEPUSH_SKIPPED);
+      return CodePush.SyncStatus.CODEPUSH_SKIPPED;
     }
 
     const updateShouldBeIgnored = await shouldUpdateBeIgnored(remotePackage, syncOptions);
