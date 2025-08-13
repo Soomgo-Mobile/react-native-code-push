@@ -506,9 +506,6 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
           case CodePush.SyncStatus.INSTALLING_UPDATE:
             log("Installing update.");
             break;
-          case CodePush.SyncStatus.CODEPUSH_SKIPPED:
-            log("Codepush Skipped.");
-            break;
           case CodePush.SyncStatus.UP_TO_DATE:
             log("App is up to date.");
             break;
@@ -560,8 +557,8 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     };
 
     if(remotePackage?.skipRollout){
-      syncStatusChangeCallback(CodePush.SyncStatus.CODEPUSH_SKIPPED);
-      return CodePush.SyncStatus.CODEPUSH_SKIPPED;
+      syncStatusChangeCallback(CodePush.SyncStatus.UP_TO_DATE);
+      return CodePush.SyncStatus.UP_TO_DATE;
     }
 
     const updateShouldBeIgnored = await shouldUpdateBeIgnored(remotePackage, syncOptions);
@@ -871,8 +868,7 @@ if (NativeCodePush) {
       CHECKING_FOR_UPDATE: 5,
       AWAITING_USER_ACTION: 6,
       DOWNLOADING_PACKAGE: 7,
-      INSTALLING_UPDATE: 8,
-      CODEPUSH_SKIPPED: 9
+      INSTALLING_UPDATE: 8
     },
     CheckFrequency: {
       ON_APP_START: 0,
