@@ -238,6 +238,7 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
     const remotePackage = { ...update, ...PackageMixins.remote() };
 
     // Rollout filtering
+    // Note that the `clientUniqueId` value may not guarantee the same value if the app is deleted and re-installed. In other words, if a user re-installs the app, the result of this function may change.
     const shouldApply = await shouldApplyCodePushUpdate(remotePackage, nativeConfig.clientUniqueId, sharedCodePushOptions?.onRolloutSkipped);
 
     if (!shouldApply) {
