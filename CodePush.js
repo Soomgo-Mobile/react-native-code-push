@@ -61,7 +61,7 @@ export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRollo
   const inRollout = bucket < remotePackage.rollout;
   const prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
 
-  console.log(`[CodePush] Bucket: ${bucket}, rollout: ${remotePackage.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
+  log(`Bucket: ${bucket}, rollout: ${remotePackage.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
 
   if (prevRolloutCacheKey) {
     await RolloutStorage.removeItem(prevRolloutCacheKey);
@@ -70,7 +70,7 @@ export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRollo
   await RolloutStorage.setItem(rolloutKey, inRollout.toString());
 
   if (!inRollout) {
-    console.log(`[CodePush] Skipping update due to rollout. Bucket ${bucket} >= rollout ${remotePackage.rollout}`);
+    log(`Skipping update due to rollout. Bucket ${bucket} >= rollout ${remotePackage.rollout}`);
     onRolloutSkipped?.(remotePackage.label);
   }
 
