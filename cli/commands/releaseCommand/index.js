@@ -42,6 +42,11 @@ program.command('release')
     .action(async (options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
+        if (typeof options.rollout === 'number' && (options.rollout < 0 || options.rollout > 100)) {
+            console.error('Rollout percentage number must be between 0 and 100 (inclusive).');
+            process.exit(1);
+        }
+
         await release(
             config.bundleUploader,
             config.getReleaseHistory,

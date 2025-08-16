@@ -24,13 +24,19 @@ class BaseVersioning {
     this.sortedReleaseHistory = Object.entries(releaseHistory).sort(
       ([a], [b]) => this.sortingMethod(a, b)
     );
+
+    /** @type {boolean} */
+    this.isLatestReleaseInRollout = true;
   }
 
   /**
    * @return {[ReleaseVersion, ReleaseInfo][]}
    */
   get sortedEnabledReleaseHistory() {
-    return this.sortedReleaseHistory.filter(([_, bundle]) => bundle.enabled);
+    const list = this.sortedReleaseHistory.filter(([_, bundle]) => bundle.enabled)
+    // If the latest release is not a rollout target, exclude it from the list.
+    // - This also means that rollout deployment can only be applied to the latest release.
+    return this.isLatestReleaseInRollout ? list : list.slice(1);
   }
 
   /**
@@ -40,6 +46,11 @@ class BaseVersioning {
     return this.sortedEnabledReleaseHistory.filter(
       ([_, bundle]) => bundle.mandatory
     );
+  }
+
+  /** @param isLatestReleaseInRollout {boolean} */
+  setIsLatestReleaseInRollout(isLatestReleaseInRollout) {
+    this.isLatestReleaseInRollout = isLatestReleaseInRollout;
   }
 
   /**

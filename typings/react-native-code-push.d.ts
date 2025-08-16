@@ -29,7 +29,7 @@ export interface ReleaseInfo {
     mandatory: boolean;
     downloadUrl: string;
     packageHash: string;
-    rollout: number;
+    rollout?: number;
 }
 
 // from code-push SDK

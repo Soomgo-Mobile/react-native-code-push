@@ -27,7 +27,6 @@ async function createReleaseHistory(
         mandatory: false,
         downloadUrl: "",
         packageHash: "",
-        rollout: 100
     };
 
     /** @type {ReleaseHistoryInterface} */

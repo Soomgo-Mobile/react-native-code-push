@@ -6,9 +6,11 @@ import { SemverVersioning } from './versioning/SemverVersioning'
 
 let NativeCodePush = require("react-native").NativeModules.CodePush;
 const PackageMixins = require("./package-mixins")(NativeCodePush);
-const RolloutStorage = require("react-native").NativeModules.RolloutStorage;
 
 const DEPLOYMENT_KEY = 'deprecated_deployment_key';
+
+// TODO: split the rollout decision logic into a separate js module
+const RolloutStorage = require("react-native").NativeModules.RolloutStorage;
 const ROLLOUT_CACHE_PREFIX = 'CodePushRolloutDecision_';
 const ROLLOUT_CACHE_KEY = 'CodePushRolloutKey';
 
@@ -44,37 +46,49 @@ function getBucket(clientId, packageHash) {
   return (Math.abs(hash) % 100);
 }
 
-export async function shouldApplyCodePushUpdate(remotePackage, clientId, onRolloutSkipped) {
-  if (remotePackage.rollout === undefined || remotePackage.rollout >= 100) {
-    return true;
+/**
+ * Note that the `clientUniqueId` value may not guarantee the same value if the app is deleted and re-installed.
+ * In other words, if a user re-installs the app, the result of this function may change.
+ * @returns {Promise<boolean>}
+ */
+async function decideLatestReleaseIsInRollout(versioning, clientId, onRolloutSkipped) {
+  try {
+    const [latestVersion, latestReleaseInfo] = versioning.findLatestRelease();
+
+    if (latestReleaseInfo.rollout === undefined || latestReleaseInfo.rollout >= 100) {
+      return true;
+    }
+
+    const rolloutKey = getRolloutKey(latestVersion, latestReleaseInfo.rollout);
+    const cachedDecision = await RolloutStorage.getItem(rolloutKey);
+
+    if (cachedDecision != null) {
+      // should apply if cachedDecision is true
+      return cachedDecision === 'true';
+    }
+
+    const bucket = getBucket(clientId, latestReleaseInfo.packageHash);
+    const inRollout = bucket < latestReleaseInfo.rollout;
+    const prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
+
+    log(`Bucket: ${bucket}, rollout: ${latestReleaseInfo.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
+
+    if (prevRolloutCacheKey) {
+      await RolloutStorage.removeItem(prevRolloutCacheKey);
+    }
+    await RolloutStorage.setItem(ROLLOUT_CACHE_KEY, rolloutKey);
+    await RolloutStorage.setItem(rolloutKey, inRollout.toString());
+
+    if (!inRollout) {
+      log(`Skipping update due to rollout. Bucket ${bucket} is not smaller than rollout range ${latestReleaseInfo.rollout}.`);
+      onRolloutSkipped?.(latestVersion);
+    }
+
+    return inRollout;
+  } catch {
+    // If an error occurs while accessing storage, we assume the update is not in the rollout.
+    return false;
   }
-
-  const rolloutKey = getRolloutKey(remotePackage.label, remotePackage.rollout);
-  const cachedDecision = await RolloutStorage.getItem(rolloutKey);
-
-  if (cachedDecision != null) {
-    // should apply if cachedDecision is true
-    return cachedDecision === 'true';
-  }
-
-  const bucket = getBucket(clientId, remotePackage.packageHash);
-  const inRollout = bucket < remotePackage.rollout;
-  const prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
-
-  log(`Bucket: ${bucket}, rollout: ${remotePackage.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
-
-  if (prevRolloutCacheKey) {
-    await RolloutStorage.removeItem(prevRolloutCacheKey);
-  }
-  await RolloutStorage.setItem(ROLLOUT_CACHE_KEY, rolloutKey);
-  await RolloutStorage.setItem(rolloutKey, inRollout.toString());
-
-  if (!inRollout) {
-    log(`Skipping update due to rollout. Bucket ${bucket} >= rollout ${remotePackage.rollout}`);
-    onRolloutSkipped?.(remotePackage.label);
-  }
-
-  return inRollout;
 }
 
 async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
@@ -129,8 +143,8 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
        */
       const updateChecker = sharedCodePushOptions.updateChecker;
       if (updateChecker) {
+        // We do not provide rollout functionality. This could be implemented in the `updateChecker`.
         const { update_info } = await updateChecker(updateRequest);
-
         return mapToRemotePackageMetadata(update_info);
       } else {
         /**
@@ -147,6 +161,9 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
         const runtimeVersion = updateRequest.label;
 
         const versioning = new SemverVersioning(releaseHistory);
+
+        const isInRollout = await decideLatestReleaseIsInRollout(versioning, nativeConfig.clientUniqueId, sharedCodePushOptions?.onRolloutSkipped);
+        versioning.setIsLatestReleaseInRollout(isInRollout);
 
         const shouldRollbackToBinary = versioning.shouldRollbackToBinary(runtimeVersion)
         if (shouldRollbackToBinary) {
@@ -192,7 +209,6 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
           package_size: 0,
           // not used at runtime.
           should_run_binary_version: false,
-          rollout: latestReleaseInfo.rollout,
         };
 
         return mapToRemotePackageMetadata(updateInfo);
@@ -236,15 +252,6 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
     return null;
   } else {
     const remotePackage = { ...update, ...PackageMixins.remote() };
-
-    // Rollout filtering
-    // Note that the `clientUniqueId` value may not guarantee the same value if the app is deleted and re-installed. In other words, if a user re-installs the app, the result of this function may change.
-    const shouldApply = await shouldApplyCodePushUpdate(remotePackage, nativeConfig.clientUniqueId, sharedCodePushOptions?.onRolloutSkipped);
-
-    if (!shouldApply) {
-      return { skipRollout: true };
-    }
-
     remotePackage.failedInstall = await NativeCodePush.isFailedUpdate(remotePackage.packageHash);
     return remotePackage;
   }
@@ -274,7 +281,6 @@ function mapToRemotePackageMetadata(updateInfo) {
     packageHash: updateInfo.package_hash ?? '',
     packageSize: updateInfo.package_size ?? 0,
     downloadUrl: updateInfo.download_url ?? '',
-    rollout: updateInfo.rollout ?? 100,
   };
 }
 
@@ -574,11 +580,6 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
 
       return CodePush.SyncStatus.UPDATE_INSTALLED;
     };
-
-    if (remotePackage?.skipRollout) {
-      syncStatusChangeCallback(CodePush.SyncStatus.UP_TO_DATE);
-      return CodePush.SyncStatus.UP_TO_DATE;
-    }
 
     const updateShouldBeIgnored = await shouldUpdateBeIgnored(remotePackage, syncOptions);
 

@@ -56,7 +56,10 @@ async function addToReleaseHistory(
         mandatory: mandatory,
         downloadUrl: bundleDownloadUrl,
         packageHash: packageHash,
-        rollout: rollout
+    };
+
+    if (typeof rollout === 'number') {
+        newReleaseHistory[appVersion].rollout = rollout;
     }
 
     try {

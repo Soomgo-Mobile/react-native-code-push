@@ -48,6 +48,36 @@ describe('Semver Versioning Test', () => {
                 { enabled: true, mandatory: true, downloadUrl: 'R3', packageHash: 'P3' }
             ])
         })
+
+        it('should return the previous enabled release if the latest release is not a rollout target', () => {
+            const RELEASED_BUNDLES = {
+                '1.0.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
+                '1.1.0': { enabled: false, mandatory: false, ...MOCK_INFOS }, // not enabled
+                '1.2.0': { enabled: true, mandatory: false, ...MOCK_INFOS, rollout: 30 },
+            };
+            const LATEST_IS_ROLLOUT_TARGET = false;
+
+            const versioning = new SemverVersioning(RELEASED_BUNDLES);
+            versioning.setIsLatestReleaseInRollout(LATEST_IS_ROLLOUT_TARGET);
+
+            const [latestVersion] = versioning.findLatestRelease();
+            expect(latestVersion).toEqual('1.0.0');
+        })
+
+        it('should return the latest release if the latest release is a rollout target', () => {
+            const RELEASED_BUNDLES = {
+                '1.0.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
+                '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
+                '1.2.0': { enabled: true, mandatory: false, ...MOCK_INFOS, rollout: 30 },
+            };
+            const LATEST_IS_ROLLOUT_TARGET = true;
+
+            const versioning = new SemverVersioning(RELEASED_BUNDLES);
+            versioning.setIsLatestReleaseInRollout(LATEST_IS_ROLLOUT_TARGET);
+
+            const [latestVersion] = versioning.findLatestRelease();
+            expect(latestVersion).toEqual('1.2.0');
+        })
     })
 
     describe('checkIsMandatory', () => {
@@ -159,6 +189,26 @@ describe('Semver Versioning Test', () => {
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory('1.1.1')).toBe(false);
                 expect(new SemverVersioning(RELEASED_BUNDLES).checkIsMandatory('1.2.0')).toBe(true);
             });
+
+            it('When having not-enabled releases and latest mandatory version is not a rollout target', () => {
+                const RELEASED_BUNDLES = {
+                    '1.0.0': FIRST_RELEASE_INFO,
+                    '1.0.1': { enabled: true, mandatory: true, ...MOCK_INFOS },
+                    '1.1.0': { enabled: false, mandatory: false, ...MOCK_INFOS },
+                    '1.1.1': { enabled: true, mandatory: true, ...MOCK_INFOS },
+                    '1.2.0': { enabled: true, mandatory: true, ...MOCK_INFOS, rollout: 30 },
+                };
+                const LATEST_IS_ROLLOUT_TARGET = false;
+
+                const versioning = new SemverVersioning(RELEASED_BUNDLES);
+                versioning.setIsLatestReleaseInRollout(LATEST_IS_ROLLOUT_TARGET);
+
+                expect(versioning.checkIsMandatory('1.0.0')).toBe(true); // update to 1.1.1
+                expect(versioning.checkIsMandatory('1.0.1')).toBe(true); // update to 1.1.1
+                expect(versioning.checkIsMandatory('1.1.0')).toBe(true); // update to 1.1.1
+                expect(versioning.checkIsMandatory('1.1.1')).toBe(false); // up to date
+                expect(versioning.checkIsMandatory('1.2.0')).toBe(true); // rollback target is treated as mandatory
+            })
         })
     })
 
@@ -200,6 +250,34 @@ describe('Semver Versioning Test', () => {
             };
             expect(new SemverVersioning(RELEASED_BUNDLES_1).shouldRollbackToBinary('1.2.0')).toBe(false)
             expect(new SemverVersioning(RELEASED_BUNDLES_2).shouldRollbackToBinary('1.2.0-rc.2')).toBe(false)
+        })
+
+        it ('should return true if the latest release is not a rollout target', () => {
+            const RELEASED_BUNDLES = {
+                '1.0.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
+                '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS, rollout: 30 },
+            };
+            const LATEST_IS_ROLLOUT_TARGET = false;
+
+            const versioning = new SemverVersioning(RELEASED_BUNDLES);
+            versioning.setIsLatestReleaseInRollout(LATEST_IS_ROLLOUT_TARGET);
+
+            // If the latest release was a rollout target and the rollout value is later reduced, the app might run on version 1.1.0.
+            expect(versioning.shouldRollbackToBinary('1.1.0')).toBe(true);
+        })
+
+        it ('should return false if the latest release and the previous release are both rollout targets', () => {
+            const RELEASED_BUNDLES = {
+                '1.0.0': { enabled: true, mandatory: false, ...MOCK_INFOS },
+                '1.1.0': { enabled: true, mandatory: false, ...MOCK_INFOS, rollout: 30 },
+                '1.2.0': { enabled: true, mandatory: false, ...MOCK_INFOS, rollout: 30 },
+            };
+            const LATEST_IS_ROLLOUT_TARGET = true;
+
+            const versioning = new SemverVersioning(RELEASED_BUNDLES);
+            versioning.setIsLatestReleaseInRollout(LATEST_IS_ROLLOUT_TARGET);
+
+            expect(versioning.shouldRollbackToBinary('1.0.0')).toBe(false); // update to 1.1.0
         })
     })
 })
