@@ -9,11 +9,6 @@ const PackageMixins = require("./package-mixins")(NativeCodePush);
 
 const DEPLOYMENT_KEY = 'deprecated_deployment_key';
 
-// TODO: split the rollout decision logic into a separate js module
-const RolloutStorage = require("react-native").NativeModules.RolloutStorage;
-const ROLLOUT_CACHE_PREFIX = 'CodePushRolloutDecision_';
-const ROLLOUT_CACHE_KEY = 'CodePushRolloutKey';
-
 /**
  * @param deviceId {string}
  * @returns {number}
@@ -25,15 +20,6 @@ function hashDeviceId(deviceId) {
     hash |= 0; // Convert to 32bit int
   }
   return Math.abs(hash);
-}
-
-/**
- * @param label {string}
- * @param rollout {number|undefined}
- * @returns {string}
- */
-function getRolloutKey(label, rollout) {
-  return `${ROLLOUT_CACHE_PREFIX}${label}_rollout_${rollout ?? 100}`;
 }
 
 /**
@@ -52,43 +38,23 @@ function getBucket(clientId, packageHash) {
  * @returns {Promise<boolean>}
  */
 async function decideLatestReleaseIsInRollout(versioning, clientId, onRolloutSkipped) {
-  try {
-    const [latestVersion, latestReleaseInfo] = versioning.findLatestRelease();
+  const [latestVersion, latestReleaseInfo] = versioning.findLatestRelease();
 
-    if (latestReleaseInfo.rollout === undefined || latestReleaseInfo.rollout >= 100) {
-      return true;
-    }
-
-    const rolloutKey = getRolloutKey(latestVersion, latestReleaseInfo.rollout);
-    const cachedDecision = await RolloutStorage.getItem(rolloutKey);
-
-    if (cachedDecision != null) {
-      // should apply if cachedDecision is true
-      return cachedDecision === 'true';
-    }
-
-    const bucket = getBucket(clientId, latestReleaseInfo.packageHash);
-    const inRollout = bucket < latestReleaseInfo.rollout;
-    const prevRolloutCacheKey = await RolloutStorage.getItem(ROLLOUT_CACHE_KEY);
-
-    log(`Bucket: ${bucket}, rollout: ${latestReleaseInfo.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
-
-    if (prevRolloutCacheKey) {
-      await RolloutStorage.removeItem(prevRolloutCacheKey);
-    }
-    await RolloutStorage.setItem(ROLLOUT_CACHE_KEY, rolloutKey);
-    await RolloutStorage.setItem(rolloutKey, inRollout.toString());
-
-    if (!inRollout) {
-      log(`Skipping update due to rollout. Bucket ${bucket} is not smaller than rollout range ${latestReleaseInfo.rollout}.`);
-      onRolloutSkipped?.(latestVersion);
-    }
-
-    return inRollout;
-  } catch {
-    // If an error occurs while accessing storage, we assume the update is not in the rollout.
-    return false;
+  if (latestReleaseInfo.rollout === undefined || latestReleaseInfo.rollout >= 100) {
+    return true;
   }
+
+  const bucket = getBucket(clientId, latestReleaseInfo.packageHash);
+  const inRollout = bucket < latestReleaseInfo.rollout;
+
+  log(`Bucket: ${bucket}, rollout: ${latestReleaseInfo.rollout} → ${inRollout ? 'IN' : 'OUT'}`);
+
+  if (!inRollout) {
+    log(`Skipping update due to rollout. Bucket ${bucket} is not smaller than rollout range ${latestReleaseInfo.rollout}.`);
+    onRolloutSkipped?.(latestVersion);
+  }
+
+  return inRollout;
 }
 
 async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
