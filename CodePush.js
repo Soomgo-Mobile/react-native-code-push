@@ -12,6 +12,10 @@ const DEPLOYMENT_KEY = 'deprecated_deployment_key';
 const ROLLOUT_CACHE_PREFIX = 'CodePushRolloutDecision_';
 const ROLLOUT_CACHE_KEY = 'CodePushRolloutKey';
 
+/**
+ * @param deviceId {string}
+ * @returns {number}
+ */
 function hashDeviceId(deviceId) {
   let hash = 0;
   for (let i = 0; i < deviceId.length; i++) {
@@ -21,10 +25,20 @@ function hashDeviceId(deviceId) {
   return Math.abs(hash);
 }
 
+/**
+ * @param label {string}
+ * @param rollout {number|undefined}
+ * @returns {string}
+ */
 function getRolloutKey(label, rollout) {
   return `${ROLLOUT_CACHE_PREFIX}${label}_rollout_${rollout ?? 100}`;
 }
 
+/**
+ * @param clientId {string}
+ * @param packageHash {string}
+ * @returns {number}
+ */
 function getBucket(clientId, packageHash) {
   const hash = hashDeviceId(`${clientId ?? ''}_${packageHash ?? ''}`);
   return (Math.abs(hash) % 100);
@@ -96,6 +110,9 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
     }
   }
 
+  /**
+   * @type {RemotePackage|null|undefined}
+   */
   const update = await (async () => {
     try {
       const updateRequest = {
