@@ -49,6 +49,10 @@ export interface UpdateCheckResponse {
 
 export interface CodePushOptions extends SyncOptions {
     /**
+     * The `ignoreFailedUpdates` option is only available as an option for `CodePush.sync()`.
+     */
+    ignoreFailedUpdates?: never;
+    /**
      * Specifies when you would like to synchronize updates with the CodePush server.
      * Defaults to codePush.CheckFrequency.ON_APP_START.
      */
