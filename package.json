@@ -3,6 +3,8 @@
   "version": "12.0.2",
   "description": "React Native plugin for the CodePush service",
   "main": "CodePush.js",
+  "react-native": "CodePush.js",
+  "source": "CodePush.js",
   "typings": "typings/react-native-code-push.d.ts",
   "homepage": "https://microsoft.github.io/code-push",
   "keywords": [
