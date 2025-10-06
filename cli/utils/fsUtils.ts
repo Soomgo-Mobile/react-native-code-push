@@ -1,17 +1,19 @@
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
+import { createRequire } from "module";
+import type { CliConfigInterface } from "../../typings/react-native-code-push.d.ts";
+
+const nodeRequire = createRequire(import.meta.url);
 
 /**
  * allows to require a config file with .ts extension
- * @param filePath {string}
- * @returns {*} FIXME type
  */
-function requireConfig(filePath) {
+function requireConfig(filePath: string): CliConfigInterface {
   const ext = path.extname(filePath);
 
   if (ext === '.ts') {
     try {
-      require('ts-node/register');
+      nodeRequire('ts-node/register');
     } catch {
       console.error('ts-node not found. Please install ts-node as a devDependency.');
       process.exit(1);
@@ -22,28 +24,19 @@ function requireConfig(filePath) {
     throw new Error(`Unsupported file extension: ${ext}`);
   }
 
-  return require(filePath);
+  return nodeRequire(filePath) as CliConfigInterface;
 }
 
-/**
- * @param startDir {string}
- * @param configFileName {string}
- * @returns {*|null} FIXME type
- */
-function findAndReadConfigFile(startDir, configFileName) {
+export function findAndReadConfigFile(startDir: string, configFileName: string): CliConfigInterface {
   let dir = startDir;
 
   while (dir !== path.parse(dir).root) {
     const configPath = path.join(dir, configFileName);
     if (fs.existsSync(configPath)) {
-      const config = requireConfig(configPath);
-      return config;
+      return requireConfig(configPath);
     }
     dir = path.dirname(dir);
   }
 
-  console.error(`${configFileName} not found.`);
-  return null;
+  throw new Error(`${configFileName} not found.`);
 }
-
-module.exports = { findAndReadConfigFile };

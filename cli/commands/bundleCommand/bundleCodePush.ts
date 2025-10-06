@@ -1,29 +1,23 @@
-const fs = require('fs');
-const { prepareToBundleJS } = require('../../functions/prepareToBundleJS');
-const { runReactNativeBundleCommand } = require('../../functions/runReactNativeBundleCommand');
-const { runExpoBundleCommand } = require('../../functions/runExpoBundleCommand');
-const { getReactTempDir } = require('../../functions/getReactTempDir');
-const { runHermesEmitBinaryCommand } = require('../../functions/runHermesEmitBinaryCommand');
-const { makeCodePushBundle } = require('../../functions/makeCodePushBundle');
-const { ROOT_OUTPUT_DIR, ENTRY_FILE } = require('../../constant');
+import fs from "fs";
+import { prepareToBundleJS } from "../../functions/prepareToBundleJS.js";
+import { runReactNativeBundleCommand } from "../../functions/runReactNativeBundleCommand.js";
+import { runExpoBundleCommand } from "../../functions/runExpoBundleCommand.js";
+import { getReactTempDir } from "../../functions/getReactTempDir.js";
+import { runHermesEmitBinaryCommand } from "../../functions/runHermesEmitBinaryCommand.js";
+import { makeCodePushBundle } from "../../functions/makeCodePushBundle.js";
+import { ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
 
 /**
- * @param framework {string|undefined} 'expo'
- * @param platform {string} 'ios' | 'android'
- * @param outputRootPath {string}
- * @param entryFile {string}
- * @param jsBundleName {string|undefined}
- * @param bundleDirectory {string}
  * @return {Promise<string>} CodePush bundle file name (equals to packageHash)
  */
-async function bundleCodePush(
-  framework,
-  platform = 'ios',
-  outputRootPath = ROOT_OUTPUT_DIR,
-  entryFile = ENTRY_FILE,
-  jsBundleName, // JS bundle file name (not CodePush bundle file)
-  bundleDirectory, // CodePush bundle output directory
-) {
+export async function bundleCodePush(
+  framework: 'expo' | undefined,
+  platform: 'ios' | 'android' = 'ios',
+  outputRootPath: string = ROOT_OUTPUT_DIR,
+  entryFile: string = ENTRY_FILE,
+  jsBundleName: string, // JS bundle file name (not CodePush bundle file)
+  bundleDirectory: string, // CodePush bundle output directory
+): Promise<string> {
     if (fs.existsSync(outputRootPath)) {
         fs.rmSync(outputRootPath, { recursive: true });
     }
@@ -67,5 +61,3 @@ async function bundleCodePush(
 
     return codePushBundleFileName;
 }
-
-module.exports = { bundleCodePush: bundleCodePush };

@@ -2,8 +2,8 @@
  * code based on appcenter-cli
  */
 
-const path = require('path');
-const shell = require('shelljs');
+import path from "path";
+import shell from "shelljs";
 
 /**
  * Run `react-native bundle` CLI command
@@ -16,25 +16,19 @@ const shell = require('shelljs');
  * @param extraBundlerOptions {string[]} Additional options to pass to `react-native bundle` command
  * @return {void}
  */
-function runReactNativeBundleCommand(
-    bundleName,
-    outputPath,
-    platform,
-    sourcemapOutput,
-    entryFile,
-    extraBundlerOptions = [],
-) {
-    /**
-     * @return {string}
-     */
-    function getCliPath() {
+export function runReactNativeBundleCommand(
+    bundleName: string,
+    outputPath: string,
+    platform: string,
+    sourcemapOutput: string,
+    entryFile: string,
+    extraBundlerOptions: string[] = [],
+): void {
+    function getCliPath(): string {
         return path.join('node_modules', '.bin', 'react-native');
     }
 
-    /**
-     * @type {string[]}
-     */
-    const reactNativeBundleArgs = [
+    const reactNativeBundleArgs: string[] = [
         'bundle',
         '--assets-dest',
         outputPath,
@@ -55,5 +49,3 @@ function runReactNativeBundleCommand(
 
     shell.exec(`${getCliPath()} ${reactNativeBundleArgs.join(' ')}`);
 }
-
-module.exports = { runReactNativeBundleCommand };

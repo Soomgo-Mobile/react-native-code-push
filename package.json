@@ -16,16 +16,42 @@
     "react-native-code-push",
     "expo-code-push"
   ],
+  "workspaces": [
+    "cli"
+  ],
   "author": "Soomgo Mobile Team (originally Microsoft Corporation)",
   "license": "MIT",
   "bin": {
-    "code-push": "cli/index.js"
+    "code-push": "bin/code-push.js"
   },
+  "files": [
+    "android",
+    "ios",
+    "cli/dist",
+    "cli/**/*.ts",
+    "!cli/node_modules",
+    "expo",
+    "typings",
+    "versioning",
+    "*.podspec",
+    "react-native.config.js",
+    "./*.js",
+    "package.json",
+    "package-lock.json",
+    "!ios/build",
+    "!android/build",
+    "!android/app/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
   "scripts": {
-    "clean": "shx rm -rf bin",
     "setup": "npm install --quiet --no-progress",
-    "prebuild:tests": "npm run clean && npm run tslint",
-    "build:tests": "tsc",
     "test": "npm run build:tests && npm run test:setup && npm run test:fast",
     "test:android": "npm run build:tests && npm run test:setup:android && npm run test:fast:android",
     "test:ios": "npm run build:tests && npm run test:setup:ios && npm run test:fast:ios",
@@ -38,6 +64,9 @@
     "test:debugger:android": "mocha --recursive --inspect-brk=0.0.0.0 bin/test --android",
     "test:debugger:ios": "mocha --recursive --inspect-brk=0.0.0.0 bin/test --ios",
     "tslint": "tslint -c tslint.json test/**/*.ts",
+    "type:cli": "npm run --workspace cli typecheck",
+    "build:cli": "npm run --workspace cli clean && npm run --workspace cli build",
+    "prepack": "npm run build:cli",
     "publish": "npm publish --access=public",
     "eslint": "eslint --quiet .",
     "jest": "jest versioning/*"
@@ -50,7 +79,7 @@
     "commander": "^12.1.0",
     "hoist-non-react-statics": "^3.3.2",
     "semver": "^7.3.5",
-    "shelljs": "^0.8.5",
+    "shelljs": "^0.10.0",
     "xcode": "^3.0.1",
     "yazl": "^3.3.1"
   },
@@ -66,11 +95,12 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
+    "@babel/preset-typescript": "^7.27.1",
     "@eslint/js": "^9.13.0",
     "@types/assert": "^1.5.2",
     "@types/mkdirp": "^1.0.1",
     "@types/mocha": "^9.0.0",
-    "@types/node": "^14.0.27",
+    "@types/node": "^18.19.129",
     "@types/q": "^1.5.4",
     "@types/semver": "^7.5.8",
     "@types/shelljs": "^0.8.15",

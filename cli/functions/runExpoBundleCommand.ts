@@ -1,5 +1,5 @@
-const path = require('path');
-const shell = require('shelljs');
+import path from "path";
+import shell from "shelljs";
 
 /**
  * Run `expo bundle` CLI command
@@ -11,24 +11,18 @@ const shell = require('shelljs');
  * @param sourcemapOutput {string} Path to output sourcemap file (Warning: if sourcemapOutput points to the outputPath, the sourcemap will be included in the CodePush bundle and increase the deployment size)
  * @return {void}
  */
-function runExpoBundleCommand(
-    bundleName,
-    outputPath,
-    platform,
-    sourcemapOutput,
-    entryFile,
-) {
-    /**
-     * @return {string}
-     */
-    function getCliPath() {
+export function runExpoBundleCommand(
+    bundleName: string,
+    outputPath: string,
+    platform: string,
+    sourcemapOutput: string,
+    entryFile: string,
+): void {
+    function getCliPath(): string {
         return path.join('node_modules', '.bin', 'expo');
     }
 
-    /**
-     * @type {string[]}
-     */
-    const expoBundleArgs = [
+    const expoBundleArgs: string[] = [
         'export:embed',
         '--assets-dest',
         outputPath,
@@ -49,5 +43,3 @@ function runExpoBundleCommand(
 
     shell.exec(`${getCliPath()} ${expoBundleArgs.join(' ')}`);
 }
-
-module.exports = { runExpoBundleCommand };

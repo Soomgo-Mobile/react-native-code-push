@@ -1,6 +1,15 @@
-const { program, Option } = require("commander");
-const { bundleCodePush } = require("./bundleCodePush");
-const { OUTPUT_BUNDLE_DIR, ROOT_OUTPUT_DIR, ENTRY_FILE } = require('../../constant');
+import { program, Option } from "commander";
+import { bundleCodePush } from "./bundleCodePush.js";
+import { OUTPUT_BUNDLE_DIR, ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
+
+type Options = {
+    framework: 'expo' | undefined;
+    platform: 'ios' | 'android';
+    outputPath: string;
+    entryFile: string;
+    bundleName: string;
+    outputBundleDir: string;
+}
 
 program.command('bundle')
     .description('Creates a CodePush bundle file (assumes Hermes is enabled).')
@@ -10,17 +19,7 @@ program.command('bundle')
     .option('-e, --entry-file <string>', 'path to JS/TS entry file', ENTRY_FILE)
     .option('-b, --bundle-name <string>', 'bundle file name (default-ios: "main.jsbundle" / default-android: "index.android.bundle")')
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
-    /**
-     * @param {Object} options
-     * @param {string} options.framework
-     * @param {string} options.platform
-     * @param {string} options.outputPath
-     * @param {string} options.entryFile
-     * @param {string} options.bundleName
-     * @param {string} options.outputBundleDir
-     * @return {void}
-     */
-    .action((options) => {
+    .action((options: Options) => {
         bundleCodePush(
             options.framework,
             options.platform,

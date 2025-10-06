@@ -1,6 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-const { initAndroid, modifyMainApplicationKt } = require('../initAndroid');
+import fs from "fs";
+import path from "path";
+import { initAndroid, modifyMainApplicationKt } from "../initAndroid.js";
+import { jest, expect, describe, it } from "@jest/globals";
 
 const tempDir = path.join(__dirname, 'temp');
 
@@ -73,7 +74,7 @@ describe('Android init command', () => {
         await initAndroid();
 
         // Assert
-        expect(consoleSpy).toHaveBeenCalledWith('MainApplication.java is not supported. Please migrate to MainApplication.kt.');
+        expect(consoleSpy).toHaveBeenCalledWith('log: MainApplication.java is not supported. Please migrate to MainApplication.kt.');
         const finalContent = fs.readFileSync(javaFilePath, 'utf-8');
         expect(finalContent).toBe(originalContent); // Ensure file is not modified
 

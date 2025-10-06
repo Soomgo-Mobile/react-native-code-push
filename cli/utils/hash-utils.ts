@@ -7,50 +7,31 @@
  * integrity checks) and Management SDK (for end-to-end code signing), please keep them in sync.
  */
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const { isDirectory } = require('./file-utils');
-const { walk } = require('./promisfied-fs');
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { isDirectory } from "./file-utils.js";
+import { walk } from "./promisfied-fs.js";
 
 // Do not throw an exception if either of these modules are missing, as they may not be needed by the
 // consumer of this file.
 const HASH_ALGORITHM = 'sha256';
 class PackageManifest {
-    /**
-     * @type {Map<string, string>}
-     * @private
-     */
-    _map;
+    private _map: Map<string, string>;
 
-    /**
-     * @param map {Map<string, string>?}
-     * @public
-     */
-    constructor(map) {
+    constructor(map?: Map<string, string>) {
         if (map == null) {
             map = new Map();
         }
         this._map = map;
     }
 
-    /**
-     * @return {Map<string, string>}
-     * @public
-     */
-    toMap() {
+    toMap(): Map<string, string> {
         return this._map;
     }
 
-    /**
-     * @return {string}
-     * @public
-     */
-    computePackageHash() {
-        /**
-         * @type {string[]}
-         */
-        let entries = [];
+    computePackageHash(): string {
+        let entries: string[] = [];
         this._map.forEach((hash, name) => {
             entries.push(name + ':' + hash);
         });
@@ -62,12 +43,8 @@ class PackageManifest {
         return crypto.createHash(HASH_ALGORITHM).update(JSON.stringify(entries)).digest('hex');
     }
 
-    /**
-     * @return {string}
-     * @public
-     */
-    serialize() {
-        const obj = {};
+    serialize(): string {
+        const obj: Record<string, string> = {};
 
         this._map.forEach(function (value, key) {
             obj[key] = value;
@@ -76,22 +53,12 @@ class PackageManifest {
         return JSON.stringify(obj);
     }
 
-    /**
-     * @param filePath {string}
-     * @return {string}
-     * @public
-     */
-    static normalizePath(filePath) {
+    static normalizePath(filePath: string): string {
         //replace all backslashes coming from cli running on windows machines by slashes
         return filePath.replace(/\\/g, '/');
     }
 
-    /**
-     * @param relativeFilePath {string}
-     * @return {boolean}
-     * @public
-     */
-    static isIgnored(relativeFilePath) {
+    static isIgnored(relativeFilePath: string): boolean {
         const __MACOSX = '__MACOSX/';
         const DS_STORE = '.DS_Store';
         const CODEPUSH_METADATA = '.codepushrelease';
@@ -105,13 +72,7 @@ class PackageManifest {
     }
 }
 
-/**
- *
- * @param directoryPath {string}
- * @param basePath {string}
- * @return {Promise<string>}
- */
-async function generatePackageHashFromDirectory(directoryPath, basePath) {
+export async function generatePackageHashFromDirectory(directoryPath: string, basePath: string) {
     try {
         if (!isDirectory(directoryPath)) {
             throw new Error('Not a directory. Please either create a directory, or use hashFile().');
@@ -127,40 +88,22 @@ async function generatePackageHashFromDirectory(directoryPath, basePath) {
     return manifest.computePackageHash();
 }
 
-/**
- *
- * @param directoryPath {string}
- * @param basePath {string}
- * @return {Promise<PackageManifest>}
- */
-function generatePackageManifestFromDirectory(directoryPath, basePath) {
+function generatePackageManifestFromDirectory(directoryPath: string, basePath: string): Promise<PackageManifest> {
     // eslint-disable-next-line no-async-promise-executor
     return new Promise(async (resolve, reject) => {
-        /**
-         * @type {Map<string, string>}
-         */
-        const fileHashesMap = new Map();
+        const fileHashesMap = new Map<string, string>();
 
-        /**
-         * @type {string[]}
-         */
-        const files = await walk(directoryPath);
+        const files: string[] = await walk(directoryPath);
 
         if (!files || files.length === 0) {
             reject('Error: Cannot sign the release because no files were found.');
             return;
         }
 
-        /**
-         * @type {Promise<void>}
-         */
         // Hash the files sequentially, because streaming them in parallel is not necessarily faster
-        const generateManifestPromise = files.reduce((soFar, filePath) => {
+        const generateManifestPromise = files.reduce<Promise<unknown>>((soFar, filePath) => {
             return soFar.then(() => {
-                /**
-                 * @type {string}
-                 */
-                const relativePath = PackageManifest.normalizePath(path.relative(basePath, filePath));
+                const relativePath: string = PackageManifest.normalizePath(path.relative(basePath, filePath));
                 if (!PackageManifest.isIgnored(relativePath)) {
                     return hashFile(filePath).then((hash) => {
                         fileHashesMap.set(relativePath, hash);
@@ -175,29 +118,13 @@ function generatePackageManifestFromDirectory(directoryPath, basePath) {
     });
 }
 
-/**
- *
- * @param filePath {string}
- * @return {Promise<string>}
- */
-function hashFile(filePath) {
-    /**
-     * @type {fs.ReadStream}
-     */
-    const readStream = fs.createReadStream(filePath);
+function hashFile(filePath: string): Promise<string> {
+    const readStream: fs.ReadStream = fs.createReadStream(filePath);
     return hashStream(readStream);
 }
 
-/**
- *
- * @param readStream {stream.Readable}
- * @return {Promise<string>}
- */
-function hashStream(readStream) {
+function hashStream(readStream: fs.ReadStream): Promise<string> {
     return new Promise((resolve, reject) => {
-        /**
-         * @type {stream.Transform}
-         */
         const _hashStream = crypto.createHash(HASH_ALGORITHM)
 
         readStream
@@ -208,14 +135,8 @@ function hashStream(readStream) {
             .on('end', () => {
                 _hashStream.end();
 
-                /**
-                 * @type {Buffer}
-                 */
                 const buffer = _hashStream.read();
-                /**
-                 * @type {string}
-                 */
-                const hash = buffer.toString('hex');
+                const hash: string = buffer.toString('hex');
 
                 resolve(hash);
             });
@@ -223,5 +144,3 @@ function hashStream(readStream) {
         readStream.pipe(_hashStream);
     });
 }
-
-module.exports = { generatePackageHashFromDirectory };

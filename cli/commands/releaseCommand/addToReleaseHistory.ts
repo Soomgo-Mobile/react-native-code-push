@@ -1,46 +1,20 @@
-const path = require("path");
-const fs = require("fs");
+import path from "path";
+import fs from "fs";
+import type { CliConfigInterface } from "../../../typings/react-native-code-push.d.ts";
 
-/**
- *
- * @param appVersion {string}
- * @param binaryVersion {string}
- * @param bundleDownloadUrl {string}
- * @param packageHash {string}
- * @param getReleaseHistory {
- *   function(
- *     targetBinaryVersion: string,
- *     platform: string,
- *     identifier?: string
- *   ): Promise<ReleaseHistoryInterface>}
- * @param setReleaseHistory {
- *   function(
- *     targetBinaryVersion: string,
- *     jsonFilePath: string,
- *     releaseInfo: ReleaseHistoryInterface,
- *     platform: string,
- *     identifier?: string
- *   ): Promise<void>}
- * @param platform {"ios" | "android"}
- * @param identifier {string?}
- * @param mandatory {boolean?}
- * @param enable {boolean?}
- * @param rollout {number?}
- * @returns {Promise<void>}
- */
-async function addToReleaseHistory(
-    appVersion,
-    binaryVersion,
-    bundleDownloadUrl,
-    packageHash,
-    getReleaseHistory,
-    setReleaseHistory,
-    platform,
-    identifier,
-    mandatory,
-    enable,
-    rollout
-) {
+export async function addToReleaseHistory(
+    appVersion: string,
+    binaryVersion: string,
+    bundleDownloadUrl: string,
+    packageHash: string,
+    getReleaseHistory: CliConfigInterface['getReleaseHistory'],
+    setReleaseHistory: CliConfigInterface['setReleaseHistory'],
+    platform: 'ios' | 'android',
+    identifier: string | undefined,
+    mandatory: boolean,
+    enable: boolean,
+    rollout: number | undefined,
+): Promise<void> {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
     const updateInfo = releaseHistory[appVersion]
@@ -77,5 +51,3 @@ async function addToReleaseHistory(
         process.exit(1)
     }
 }
-
-module.exports = { addToReleaseHistory: addToReleaseHistory }

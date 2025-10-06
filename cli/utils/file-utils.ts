@@ -2,23 +2,13 @@
  * code based on appcenter-cli
  */
 
-const fs = require('fs');
+import fs from "fs";
 
-/**
- *
- * @param path {string}
- * @return {boolean}
- */
-function isDirectory(path) {
+export function isDirectory(path: string): boolean {
     return fs.statSync(path).isDirectory();
 }
 
-/**
- *
- * @param length {number}
- * @return {string}
- */
-function generateRandomFilename(length) {
+export function generateRandomFilename(length: number): string {
     let filename = '';
     const validChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -29,14 +19,7 @@ function generateRandomFilename(length) {
     return filename;
 }
 
-/**
- *
- * @param filePath {string}
- * @return {string}
- */
-function normalizePath(filePath) {
+export function normalizePath(filePath: string): string {
     //replace all backslashes coming from cli running on windows machines by slashes
     return filePath.replace(/\\/g, '/');
 }
-
-module.exports = { isDirectory, generateRandomFilename, normalizePath };

@@ -28,5 +28,10 @@
             "property-declaration": "nospace",
             "variable-declaration": "nospace"
         }]
+    },
+    "linterOptions": {
+        "exclude": [
+            "./cli/**"
+        ]
     }
 }

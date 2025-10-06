@@ -1,4 +1,4 @@
-function showLogo() {
+export function showLogo() {
   const logo = `
     
 +------------------------------------------------------------------+
@@ -19,5 +19,3 @@ Please refer to help command for more information.
     `;
   console.log(logo);
 }
-
-module.exports = { showLogo };

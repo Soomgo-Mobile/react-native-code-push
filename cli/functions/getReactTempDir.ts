@@ -2,15 +2,11 @@
  * code based on appcenter-cli
  */
 
-const os = require('os');
+import os from "os";
 
 /**
  * Return the path of the temporary directory for react-native bundling
- *
- * @return {string}
  */
-function getReactTempDir() {
+export function getReactTempDir(): string {
     return `${os.tmpdir()}/react-*`;
 }
-
-module.exports = { getReactTempDir };

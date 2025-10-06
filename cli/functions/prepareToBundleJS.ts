@@ -1,12 +1,10 @@
-const shell = require('shelljs');
+import shell from "shelljs";
 
 /**
  * @param deleteDirs {string[]} Directories to delete
  * @param makeDir {string} Directory path to create
  */
-function prepareToBundleJS({ deleteDirs, makeDir }) {
+export function prepareToBundleJS({ deleteDirs, makeDir }: { deleteDirs: string[], makeDir: string }) {
     shell.rm('-rf', deleteDirs);
     shell.mkdir('-p', makeDir);
 }
-
-module.exports = { prepareToBundleJS };

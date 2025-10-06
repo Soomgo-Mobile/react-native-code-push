@@ -1,7 +1,25 @@
-const { program, Option } = require("commander");
-const { findAndReadConfigFile } = require("../../utils/fsUtils");
-const { release } = require("./release");
-const { OUTPUT_BUNDLE_DIR, CONFIG_FILE_NAME, ROOT_OUTPUT_DIR, ENTRY_FILE } = require('../../constant');
+import { program, Option } from "commander";
+import { findAndReadConfigFile } from "../../utils/fsUtils.js";
+import { release } from "./release.js";
+import { OUTPUT_BUNDLE_DIR, CONFIG_FILE_NAME, ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
+
+type Options = {
+    binaryVersion: string;
+    appVersion: string;
+    framework: 'expo' | undefined;
+    platform: 'ios' | 'android';
+    identifier?: string;
+    config: string;
+    outputPath: string;
+    entryFile: string;
+    bundleName: string;
+    mandatory: boolean;
+    enable: boolean;
+    rollout?: number;
+    skipBundle: boolean;
+    skipCleanup: boolean;
+    outputBundleDir: string;
+}
 
 program.command('release')
     .description('Deploys a new CodePush update for a target binary app.\nAfter creating the CodePush bundle, it uploads the file and updates the ReleaseHistory information.\n`bundleUploader`, `getReleaseHistory`, and `setReleaseHistory` functions should be implemented in the config file.')
@@ -20,26 +38,7 @@ program.command('release')
     .option('--skip-bundle <bool>', 'skip bundle process', parseBoolean, false)
     .option('--skip-cleanup <bool>', 'skip cleanup process', parseBoolean, false)
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
-    /**
-     * @param {Object} options
-     * @param {string} options.binaryVersion
-     * @param {string} options.appVersion
-     * @param {string} options.framework
-     * @param {string} options.platform
-     * @param {string} options.identifier
-     * @param {string} options.config
-     * @param {string} options.outputPath
-     * @param {string} options.entryFile
-     * @param {string} options.bundleName
-     * @param {string} options.mandatory
-     * @param {string} options.enable
-     * @param {number} options.rollout
-     * @param {string} options.skipBundle
-     * @param {string} options.skipCleanup
-     * @param {string} options.outputBundleDir
-     * @return {void}
-     */
-    .action(async (options) => {
+    .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
         if (typeof options.rollout === 'number' && (options.rollout < 0 || options.rollout > 100)) {
@@ -70,7 +69,7 @@ program.command('release')
         console.log('🚀 Release completed.')
     });
 
-function parseBoolean(value) {
+function parseBoolean(value: string): boolean | undefined {
     if (value === 'true') return true;
     if (value === 'false') return false;
     else return undefined;

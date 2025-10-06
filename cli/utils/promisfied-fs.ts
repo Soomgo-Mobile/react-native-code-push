@@ -2,21 +2,13 @@
  * code based on appcenter-cli
  */
 
-const { promises: fs } = require('fs');
-const path = require('path');
+import { promises as fs } from "fs";
+import path from "path";
 
-/**
- *
- * @param dir {string}
- * @return {Promise<string[]>}
- */
-async function walk(dir) {
+export async function walk(dir: string): Promise<string[]> {
     const stats = await fs.stat(dir);
     if (stats.isDirectory()) {
-        /**
-         * @type {string[]}
-         */
-        let files = [];
+        let files: string[] = [];
         for (const file of await fs.readdir(dir)) {
             files = files.concat(await walk(path.join(dir, file)));
         }
@@ -25,5 +17,3 @@ async function walk(dir) {
         return [dir];
     }
 }
-
-module.exports = { walk };

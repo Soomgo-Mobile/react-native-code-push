@@ -1,6 +1,6 @@
-const { initAndroid } = require('./initAndroid');
-const { initIos } = require('./initIos');
-const { program } = require('commander');
+import { initAndroid } from "./initAndroid.js";
+import { initIos } from "./initIos.js";
+import { program } from "commander";
 
 program
     .command('init')

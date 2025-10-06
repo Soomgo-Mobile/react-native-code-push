@@ -1,7 +1,14 @@
-const { program, Option } = require("commander");
-const { findAndReadConfigFile } = require("../../utils/fsUtils");
-const { createReleaseHistory } = require("./createReleaseHistory");
-const { CONFIG_FILE_NAME } = require('../../constant');
+import { program, Option } from "commander";
+import { findAndReadConfigFile } from "../../utils/fsUtils.js";
+import { createReleaseHistory } from "./createReleaseHistory.js";
+import { CONFIG_FILE_NAME } from "../../constant.js";
+
+type Options = {
+    binaryVersion: string;
+    platform: 'ios' | 'android';
+    identifier?: string;
+    config: string;
+}
 
 program.command('create-history')
     .description('Creates a new release history for the binary app.')
@@ -9,15 +16,7 @@ program.command('create-history')
     .addOption(new Option('-p, --platform <type>', 'platform').choices(['ios', 'android']).default('ios'))
     .option('-i, --identifier <string>', 'reserved characters to distinguish the release.')
     .option('-c, --config <path>', 'set config file name (JS/TS)', CONFIG_FILE_NAME)
-    /**
-     * @param {Object} options
-     * @param {string} options.binaryVersion
-     * @param {string} options.platform
-     * @param {string} options.identifier
-     * @param {string} options.config
-     * @return {void}
-     */
-    .action(async (options) => {
+    .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
         await createReleaseHistory(

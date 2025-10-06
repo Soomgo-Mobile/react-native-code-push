@@ -1,8 +1,8 @@
-const path = require('path');
-const fs = require('fs');
-const { EOL } = require('os');
+import path from "path";
+import fs from "fs";
+import { EOL } from "os";
 
-function modifyMainApplicationKt(mainApplicationContent) {
+export function modifyMainApplicationKt(mainApplicationContent: string) {
     if (mainApplicationContent.includes('CodePush.getJSBundleFile()')) {
         console.log('log: MainApplication.kt already has CodePush initialized.');
         return mainApplicationContent;
@@ -12,7 +12,7 @@ function modifyMainApplicationKt(mainApplicationContent) {
         .replace('override fun getJSMainModuleName(): String = "index"', `override fun getJSMainModuleName(): String = "index"${EOL}        override fun getJSBundleFile(): String = CodePush.getJSBundleFile()`)
 }
 
-async function initAndroid() {
+export async function initAndroid() {
     console.log('log: Running Android setup...');
     await applyMainApplication();
 }
@@ -37,12 +37,7 @@ async function applyMainApplication() {
 
 async function findMainApplication() {
     const searchPath = path.join(process.cwd(), 'android', 'app', 'src', 'main', 'java');
-    const files = fs.readdirSync(searchPath, { recursive: true });
+    const files = fs.readdirSync(searchPath, { encoding: 'utf-8', recursive: true });
     const mainApplicationFile = files.find(file => file.endsWith('MainApplication.java') || file.endsWith('MainApplication.kt'));
     return mainApplicationFile ? path.join(searchPath, mainApplicationFile) : null;
 }
-
-module.exports = {
-    initAndroid: initAndroid,
-    modifyMainApplicationKt: modifyMainApplicationKt,
-};

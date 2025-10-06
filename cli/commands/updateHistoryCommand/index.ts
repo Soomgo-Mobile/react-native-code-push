@@ -1,7 +1,18 @@
-const { program, Option } = require("commander");
-const { findAndReadConfigFile } = require("../../utils/fsUtils");
-const { updateReleaseHistory } = require("./updateReleaseHistory");
-const { CONFIG_FILE_NAME } = require('../../constant');
+import { program, Option } from "commander";
+import { findAndReadConfigFile } from "../../utils/fsUtils.js";
+import { updateReleaseHistory } from "./updateReleaseHistory.js";
+import { CONFIG_FILE_NAME } from "../../constant.js";
+
+type Options = {
+    appVersion: string;
+    binaryVersion: string;
+    platform: 'ios' | 'android';
+    identifier?: string;
+    config: string;
+    mandatory?: boolean;
+    enable?: boolean;
+    rollout?: number;
+}
 
 program.command('update-history')
     .description('Updates the release history for a specific binary version.\n`getReleaseHistory`, `setReleaseHistory` functions should be implemented in the config file.')
@@ -13,19 +24,7 @@ program.command('update-history')
     .option('-m, --mandatory <bool>', 'make the release to be mandatory', parseBoolean, undefined)
     .option('-e, --enable <bool>', 'make the release to be enabled', parseBoolean, undefined)
     .option('--rollout <number>', 'rollout percentage (0-100)', parseFloat, undefined)
-    /**
-     * @param {Object} options
-     * @param {string} options.appVersion
-     * @param {string} options.binaryVersion
-     * @param {string} options.platform
-     * @param {string} options.identifier
-     * @param {string} options.config
-     * @param {string} options.mandatory
-     * @param {string} options.enable
-     * @param {number} options.rollout
-     * @return {void}
-     */
-    .action(async (options) => {
+    .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
         if (typeof options.mandatory !== "boolean" && typeof options.enable !== "boolean") {
@@ -46,7 +45,7 @@ program.command('update-history')
         )
     });
 
-function parseBoolean(value) {
+function parseBoolean(value: string) {
     if (value === 'true') return true;
     if (value === 'false') return false;
     else return undefined;

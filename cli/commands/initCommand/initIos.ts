@@ -1,8 +1,9 @@
-const path = require('path');
-const fs = require('fs');
-const xcode = require('xcode');
+import path from "path";
+import fs from "fs";
+// @ts-expect-error -- types for "xcode" are not available
+import xcode from "xcode";
 
-async function initIos() {
+export async function initIos() {
     console.log('log: Running iOS setup...');
     const projectDir = path.join(process.cwd(), 'ios');
     const files = fs.readdirSync(projectDir);
@@ -28,14 +29,14 @@ async function initIos() {
     console.log('log: Please run `cd ios && pod install` to complete the setup.');
 }
 
-function findAppDelegate(searchPath) {
+function findAppDelegate(searchPath: string) {
     if (!fs.existsSync(searchPath)) return null;
     const files = fs.readdirSync(searchPath);
     const appDelegateFile = files.find(file => file.startsWith('AppDelegate') && (file.endsWith('.m') || file.endsWith('.mm') || file.endsWith('.swift')));
     return appDelegateFile ? path.join(searchPath, appDelegateFile) : null;
 }
 
-function modifyObjectiveCAppDelegate(appDelegateContent) {
+export function modifyObjectiveCAppDelegate(appDelegateContent: string) {
     const IMPORT_STATEMENT = '#import <CodePush/CodePush.h>';
     if (appDelegateContent.includes(IMPORT_STATEMENT)) {
         console.log('log: AppDelegate already has CodePush imported.');
@@ -47,7 +48,7 @@ function modifyObjectiveCAppDelegate(appDelegateContent) {
         .replace('[[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];', '[CodePush bundleURL];');
 }
 
-function modifySwiftAppDelegate(appDelegateContent) {
+export function modifySwiftAppDelegate(appDelegateContent: string) {
     const CODEPUSH_CALL_STATEMENT = 'CodePush.bundleURL()';
     if (appDelegateContent.includes(CODEPUSH_CALL_STATEMENT)) {
         console.log('log: AppDelegate.swift already configured for CodePush.');
@@ -58,14 +59,14 @@ function modifySwiftAppDelegate(appDelegateContent) {
         .replace('Bundle.main.url(forResource: "main", withExtension: "jsbundle")', CODEPUSH_CALL_STATEMENT);
 }
 
-async function setupObjectiveC(appDelegatePath) {
+async function setupObjectiveC(appDelegatePath: string) {
     const appDelegateContent = fs.readFileSync(appDelegatePath, 'utf-8');
     const newContent = modifyObjectiveCAppDelegate(appDelegateContent);
     fs.writeFileSync(appDelegatePath, newContent);
     console.log('log: Successfully updated AppDelegate.m/mm.');
 }
 
-async function setupSwift(appDelegatePath, projectDir, projectName) {
+async function setupSwift(appDelegatePath: string, projectDir: string, projectName: string) {
     const bridgingHeaderPath = await ensureBridgingHeader(projectDir, projectName);
     if (!bridgingHeaderPath) {
         console.log('log: Failed to create or find bridging header.');
@@ -78,12 +79,12 @@ async function setupSwift(appDelegatePath, projectDir, projectName) {
     console.log('log: Successfully updated AppDelegate.swift.');
 }
 
-async function ensureBridgingHeader(projectDir, projectName) {
+async function ensureBridgingHeader(projectDir: string, projectName: string) {
     const projectPath = path.join(projectDir, `${projectName}.xcodeproj`, 'project.pbxproj');
     const myProj = xcode.project(projectPath);
 
     return new Promise((resolve, reject) => {
-        myProj.parse(function (err) {
+        myProj.parse(function (err: unknown) {
             if (err) {
                 console.error(`Error parsing Xcode project: ${err}`);
                 return reject(err);
@@ -119,10 +120,4 @@ async function ensureBridgingHeader(projectDir, projectName) {
             resolve(bridgingHeaderAbsolutePath);
         });
     });
-}
-
-module.exports = {
-    initIos: initIos,
-    modifyObjectiveCAppDelegate: modifyObjectiveCAppDelegate,
-    modifySwiftAppDelegate: modifySwiftAppDelegate,
 }

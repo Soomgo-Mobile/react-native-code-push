@@ -1,7 +1,7 @@
-const path = require('path');
-const shell = require('shelljs');
-const zip = require('../utils/zip');
-const {generatePackageHashFromDirectory} = require('../utils/hash-utils');
+import path from "path";
+import shell from "shelljs";
+import { zip } from "../utils/zip.js";
+import { generatePackageHashFromDirectory } from "../utils/hash-utils.js";
 
 /**
  * Create a CodePush bundle file and return the information.
@@ -10,7 +10,7 @@ const {generatePackageHashFromDirectory} = require('../utils/hash-utils');
  * @param bundleDirectory {string} The directory path to save the CodePush bundle file
  * @return {Promise<{ bundleFileName: string }>}
  */
-async function makeCodePushBundle(contentsPath, bundleDirectory) {
+export async function makeCodePushBundle(contentsPath: string, bundleDirectory: string): Promise<{ bundleFileName: string }> {
     const updateContentsZipPath = await zip(contentsPath);
 
     const packageHash = await generatePackageHashFromDirectory(contentsPath, path.join(contentsPath, '..'));
@@ -24,5 +24,3 @@ async function makeCodePushBundle(contentsPath, bundleDirectory) {
         bundleFileName: packageHash,
     };
 }
-
-module.exports = { makeCodePushBundle };

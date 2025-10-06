@@ -1,36 +1,21 @@
-const fs = require('fs');
-const path = require('path');
+import fs from "fs";
+import path from "path";
+import type { CliConfigInterface, ReleaseHistoryInterface, ReleaseInfo } from "../../../typings/react-native-code-push.d.ts";
 
-/**
- *
- * @param targetVersion {string}
- * @param setReleaseHistory {
- *   function(
- *     targetBinaryVersion: string,
- *     jsonFilePath: string,
- *     releaseInfo: ReleaseHistoryInterface,
- *     platform: string,
- *     identifier: string
- *   ): Promise<void>}
- * @param platform {"ios" | "android"}
- * @param identifier {string}
- * @returns {Promise<void>}
- */
-async function createReleaseHistory(
-    targetVersion,
-    setReleaseHistory,
-    platform,
-    identifier,
-) {
-    const BINARY_RELEASE = {
+export async function createReleaseHistory(
+    targetVersion: string,
+    setReleaseHistory: CliConfigInterface['setReleaseHistory'],
+    platform: 'ios' | 'android',
+    identifier?: string,
+): Promise<void> {
+    const BINARY_RELEASE: ReleaseInfo = {
         enabled: true,
         mandatory: false,
         downloadUrl: "",
         packageHash: "",
     };
 
-    /** @type {ReleaseHistoryInterface} */
-    const INITIAL_HISTORY = {
+    const INITIAL_HISTORY: ReleaseHistoryInterface = {
         [targetVersion]: BINARY_RELEASE
     };
 
@@ -49,5 +34,3 @@ async function createReleaseHistory(
         process.exit(1)
     }
 }
-
-module.exports = { createReleaseHistory: createReleaseHistory }

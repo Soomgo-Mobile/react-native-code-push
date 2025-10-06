@@ -2,10 +2,10 @@
  * code based on appcenter-cli
  */
 
-const childProcess = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const shell = require('shelljs');
+import childProcess from "child_process";
+import fs from "fs";
+import path from "path";
+import shell from "shelljs";
 
 /**
  * Run Hermes compile CLI command
@@ -16,16 +16,13 @@ const shell = require('shelljs');
  * @param extraHermesFlags {string[]} Additional options to pass to `hermesc` command
  * @return {Promise<void>}
  */
-async function runHermesEmitBinaryCommand(
-    bundleName,
-    outputPath,
-    sourcemapOutput,
-    extraHermesFlags = [],
-) {
-    /**
-     * @type {string[]}
-     */
-    const hermesArgs = [
+export async function runHermesEmitBinaryCommand(
+    bundleName: string,
+    outputPath: string,
+    sourcemapOutput: string,
+    extraHermesFlags: string[] = [],
+): Promise<void> {
+    const hermesArgs: string[] = [
         '-emit-binary',
         '-out',
         path.join(outputPath, bundleName + '.hbc'),
@@ -38,7 +35,7 @@ async function runHermesEmitBinaryCommand(
 
     console.log('Converting JS bundle to byte code via Hermes, running command:\n');
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
         try {
             const hermesCommand = getHermesCommand();
 
@@ -109,14 +106,8 @@ async function runHermesEmitBinaryCommand(
     });
 }
 
-/**
- * @return {string}
- */
-function getHermesCommand() {
-    /**
-     * @type {(file: string) => boolean}
-     */
-    const fileExists = (file) => {
+function getHermesCommand(): string {
+    const fileExists = (file: string): boolean => {
         try {
             return fs.statSync(file).isFile();
         } catch (e) {
@@ -137,9 +128,6 @@ function getHermesCommand() {
     throw new Error('Hermes engine binary not found. Please upgrade to react-native 0.69 or later');
 }
 
-/**
- * @return {string}
- */
 function getHermesOSBin() {
     switch (process.platform) {
         case 'win32':
@@ -154,10 +142,7 @@ function getHermesOSBin() {
     }
 }
 
-/**
- * @return {string}
- */
-function getHermesOSExe() {
+function getHermesOSExe(): string {
     const hermesExecutableName = 'hermesc';
     switch (process.platform) {
         case 'win32':
@@ -167,10 +152,7 @@ function getHermesOSExe() {
     }
 }
 
-/**
- * @return {string | null}
- */
-function getComposeSourceMapsPath() {
+function getComposeSourceMapsPath(): string | null {
     // detect if compose-source-maps.js script exists
     const composeSourceMaps = path.join(getReactNativePackagePath(), 'scripts', 'compose-source-maps.js');
     if (fs.existsSync(composeSourceMaps)) {
@@ -179,10 +161,7 @@ function getComposeSourceMapsPath() {
     return null;
 }
 
-/**
- * @return {string}
- */
-function getReactNativePackagePath() {
+function getReactNativePackagePath(): string {
     const result = childProcess.spawnSync('node', [
         '--print',
         "require.resolve('react-native/package.json')",
@@ -195,19 +174,13 @@ function getReactNativePackagePath() {
     return path.join('node_modules', 'react-native');
 }
 
-/**
- * @param dirname {string}
- * @return {boolean}
- */
-function directoryExistsSync(dirname) {
+function directoryExistsSync(dirname: string): boolean {
     try {
         return fs.statSync(dirname).isDirectory();
-    } catch (err) {
-        if (err.code !== 'ENOENT') {
+    } catch (err: unknown) {
+        if ((err as any).code !== 'ENOENT') {
             throw err;
         }
     }
     return false;
 }
-
-module.exports = { runHermesEmitBinaryCommand };

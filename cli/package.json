@@ -1,0 +1,32 @@
+{
+  "name": "@bravemobile/code-push-cli",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "shelljs": "^0.10.0",
+    "xcode": "^3.0.1",
+    "yazl": "^3.3.1"
+  },
+  "peerDependencies": {
+    "ts-node": ">=10"
+  },
+  "peerDependenciesMeta": {
+    "ts-node": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/yazl": "^3.3.0"
+  }
+}
