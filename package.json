@@ -69,7 +69,7 @@
     "prepack": "npm run build:cli",
     "publish": "npm publish --access=public",
     "eslint": "eslint --quiet .",
-    "jest": "jest src/versioning/*"
+    "jest": "jest src/versioning/* cli/*"
   },
   "repository": {
     "type": "git",
