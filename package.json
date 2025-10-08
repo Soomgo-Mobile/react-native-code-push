@@ -2,9 +2,9 @@
   "name": "@bravemobile/react-native-code-push",
   "version": "12.0.2",
   "description": "React Native plugin for the CodePush service",
-  "main": "CodePush.js",
-  "react-native": "CodePush.js",
-  "source": "CodePush.js",
+  "main": "src/CodePush.js",
+  "react-native": "src/CodePush.js",
+  "source": "src/CodePush.js",
   "types": "typings/react-native-code-push.d.ts",
   "homepage": "https://microsoft.github.io/code-push",
   "keywords": [
@@ -25,6 +25,8 @@
     "code-push": "bin/code-push.js"
   },
   "files": [
+    "src",
+    "bin/code-push.js",
     "android",
     "ios",
     "cli/dist",
@@ -32,10 +34,8 @@
     "!cli/node_modules",
     "expo",
     "typings",
-    "versioning",
     "*.podspec",
     "react-native.config.js",
-    "./*.js",
     "package.json",
     "package-lock.json",
     "!ios/build",
@@ -69,7 +69,7 @@
     "prepack": "npm run build:cli",
     "publish": "npm publish --access=public",
     "eslint": "eslint --quiet .",
-    "jest": "jest versioning/*"
+    "jest": "jest src/versioning/*"
   },
   "repository": {
     "type": "git",
