@@ -31,7 +31,7 @@ public class CodePush implements ReactPackage {
 
     private boolean mDidUpdate = false;
 
-    private String mAssetsBundleFileName;
+    private String mAssetsBundleFileName = CodePushConstants.DEFAULT_JS_BUNDLE_NAME;
 
     // Helper classes.
     private CodePushUpdateManager mUpdateManager;
