@@ -87,7 +87,6 @@ public class CodePush implements ReactPackage {
         String serverUrlFromStrings = getCustomPropertyFromStringsIfExist("ServerUrl");
         if (serverUrlFromStrings != null) mServerUrl = serverUrlFromStrings;
 
-        clearDebugCacheIfNeeded(null);
         initializeUpdateAfterRestart();
     }
 
@@ -126,39 +125,6 @@ public class CodePush implements ReactPackage {
         }
 
         return null;
-    }
-
-    private boolean isLiveReloadEnabled(ReactInstanceManager instanceManager) {
-        // Use instanceManager for checking if we use LiveReload mode. In this case we should not remove ReactNativeDevBundle.js file
-        // because we get error with trying to get this after reloading. Issue: https://github.com/microsoft/react-native-code-push/issues/1272
-        if (instanceManager != null) {
-            DevSupportManager devSupportManager = instanceManager.getDevSupportManager();
-            if (devSupportManager != null) {
-                DeveloperSettings devSettings = devSupportManager.getDevSettings();
-                Method[] methods = devSettings.getClass().getMethods();
-                for (Method m : methods) {
-                    if (m.getName().equals("isReloadOnJSChangeEnabled")) {
-                        try {
-                            return (boolean) m.invoke(devSettings);
-                        } catch (Exception x) {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    public void clearDebugCacheIfNeeded(ReactInstanceManager instanceManager) {
-        if (mIsDebugMode && mSettingsManager.isPendingUpdate(null) && !isLiveReloadEnabled(instanceManager)) {
-            // This needs to be kept in sync with https://github.com/facebook/react-native/blob/master/ReactAndroid/src/main/java/com/facebook/react/devsupport/DevSupportManager.java#L78
-            File cachedDevBundle = new File(mContext.getFilesDir(), "ReactNativeDevBundle.js");
-            if (cachedDevBundle.exists()) {
-                cachedDevBundle.delete();
-            }
-        }
     }
 
     public boolean didUpdate() {
