@@ -116,7 +116,7 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
 
     // Use reflection to find and set the appropriate fields on ReactInstanceManager. See #556 for a proposal for a less brittle way
     // to approach this.
-    private void setJSBundle(ReactInstanceManager instanceManager, String latestJSBundleFile) throws IllegalAccessException {
+    private void setJSBundle(String latestJSBundleFile) throws IllegalAccessException {
         try {
             JSBundleLoader latestJSBundleLoader;
             if (latestJSBundleFile.toLowerCase().startsWith("assets://")) {
@@ -128,7 +128,6 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
             ReactHost reactHost = resolveReactHost();
             if (reactHost == null) {
                 // Bridge, Old Architecture
-                setJSBundleLoaderBridge(instanceManager, latestJSBundleLoader);
                 return;
             }
 
@@ -167,19 +166,12 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         }
 
         try {
-            // #1) Get the ReactInstanceManager instance, which is what includes the
-            //     logic to reload the current React context.
-            final ReactInstanceManager instanceManager = resolveInstanceManager();
-            if (instanceManager == null) {
-                return;
-            }
-
             String latestJSBundleFile = mCodePush.getJSBundleFileInternal(mCodePush.getAssetsBundleFileName());
 
-            // #2) Update the locally stored JS bundle file path
-            setJSBundle(instanceManager, latestJSBundleFile);
+            // #1) Update the locally stored JS bundle file path
+            setJSBundle(latestJSBundleFile);
 
-            // #3) Get the context creation method and fire it on the UI thread (which RN enforces)
+            // #2) Get the context creation method and fire it on the UI thread (which RN enforces)
             new Handler(Looper.getMainLooper()).post(new Runnable() {
                 @Override
                 public void run() {
