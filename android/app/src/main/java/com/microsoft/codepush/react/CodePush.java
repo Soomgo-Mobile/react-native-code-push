@@ -10,8 +10,6 @@ import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.JavaScriptModule;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.devsupport.interfaces.DevSupportManager;
-import com.facebook.react.modules.debug.interfaces.DeveloperSettings;
 import com.facebook.react.uimanager.ViewManager;
 
 import org.json.JSONException;
@@ -31,7 +29,7 @@ public class CodePush implements ReactPackage {
 
     private boolean mDidUpdate = false;
 
-    private String mAssetsBundleFileName;
+    private String mAssetsBundleFileName = CodePushConstants.DEFAULT_JS_BUNDLE_NAME;
 
     // Helper classes.
     private CodePushUpdateManager mUpdateManager;
@@ -87,7 +85,6 @@ public class CodePush implements ReactPackage {
         String serverUrlFromStrings = getCustomPropertyFromStringsIfExist("ServerUrl");
         if (serverUrlFromStrings != null) mServerUrl = serverUrlFromStrings;
 
-        clearDebugCacheIfNeeded(null);
         initializeUpdateAfterRestart();
     }
 
@@ -128,39 +125,6 @@ public class CodePush implements ReactPackage {
         return null;
     }
 
-    private boolean isLiveReloadEnabled(ReactInstanceManager instanceManager) {
-        // Use instanceManager for checking if we use LiveReload mode. In this case we should not remove ReactNativeDevBundle.js file
-        // because we get error with trying to get this after reloading. Issue: https://github.com/microsoft/react-native-code-push/issues/1272
-        if (instanceManager != null) {
-            DevSupportManager devSupportManager = instanceManager.getDevSupportManager();
-            if (devSupportManager != null) {
-                DeveloperSettings devSettings = devSupportManager.getDevSettings();
-                Method[] methods = devSettings.getClass().getMethods();
-                for (Method m : methods) {
-                    if (m.getName().equals("isReloadOnJSChangeEnabled")) {
-                        try {
-                            return (boolean) m.invoke(devSettings);
-                        } catch (Exception x) {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    public void clearDebugCacheIfNeeded(ReactInstanceManager instanceManager) {
-        if (mIsDebugMode && mSettingsManager.isPendingUpdate(null) && !isLiveReloadEnabled(instanceManager)) {
-            // This needs to be kept in sync with https://github.com/facebook/react-native/blob/master/ReactAndroid/src/main/java/com/facebook/react/devsupport/DevSupportManager.java#L78
-            File cachedDevBundle = new File(mContext.getFilesDir(), "ReactNativeDevBundle.js");
-            if (cachedDevBundle.exists()) {
-                cachedDevBundle.delete();
-            }
-        }
-    }
-
     public boolean didUpdate() {
         return mDidUpdate;
     }
@@ -185,34 +149,12 @@ public class CodePush implements ReactPackage {
         return mUpdateManager.getPackageFolderPath(codePushLocalPackage.optString("packageHash"));
     }
 
-    @Deprecated
-    public static String getBundleUrl() {
-        return getJSBundleFile();
-    }
-
-    @Deprecated
-    public static String getBundleUrl(String assetsBundleFileName) {
-        return getJSBundleFile(assetsBundleFileName);
-    }
-
     public Context getContext() {
         return mContext;
     }
 
     public String getDeploymentKey() {
         return mDeploymentKey;
-    }
-
-    public static String getJSBundleFile() {
-        return CodePush.getJSBundleFile(CodePushConstants.DEFAULT_JS_BUNDLE_NAME);
-    }
-
-    public static String getJSBundleFile(String assetsBundleFileName) {
-        if (mCurrentInstance == null) {
-            throw new CodePushNotInitializedException("A CodePush instance has not been created yet. Have you added it to your app's list of ReactPackages?");
-        }
-
-        return mCurrentInstance.getJSBundleFileInternal(assetsBundleFileName);
     }
 
     public String getJSBundleFileInternal(String assetsBundleFileName) {
