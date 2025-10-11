@@ -185,34 +185,12 @@ public class CodePush implements ReactPackage {
         return mUpdateManager.getPackageFolderPath(codePushLocalPackage.optString("packageHash"));
     }
 
-    @Deprecated
-    public static String getBundleUrl() {
-        return getJSBundleFile();
-    }
-
-    @Deprecated
-    public static String getBundleUrl(String assetsBundleFileName) {
-        return getJSBundleFile(assetsBundleFileName);
-    }
-
     public Context getContext() {
         return mContext;
     }
 
     public String getDeploymentKey() {
         return mDeploymentKey;
-    }
-
-    public static String getJSBundleFile() {
-        return CodePush.getJSBundleFile(CodePushConstants.DEFAULT_JS_BUNDLE_NAME);
-    }
-
-    public static String getJSBundleFile(String assetsBundleFileName) {
-        if (mCurrentInstance == null) {
-            throw new CodePushNotInitializedException("A CodePush instance has not been created yet. Have you added it to your app's list of ReactPackages?");
-        }
-
-        return mCurrentInstance.getJSBundleFileInternal(assetsBundleFileName);
     }
 
     public String getJSBundleFileInternal(String assetsBundleFileName) {
