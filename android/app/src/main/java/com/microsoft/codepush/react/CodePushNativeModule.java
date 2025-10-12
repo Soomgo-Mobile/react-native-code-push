@@ -10,7 +10,6 @@ import android.view.Choreographer;
 
 import androidx.annotation.OptIn;
 
-import com.facebook.react.ReactApplication;
 import com.facebook.react.ReactDelegate;
 import com.facebook.react.ReactHost;
 import com.facebook.react.ReactInstanceManager;
@@ -233,24 +232,6 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    // Use reflection to find the ReactInstanceManager. See #556 for a proposal for a less brittle way to approach this.
-    private ReactInstanceManager resolveInstanceManager() throws NoSuchFieldException, IllegalAccessException {
-        ReactInstanceManager instanceManager = CodePush.getReactInstanceManager();
-        if (instanceManager != null) {
-            return instanceManager;
-        }
-
-        final Activity currentActivity = getReactApplicationContext().getCurrentActivity();
-        if (currentActivity == null) {
-            return null;
-        }
-
-        ReactApplication reactApplication = (ReactApplication) currentActivity.getApplication();
-        instanceManager = reactApplication.getReactNativeHost().getReactInstanceManager();
-
-        return instanceManager;
     }
 
     private void restartAppInternal(boolean onlyIfUpdateIsPending) {

@@ -5,7 +5,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 
-import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.JavaScriptModule;
 import com.facebook.react.bridge.NativeModule;
@@ -15,10 +14,8 @@ import com.facebook.react.uimanager.ViewManager;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.lang.reflect.Method;
 
 public class CodePush implements ReactPackage {
 
@@ -45,7 +42,6 @@ public class CodePush implements ReactPackage {
 
     private static String mPublicKey;
 
-    private static ReactInstanceHolder mReactInstanceHolder;
     private static CodePush mCurrentInstance;
 
     public static String getServiceUrl() {
@@ -330,17 +326,6 @@ public class CodePush implements ReactPackage {
         mUpdateManager.clearUpdates();
         mSettingsManager.removePendingUpdate();
         mSettingsManager.removeFailedUpdates();
-    }
-
-    public static void setReactInstanceHolder(ReactInstanceHolder reactInstanceHolder) {
-        mReactInstanceHolder = reactInstanceHolder;
-    }
-
-    static ReactInstanceManager getReactInstanceManager() {
-        if (mReactInstanceHolder == null) {
-            return null;
-        }
-        return mReactInstanceHolder.getReactInstanceManager();
     }
 
     @Override
