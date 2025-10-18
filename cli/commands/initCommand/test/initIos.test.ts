@@ -1,4 +1,4 @@
-import { modifyObjectiveCAppDelegate, modifySwiftAppDelegate } from "../initIos.ts";
+import { modifyObjectiveCAppDelegate, modifySwiftAppDelegate } from "../initIos.js";
 import { expect, describe, it} from "@jest/globals";
 
 // https://github.com/react-native-community/template/blob/0.80.2/template/ios/HelloWorld/AppDelegate.swift

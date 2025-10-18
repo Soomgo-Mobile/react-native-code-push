@@ -12,8 +12,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowImportingTsExtensions": true
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["./**/*.ts"],
   "exclude": [

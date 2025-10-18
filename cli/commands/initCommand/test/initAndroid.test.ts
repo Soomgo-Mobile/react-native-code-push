@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { initAndroid, modifyMainApplicationKt } from "../initAndroid.ts";
+import { initAndroid, modifyMainApplicationKt } from "../initAndroid.js";
 import { jest, expect, describe, it } from "@jest/globals";
 
 const tempDir = path.join(__dirname, 'temp');
