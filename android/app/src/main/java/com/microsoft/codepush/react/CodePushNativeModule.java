@@ -138,12 +138,6 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
-    private void setJSBundleLoaderBridge(ReactInstanceManager instanceManager, JSBundleLoader latestJSBundleLoader) throws NoSuchFieldException, IllegalAccessException {
-        Field bundleLoaderField = instanceManager.getClass().getDeclaredField("mBundleLoader");
-        bundleLoaderField.setAccessible(true);
-        bundleLoaderField.set(instanceManager, latestJSBundleLoader);
-    }
-
     @OptIn(markerClass = UnstableReactNativeAPI.class)
     private void setJSBundleLoaderBridgeless(ReactHost reactHost, JSBundleLoader latestJSBundleLoader) throws NoSuchFieldException, IllegalAccessException {
         Field mReactHostDelegateField = reactHost.getClass().getDeclaredField("mReactHostDelegate");
