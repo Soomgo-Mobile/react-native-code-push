@@ -36,6 +36,7 @@
     "typings",
     "*.podspec",
     "react-native.config.js",
+    "app.plugin.js",
     "package.json",
     "package-lock.json",
     "!ios/build",
