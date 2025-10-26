@@ -146,7 +146,28 @@ Then, edit `AppDelegate.swift` like below.
 
 #### Edit `MainApplication` Code
 
-**If you have `MainApplication.kt` (>= RN 0.73)**
+**(RN 0.82+) If you have `MainApplication.kt`**
+
+```diff
++ import com.microsoft.codepush.react.CodePush
+
+  class MainApplication : Application(), ReactApplication {
+    override val reactHost: ReactHost by lazy {
+      getDefaultReactHost(
+        context = applicationContext,
+        packageList =
+          PackageList(this).packages.apply {
+            // Packages that cannot be autolinked yet can be added manually here, for example:
+            // add(MyReactNativePackage())
+          },
++       jsBundleFilePath = CodePush.getJSBundleFile(),
+      )
+    }
+  // ...
+}
+```
+
+**(RN 0.73+) If you have `MainApplication.kt`**
 
 ```diff
 + import com.microsoft.codepush.react.CodePush
@@ -162,6 +183,7 @@ Then, edit `AppDelegate.swift` like below.
     // ...
   }
 ```
+
 
 **Or if you have `MainApplication.java`**
 
