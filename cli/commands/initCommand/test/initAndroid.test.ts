@@ -47,11 +47,53 @@ class MainApplication : Application(), ReactApplication {
 }
 `;
 
+// https://github.com/react-native-community/template/blob/0.82.1/template/android/app/src/main/java/com/helloworld/MainApplication.kt
+const ktRN82Template = `
+package com.helloworld
+
+import android.app.Application
+import com.facebook.react.PackageList
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
+import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
+import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+
+class MainApplication : Application(), ReactApplication {
+
+  override val reactHost: ReactHost by lazy {
+    getDefaultReactHost(
+      context = applicationContext,
+      packageList =
+        PackageList(this).packages.apply {
+          // Packages that cannot be autolinked yet can be added manually here, for example:
+          // add(MyReactNativePackage())
+        },
+    )
+  }
+
+  override fun onCreate() {
+    super.onCreate()
+    loadReactNative(this)
+  }
+}
+`;
+
 describe('Android init command', () => {
     it('should correctly modify Kotlin MainApplication content', () => {
         const modifiedContent = modifyMainApplicationKt(ktTemplate);
         expect(modifiedContent).toContain('import com.microsoft.codepush.react.CodePush');
         expect(modifiedContent).toContain('override fun getJSBundleFile(): String = CodePush.getJSBundleFile()');
+    });
+
+    it('should insert jsBundleFilePath argument for RN 0.82 style MainApplication', () => {
+        const modifiedContent = modifyMainApplicationKt(ktRN82Template);
+
+        expect(modifiedContent).toContain('import com.microsoft.codepush.react.CodePush');
+        expect(modifiedContent).toContain('jsBundleFilePath = CodePush.getJSBundleFile()');
+
+        const packageListIndex = modifiedContent.indexOf('packageList =');
+        const jsBundleIndex = modifiedContent.indexOf('jsBundleFilePath = CodePush.getJSBundleFile()');
+        expect(jsBundleIndex).toBeGreaterThan(packageListIndex);
     });
 
     it('should log a message and exit if MainApplication.java is found', async () => {
