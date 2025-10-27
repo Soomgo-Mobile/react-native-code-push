@@ -44,7 +44,7 @@ export function modifyMainApplicationKt(mainApplicationContent: string) {
 }
 
 function addJsBundleFilePathArgument(mainApplicationContent: string) {
-    const packageListArgumentPattern = /(packageList\s*=\s*\n\s*PackageList\(this\)[\s\S]+?\},\s*\n)/;
+    const packageListArgumentPattern = /(packageList\s*=\s*\n\s*PackageList\(this\)[\s\S]+?\},?\s*\n)/;
 
     if (!packageListArgumentPattern.test(mainApplicationContent)) {
         console.log('log: Could not find packageList argument while updating MainApplication.kt.');
