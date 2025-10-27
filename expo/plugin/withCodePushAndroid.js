@@ -68,10 +68,19 @@ const withAndroidMainApplicationDependency = (config) => {
       if (action.modResults.contents.includes(RN_082_MARKER)) {
         action.modResults.contents = addJsBundleFilePathArgument(action.modResults.contents);
       } else {
+        // https://github.com/Soomgo-Mobile/react-native-code-push/issues/97
+        const isExpoSDK54 = config.sdkVersion?.startsWith('54.') ?? false;
+        const addingCode = isExpoSDK54
+          ? '        override fun getJSBundleFile(): String {\n' +
+            '          CodePush.getInstance(applicationContext, BuildConfig.DEBUG)\n' +
+            '          return CodePush.getJSBundleFile()\n' +
+            '        }\n'
+          : '        override fun getJSBundleFile(): String = CodePush.getJSBundleFile()\n';
         action.modResults.contents = androidMainApplicationApplyImplementation(
           action.modResults.contents,
           'object : DefaultReactNativeHost(this) {',
-          '        override fun getJSBundleFile(): String = CodePush.getJSBundleFile()\n');
+          addingCode,
+        );
       }
     }
 
