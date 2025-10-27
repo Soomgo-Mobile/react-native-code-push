@@ -1,7 +1,7 @@
 const { withMainApplication, WarningAggregator } = require('expo/config-plugins');
 
 const IMPORT_CODE_PUSH = 'import com.microsoft.codepush.react.CodePush';
-const RN_082_MARKER = '  getDefaultReactHost(';
+const RN_082_MARKER = 'ExpoReactHostFactory.getDefaultReactHost(';
 const JS_BUNDLE_FILE_PATH_ARGUMENT = 'jsBundleFilePath = CodePush.getJSBundleFile()';
 
 function androidMainApplicationApplyImplementation(mainApplication, find, add, reverse = false) {
@@ -32,7 +32,7 @@ function addJsBundleFilePathArgument(mainApplication) {
     return mainApplication;
   }
 
-  const packageListArgumentPattern = /(packageList\s*=\s*\n\s*PackageList\(this\)[\s\S]+?\},\s*\n)/;
+  const packageListArgumentPattern = /(packageList\s*=\s*\n\s*PackageList\(this\)[\s\S]+?\},?\s*\n)/;
 
   if (!packageListArgumentPattern.test(mainApplication)) {
     WarningAggregator.addWarningAndroid(
