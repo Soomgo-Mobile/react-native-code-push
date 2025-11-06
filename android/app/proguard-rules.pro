@@ -21,7 +21,8 @@
     private final ** mBundleLoader;
 }
 -keepclassmembers class com.facebook.react.ReactDelegate {
-    private ** mReactHost; # bridgeless
+    private ** mReactHost; # RN < 0.81
+    private ** reactHost; # RN 0.81+
     public void reload(...); # RN 0.74 and above
 }
 # bridgeless
@@ -30,7 +31,8 @@
 }
 # bridgeless
 -keepclassmembers class com.facebook.react.runtime.ReactHostImpl {
-    private final ** mReactHostDelegate;
+    private final ** mReactHostDelegate; # RN < 0.81
+    private final ** reactHostDelegate; # RN 0.81+
 }
 
 # Can't find referenced class org.bouncycastle.**

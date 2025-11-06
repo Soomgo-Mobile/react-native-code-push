@@ -12,7 +12,6 @@ import androidx.annotation.OptIn;
 
 import com.facebook.react.ReactDelegate;
 import com.facebook.react.ReactHost;
-import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactRootView;
 import com.facebook.react.bridge.Arguments;
@@ -140,9 +139,16 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
 
     @OptIn(markerClass = UnstableReactNativeAPI.class)
     private void setJSBundleLoaderBridgeless(ReactHost reactHost, JSBundleLoader latestJSBundleLoader) throws NoSuchFieldException, IllegalAccessException {
-        Field mReactHostDelegateField = reactHost.getClass().getDeclaredField("mReactHostDelegate");
-        mReactHostDelegateField.setAccessible(true);
-        ReactHostDelegate reactHostDelegate = (ReactHostDelegate) mReactHostDelegateField.get(reactHost);
+        Field reactHostDelegateField;
+        try {
+            // RN < 0.81
+            reactHostDelegateField = reactHost.getClass().getDeclaredField("mReactHostDelegate");
+        } catch (NoSuchFieldException e) {
+            // RN >= 0.81
+            reactHostDelegateField = reactHost.getClass().getDeclaredField("reactHostDelegate");
+        }
+        reactHostDelegateField.setAccessible(true);
+        ReactHostDelegate reactHostDelegate = (ReactHostDelegate) reactHostDelegateField.get(reactHost);
         assert reactHostDelegate != null;
         Field jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("jsBundleLoader");
         jsBundleLoaderField.setAccessible(true);
@@ -220,7 +226,14 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         }
 
         try {
-            Field reactHostField = reactDelegate.getClass().getDeclaredField("mReactHost");
+            Field reactHostField;
+            try {
+                // RN < 0.81
+                reactHostField = reactDelegate.getClass().getDeclaredField("mReactHost");
+            } catch (NoSuchFieldException e) {
+                // RN >= 0.81
+                reactHostField = reactDelegate.getClass().getDeclaredField("reactHost");
+            }
             reactHostField.setAccessible(true);
             return (ReactHost) reactHostField.get(reactDelegate);
         } catch (Exception e) {
