@@ -140,7 +140,7 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
 
     @OptIn(markerClass = UnstableReactNativeAPI.class)
     private void setJSBundleLoaderBridgeless(ReactHost reactHost, JSBundleLoader latestJSBundleLoader) throws NoSuchFieldException, IllegalAccessException {
-        Field mReactHostDelegateField = reactHost.getClass().getDeclaredField("mReactHostDelegate");
+        Field mReactHostDelegateField = reactHost.getClass().getDeclaredField("reactHostDelegate");
         mReactHostDelegateField.setAccessible(true);
         ReactHostDelegate reactHostDelegate = (ReactHostDelegate) mReactHostDelegateField.get(reactHost);
         assert reactHostDelegate != null;
