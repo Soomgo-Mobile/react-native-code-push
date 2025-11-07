@@ -10,6 +10,9 @@
 
 Supports React Native 0.74 ~ 0.82.
 
+> [!NOTE]
+> If you are using React Native 0.76 or lower, please use version `12.0.2` of this library.
+
 (Tested on the React Native CLI template apps)
 
 ### ✅ Requirements
