@@ -20,11 +20,6 @@
 -keepclassmembers class com.facebook.react.ReactInstanceManager {
     private final ** mBundleLoader;
 }
--keepclassmembers class com.facebook.react.ReactDelegate {
-    private ** mReactHost; # RN < 0.81
-    private ** reactHost; # RN 0.81+
-    public void reload(...); # RN 0.74 and above
-}
 # bridgeless
 -keepclassmembers class com.facebook.react.defaults.DefaultReactHostDelegate {
     private ** jsBundleLoader;
