@@ -19,6 +19,7 @@ type Options = {
     skipBundle: boolean;
     skipCleanup: boolean;
     outputBundleDir: string;
+    hashCalc?: boolean;
 }
 
 program.command('release')
@@ -36,6 +37,7 @@ program.command('release')
     .option('--enable <bool>', 'make the release to be enabled', parseBoolean, true)
     .option('--rollout <number>', 'rollout percentage (0-100)', parseFloat)
     .option('--skip-bundle <bool>', 'skip bundle process', parseBoolean, false)
+    .option('--hash-calc <bool>', 'calculates the bundle file hash used for packageHash in the release history (Requires setting --skip-bundle to true)', parseBoolean)
     .option('--skip-cleanup <bool>', 'skip cleanup process', parseBoolean, false)
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
     .action(async (options: Options) => {
@@ -43,6 +45,11 @@ program.command('release')
 
         if (typeof options.rollout === 'number' && (options.rollout < 0 || options.rollout > 100)) {
             console.error('Rollout percentage number must be between 0 and 100 (inclusive).');
+            process.exit(1);
+        }
+
+        if (options.hashCalc && !options.skipBundle) {
+            console.error('--hash-calc option can be used only when --skip-bundle is set to true.');
             process.exit(1);
         }
 
@@ -64,6 +71,7 @@ program.command('release')
             options.skipBundle,
             options.skipCleanup,
             `${options.outputPath}/${options.outputBundleDir}`,
+            options.hashCalc,
         )
 
         console.log('🚀 Release completed.')

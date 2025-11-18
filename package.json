@@ -81,7 +81,8 @@
     "semver": "^7.3.5",
     "shelljs": "^0.10.0",
     "xcode": "^3.0.1",
-    "yazl": "^3.3.1"
+    "yazl": "^3.3.1",
+    "yauzl": "^3.2.0"
   },
   "peerDependencies": {
     "expo": ">=50.0.0",
@@ -104,6 +105,7 @@
     "@types/q": "^1.5.4",
     "@types/semver": "^7.5.8",
     "@types/shelljs": "^0.8.15",
+    "@types/yauzl": "^2.10.3",
     "archiver": "latest",
     "babel-jest": "^29.7.0",
     "body-parser": "latest",
