@@ -14,7 +14,8 @@
     "commander": "^12.1.0",
     "shelljs": "^0.10.0",
     "xcode": "^3.0.1",
-    "yazl": "^3.3.1"
+    "yazl": "^3.3.1",
+    "yauzl": "^3.2.0"
   },
   "peerDependencies": {
     "ts-node": ">=10"
@@ -28,6 +29,7 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "@types/yazl": "^3.3.0"
+    "@types/yazl": "^3.3.0",
+    "@types/yauzl": "^2.10.3"
   }
 }
