@@ -1,6 +1,6 @@
 {
   "name": "@bravemobile/react-native-code-push",
-  "version": "12.1.6-beta.0",
+  "version": "12.1.6-beta.1",
   "description": "React Native plugin for the CodePush service",
   "main": "src/CodePush.js",
   "react-native": "src/CodePush.js",
