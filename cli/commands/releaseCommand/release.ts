@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
-import yauzl from "yauzl";
 import { bundleCodePush } from "../bundleCommand/bundleCodePush.js";
 import { addToReleaseHistory } from "./addToReleaseHistory.js";
 import type { CliConfigInterface } from "../../../typings/react-native-code-push.d.ts";
 import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
+import { unzip } from "../../utils/unzip.js";
 
 export async function release(
     bundleUploader: CliConfigInterface['bundleUploader'],
@@ -81,41 +81,21 @@ function readBundleFileNameFrom(bundleDirectory: string): string {
     return path.basename(bundleFilePath);
 }
 
-function calcHashFromBundleFile(bundleFilePath: string): Promise<string> {
+async function calcHashFromBundleFile(bundleFilePath: string): Promise<string> {
     const tempDir = path.join(path.dirname(bundleFilePath), 'temp_contents_for_hash_calc');
-    console.log('🔥 🔥 🔥 tempDir', tempDir);
-    fs.mkdirSync(tempDir);
+    const zipFilePath = path.resolve(bundleFilePath);
 
-    // unzip
-    yauzl.open(bundleFilePath, { lazyEntries: true }, (err, zipFile) => {
-        if (err) throw err;
-        zipFile.readEntry();
-        zipFile.on("entry", (entry) => {
-            if (/\/$/.test(entry.fileName)) {
-                // Directory file names end with '/'.
-                // Note that entries for directories themselves are optional.
-                // An entry's fileName implicitly requires its parent directories to exist.
-                zipFile.readEntry();
-            } else {
-                // file entry
-                zipFile.openReadStream(entry, (err, readStream) => {
-                    if (err) throw err;
-                    readStream.on("end", () => {
-                        zipFile.readEntry();
-                    });
-                    readStream.pipe(fs.createWriteStream(tempDir));
-                });
-            }
-        });
-    });
+    if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(tempDir, { recursive: true });
 
-    // calc hash
-    const hash = generatePackageHashFromDirectory(tempDir, path.join(tempDir, '..'));
-
-    // cleanup
-    fs.rmSync(tempDir, { recursive: true });
-
-    console.log('🔥 🔥 🔥 hash', hash);
-
-    return hash;
+    try {
+        await unzip(zipFilePath, tempDir);
+        const hash = await generatePackageHashFromDirectory(tempDir, tempDir);
+        console.log(`log: Calculated package hash from existing bundle file: ${hash}`);
+        return hash;
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 }
