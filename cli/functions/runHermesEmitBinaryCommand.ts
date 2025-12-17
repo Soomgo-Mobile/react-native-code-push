@@ -114,14 +114,20 @@ function getHermesCommand(): string {
             return false;
         }
     };
+    const reactNativePath = getReactNativePackagePath();
+    const hermesCompilerPath = getHermesCompilerPackagePath();
+
+    // Since react-native 0.83, Hermes compiler in 'hermes-compiler' package
+    if (hermesCompilerPath) {
+        const engine = path.join(hermesCompilerPath, 'hermesc', getHermesOSBin(), getHermesOSExe());
+        if (fileExists(engine)) {
+            return engine;
+        }
+    }
+
     // Hermes is bundled with react-native since 0.69
-    const bundledHermesEngine = path.join(
-        getReactNativePackagePath(),
-        'sdks',
-        'hermesc',
-        getHermesOSBin(),
-        getHermesOSExe(),
-    );
+    const bundledHermesEngine = path.join(reactNativePath, 'sdks', 'hermesc', getHermesOSBin(), getHermesOSExe());
+    // Hermes is bundled with react-native since 0.69
     if (fileExists(bundledHermesEngine)) {
         return bundledHermesEngine;
     }
@@ -172,6 +178,22 @@ function getReactNativePackagePath(): string {
     }
 
     return path.join('node_modules', 'react-native');
+}
+
+function getHermesCompilerPackagePath() {
+    try {
+        const result = childProcess.spawnSync('node', [
+            '--print',
+            "require.resolve('hermes-compiler/package.json')",
+        ]);
+        const packagePath = path.dirname(result.stdout.toString());
+        if (result.status === 0 && directoryExistsSync(packagePath)) {
+            return packagePath;
+        }
+        return path.join('node_modules', 'hermes-compiler');
+    } catch {
+        return null;
+    }
 }
 
 function directoryExistsSync(dirname: string): boolean {
