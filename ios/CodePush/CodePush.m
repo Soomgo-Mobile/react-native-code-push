@@ -32,6 +32,7 @@
     long long _latestExpectedContentLength;
     long long _latestReceivedConentLength;
     BOOL _didUpdateProgress;
+    NSTimeInterval _lastProgressEventTime;
 
     BOOL _allowed;
     BOOL _restartInProgress;
@@ -336,6 +337,18 @@ static NSString *const LatestRollbackCountKey = @"count";
                      }];
 }
 
+- (void)dispatchThrottledDownloadProgressEventWithForce:(BOOL)force
+{
+    static const NSTimeInterval interval = 0.05; // 50 ms throttle
+    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+    if (!force && _lastProgressEventTime > 0 && (now - _lastProgressEventTime) < interval) {
+        return;
+    }
+
+    _lastProgressEventTime = now;
+    [self dispatchDownloadProgressEvent];
+}
+
 /*
  * This method ensures that the app was packaged with a JS bundle
  * file, and if not, it throws the appropriate exception.
@@ -377,6 +390,7 @@ static NSString *const LatestRollbackCountKey = @"count";
     _allowed = YES;
     _restartInProgress = NO;
     _restartQueue = [NSMutableArray arrayWithCapacity:1];
+    _lastProgressEventTime = 0;
 
     self = [super init];
     if (self) {
@@ -723,6 +737,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
         // progress events every frame if the progress is updated.
         _didUpdateProgress = NO;
         self.paused = NO;
+        _lastProgressEventTime = 0;
     }
 
     NSString * publicKey = [[CodePushConfig current] publicKey];
@@ -738,13 +753,19 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
             _latestExpectedContentLength = expectedContentLength;
             _latestReceivedConentLength = receivedContentLength;
             _didUpdateProgress = YES;
+            // Fabric/TurboModules don't hook RCTFrameUpdateObserver, so _pauseCallback
+            // stays nil there and we must emit progress events directly.
+            // On the legacy bridge _pauseCallback is set, and didUpdateFrame handles dispatch.
+            if (!_pauseCallback) {
+                [self dispatchThrottledDownloadProgressEventWithForce:NO];
+            }
 
             // If the download is completed, stop observing frame
             // updates and synchronously send the last event.
             if (expectedContentLength == receivedContentLength) {
                 _didUpdateProgress = NO;
                 self.paused = YES;
-                [self dispatchDownloadProgressEvent];
+                [self dispatchThrottledDownloadProgressEventWithForce:YES];
             }
         }
         // The download completed
@@ -1115,7 +1136,7 @@ RCT_EXPORT_METHOD(saveStatusReportForRetry:(NSDictionary *)statusReport)
         return;
     }
 
-    [self dispatchDownloadProgressEvent];
+    [self dispatchThrottledDownloadProgressEventWithForce:YES];
     _didUpdateProgress = NO;
 }
 
