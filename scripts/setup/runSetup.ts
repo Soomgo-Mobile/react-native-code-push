@@ -212,6 +212,20 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {
   applyLocalPackageDependency(context);
   copyMetroConfigTemplate(context);
+  await ensureRequiredDevDependencies(context);
+}
+
+const REQUIRED_DEV_DEPENDENCIES: Array<{name: string; version?: string}> = [
+  {name: "ts-node"},
+  {name: "axios"},
+  {name: "@types/node", version: "^22"},
+  {name: "@supabase/supabase-js"}
+];
+
+interface TemplatePackageJson {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  [key: string]: unknown;
 }
 
 function applyLocalPackageDependency(context: SetupContext) {
@@ -220,19 +234,50 @@ function applyLocalPackageDependency(context: SetupContext) {
     throw new Error(`package.json을 찾을 수 없습니다: ${packageJsonPath}`);
   }
 
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
-    dependencies?: Record<string, string>;
-    [key: string]: unknown;
-  };
+  const originalContent = fs.readFileSync(packageJsonPath, "utf8");
+  const packageJson = JSON.parse(originalContent) as TemplatePackageJson;
 
   packageJson.dependencies = packageJson.dependencies ?? {};
   packageJson.dependencies["@bravemobile/react-native-code-push"] = "file:../..";
 
-  fs.writeFileSync(
-    packageJsonPath,
-    JSON.stringify(packageJson, null, 2) + "\n",
-    "utf8"
+  const serialized = `${JSON.stringify(packageJson, null, 2)}\n`;
+  if (serialized !== originalContent) {
+    fs.writeFileSync(packageJsonPath, serialized, "utf8");
+  }
+}
+
+async function ensureRequiredDevDependencies(context: SetupContext): Promise<void> {
+  const packageJsonPath = path.join(context.projectPath, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(`package.json을 찾을 수 없습니다: ${packageJsonPath}`);
+  }
+
+  const packageJson = JSON.parse(
+    fs.readFileSync(packageJsonPath, "utf8")
+  ) as TemplatePackageJson;
+  const existing = {
+    ...(packageJson.dependencies ?? {}),
+    ...(packageJson.devDependencies ?? {})
+  };
+
+  const missing = REQUIRED_DEV_DEPENDENCIES.filter(
+    (pkg) => existing[pkg.name] === undefined
   );
+  if (missing.length === 0) {
+    return;
+  }
+
+  const installArgs = [
+    "install",
+    "--save-dev",
+    "--quiet",
+    "--no-progress",
+    ...missing.map((pkg) => (pkg.version ? `${pkg.name}@${pkg.version}` : pkg.name))
+  ];
+  console.log(
+    `[command] ${getNpmBinary()} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
+  );
+  await executeCommand(getNpmBinary(), installArgs, context.projectPath);
 }
 
 function copyMetroConfigTemplate(context: SetupContext) {
