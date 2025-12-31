@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import semver from "semver";
+import ts from "typescript";
 
 interface SetupCliOptions {
   rnVersion: string;
@@ -52,6 +53,16 @@ const setupSteps: SetupStep[] = [
     name: "configure-local-code-link",
     description: "로컬 라이브러리 및 Metro 설정",
     run: configureLocalCodeLink
+  },
+  {
+    name: "create-code-push-config",
+    description: "code-push 설정 템플릿 적용",
+    run: createCodePushConfigFile
+  },
+  {
+    name: "configure-ts-node",
+    description: "ts-node 실행 환경 설정",
+    run: configureTsNodeOptions
   },
   {
     name: "install-dependencies",
@@ -236,6 +247,65 @@ function copyMetroConfigTemplate(context: SetupContext) {
   }
 
   fs.copyFileSync(templatePath, destinationPath);
+}
+
+async function createCodePushConfigFile(context: SetupContext): Promise<void> {
+  const templatePath = path.resolve(
+    __dirname,
+    "../../Examples/CodePushDemoApp/code-push.config.example.supabase.ts"
+  );
+  const destinationPath = path.join(context.projectPath, "code-push.config.ts");
+
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`code-push 설정 템플릿 파일이 없습니다: ${templatePath}`);
+  }
+
+  fs.copyFileSync(templatePath, destinationPath);
+}
+
+async function configureTsNodeOptions(context: SetupContext): Promise<void> {
+  const tsconfigPath = path.join(context.projectPath, "tsconfig.json");
+  if (!fs.existsSync(tsconfigPath)) {
+    throw new Error(`tsconfig.json을 찾을 수 없습니다: ${tsconfigPath}`);
+  }
+
+  const originalContent = fs.readFileSync(tsconfigPath, "utf8");
+  const parsed = ts.parseConfigFileTextToJson(tsconfigPath, originalContent);
+  if (parsed.error || !parsed.config) {
+    const message = parsed.error
+      ? ts.flattenDiagnosticMessageText(parsed.error.messageText, "\n")
+      : "알 수 없는 이유로 tsconfig.json을 읽지 못했습니다.";
+    throw new Error(`tsconfig.json 파싱에 실패했습니다: ${message}`);
+  }
+
+  const tsconfig = parsed.config as {
+    include?: string[];
+    ["ts-node"]?: {
+      compilerOptions?: { module?: string; types?: string[] };
+    };
+    [key: string]: unknown;
+  };
+
+  const includeEntries = tsconfig.include ?? [];
+  const requiredIncludes = ["**/*.ts", "**/*.tsx", "code-push.config.ts"];
+  for (const entry of requiredIncludes) {
+    if (!includeEntries.includes(entry)) {
+      includeEntries.push(entry);
+    }
+  }
+  tsconfig.include = includeEntries;
+
+  tsconfig["ts-node"] = {
+    compilerOptions: {
+      module: "CommonJS",
+      types: ["node"]
+    }
+  };
+
+  const serialized = `${JSON.stringify(tsconfig, null, 2)}\n`;
+  if (serialized !== originalContent) {
+    fs.writeFileSync(tsconfigPath, serialized, "utf8");
+  }
 }
 
 async function installDependencies(context: SetupContext): Promise<void> {

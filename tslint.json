@@ -31,7 +31,8 @@
     },
     "linterOptions": {
         "exclude": [
-            "./cli/**"
+            "./cli/**",
+            "./Examples/**/*"
         ]
     }
 }
