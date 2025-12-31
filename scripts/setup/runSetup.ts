@@ -25,53 +25,53 @@ type SetupStep = {
 
 const program = new Command()
   .name("setup-automation")
-  .description("React Native CodePush 테스트 앱 셋업 자동화")
-  .requiredOption("-v, --rn-version <version>", "테스트할 React Native 버전 (예: 0.83.1)")
+  .description("React Native CodePush test app setup automation")
+  .requiredOption("-v, --rn-version <version>", "React Native version to test (e.g. 0.83.1)")
   .option(
     "-w, --working-dir <path>",
-    "템플릿 앱을 생성할 경로",
+    "Directory where the template app will be created",
     path.resolve(process.cwd(), "Examples")
   );
 
 const setupSteps: SetupStep[] = [
   {
     name: "create-react-native-template",
-    description: "RN 템플릿 앱 생성",
+    description: "Create RN template app",
     run: createReactNativeTemplateApp
   },
   {
     name: "configure-ios-versioning",
-    description: "iOS 버전 및 최소 지원 버전 설정",
+    description: "Configure iOS versioning and minimum OS",
     run: configureIosVersioning
   },
   {
     name: "configure-android-versioning",
-    description: "Android 버전 정보 설정",
+    description: "Configure Android version information",
     run: configureAndroidVersioning
   },
   {
     name: "configure-local-code-link",
-    description: "로컬 라이브러리 및 Metro 설정",
+    description: "Configure local library link and Metro",
     run: configureLocalCodeLink
   },
   {
     name: "create-code-push-config",
-    description: "code-push 설정 템플릿 적용",
+    description: "Apply code-push config template",
     run: createCodePushConfigFile
   },
   {
     name: "configure-ts-node",
-    description: "ts-node 실행 환경 설정",
+    description: "Configure ts-node runtime options",
     run: configureTsNodeOptions
   },
   {
     name: "install-dependencies",
-    description: "템플릿 앱 npm install 실행",
+    description: "Run npm install inside template app",
     run: installDependencies
   },
   {
     name: "initialize-code-push",
-    description: "code-push 초기 설정",
+    description: "Initialize code-push in native projects",
     run: initializeCodePush
   }
 ];
@@ -93,10 +93,10 @@ async function main() {
     };
 
     await runSetup(context);
-    console.log(`\n✅ 템플릿 앱 생성이 완료되었습니다: ${context.projectPath}`);
+    console.log(`\n✅ Template app created successfully: ${context.projectPath}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`\n❌ 셋업 자동화에 실패했습니다: ${message}`);
+    console.error(`\n❌ Setup automation failed: ${message}`);
     process.exitCode = 1;
   }
 }
@@ -114,7 +114,7 @@ function normalizeVersion(input: string): string {
     semver.valid(semver.coerce(input) ?? undefined);
 
   if (!parsed) {
-    throw new Error(`유효하지 않은 React Native 버전입니다: ${input}`);
+    throw new Error(`Invalid React Native version: ${input}`);
   }
 
   return parsed;
@@ -129,7 +129,7 @@ async function createReactNativeTemplateApp(context: SetupContext): Promise<void
   ensureDirectory(context.workingDirectory);
 
   if (fs.existsSync(context.projectPath)) {
-    throw new Error(`이미 동일한 폴더가 존재합니다: ${context.projectPath}`);
+    throw new Error(`Target directory already exists: ${context.projectPath}`);
   }
 
   const initArgs = [
@@ -231,7 +231,7 @@ interface TemplatePackageJson {
 function applyLocalPackageDependency(context: SetupContext) {
   const packageJsonPath = path.join(context.projectPath, "package.json");
   if (!fs.existsSync(packageJsonPath)) {
-    throw new Error(`package.json을 찾을 수 없습니다: ${packageJsonPath}`);
+    throw new Error(`Cannot find package.json: ${packageJsonPath}`);
   }
 
   const originalContent = fs.readFileSync(packageJsonPath, "utf8");
@@ -249,7 +249,7 @@ function applyLocalPackageDependency(context: SetupContext) {
 async function ensureRequiredDevDependencies(context: SetupContext): Promise<void> {
   const packageJsonPath = path.join(context.projectPath, "package.json");
   if (!fs.existsSync(packageJsonPath)) {
-    throw new Error(`package.json을 찾을 수 없습니다: ${packageJsonPath}`);
+    throw new Error(`Cannot find package.json: ${packageJsonPath}`);
   }
 
   const packageJson = JSON.parse(
@@ -288,7 +288,7 @@ function copyMetroConfigTemplate(context: SetupContext) {
   const destinationPath = path.join(context.projectPath, "metro.config.js");
 
   if (!fs.existsSync(templatePath)) {
-    throw new Error(`Metro 템플릿 파일이 없습니다: ${templatePath}`);
+    throw new Error(`Metro template file does not exist: ${templatePath}`);
   }
 
   fs.copyFileSync(templatePath, destinationPath);
@@ -302,7 +302,7 @@ async function createCodePushConfigFile(context: SetupContext): Promise<void> {
   const destinationPath = path.join(context.projectPath, "code-push.config.ts");
 
   if (!fs.existsSync(templatePath)) {
-    throw new Error(`code-push 설정 템플릿 파일이 없습니다: ${templatePath}`);
+    throw new Error(`code-push config template file does not exist: ${templatePath}`);
   }
 
   fs.copyFileSync(templatePath, destinationPath);
@@ -311,7 +311,7 @@ async function createCodePushConfigFile(context: SetupContext): Promise<void> {
 async function configureTsNodeOptions(context: SetupContext): Promise<void> {
   const tsconfigPath = path.join(context.projectPath, "tsconfig.json");
   if (!fs.existsSync(tsconfigPath)) {
-    throw new Error(`tsconfig.json을 찾을 수 없습니다: ${tsconfigPath}`);
+    throw new Error(`Cannot find tsconfig.json: ${tsconfigPath}`);
   }
 
   const originalContent = fs.readFileSync(tsconfigPath, "utf8");
@@ -319,8 +319,8 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
   if (parsed.error || !parsed.config) {
     const message = parsed.error
       ? ts.flattenDiagnosticMessageText(parsed.error.messageText, "\n")
-      : "알 수 없는 이유로 tsconfig.json을 읽지 못했습니다.";
-    throw new Error(`tsconfig.json 파싱에 실패했습니다: ${message}`);
+      : "Failed to read tsconfig.json for an unknown reason.";
+    throw new Error(`Failed to parse tsconfig.json: ${message}`);
   }
 
   const tsconfig = parsed.config as {
@@ -374,7 +374,7 @@ function updateTextFile(
   mutator: (original: string) => string
 ) {
   if (!fs.existsSync(filePath)) {
-    throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
+    throw new Error(`Cannot find file: ${filePath}`);
   }
   const original = fs.readFileSync(filePath, "utf8");
   const mutated = mutator(original);
@@ -395,7 +395,7 @@ function replaceAllOrThrow(
   });
 
   if (replaced === input) {
-    throw new Error(`${label} 업데이트 패턴과 일치하는 내용이 없습니다.`);
+    throw new Error(`No matches found for ${label} update pattern.`);
   }
 
   return replaced;
@@ -416,7 +416,7 @@ function executeCommand(command: string, args: string[], cwd: string): Promise<v
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`${command} 명령이 실패했습니다 (exit code: ${code})`));
+        reject(new Error(`${command} command failed (exit code: ${code})`));
       }
     });
   });
