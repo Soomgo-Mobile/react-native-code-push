@@ -1,8 +1,8 @@
-import { Command } from 'commander';
-import fs from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
-import semver from 'semver';
+import { Command } from "commander";
+import fs from "fs";
+import path from "path";
+import { spawn } from "child_process";
+import semver from "semver";
 
 interface SetupCliOptions {
   rnVersion: string;
@@ -23,44 +23,44 @@ type SetupStep = {
 };
 
 const program = new Command()
-  .name('setup-automation')
-  .description('React Native CodePush 테스트 앱 셋업 자동화')
-  .requiredOption('-v, --rn-version <version>', '테스트할 React Native 버전 (예: 0.83.1)')
+  .name("setup-automation")
+  .description("React Native CodePush 테스트 앱 셋업 자동화")
+  .requiredOption("-v, --rn-version <version>", "테스트할 React Native 버전 (예: 0.83.1)")
   .option(
-    '-w, --working-dir <path>',
-    '템플릿 앱을 생성할 경로',
-    path.resolve(process.cwd(), 'Examples')
+    "-w, --working-dir <path>",
+    "템플릿 앱을 생성할 경로",
+    path.resolve(process.cwd(), "Examples")
   );
 
 const setupSteps: SetupStep[] = [
   {
-    name: 'create-react-native-template',
-    description: 'RN 템플릿 앱 생성',
+    name: "create-react-native-template",
+    description: "RN 템플릿 앱 생성",
     run: createReactNativeTemplateApp
   },
   {
-    name: 'configure-ios-versioning',
-    description: 'iOS 버전 및 최소 지원 버전 설정',
+    name: "configure-ios-versioning",
+    description: "iOS 버전 및 최소 지원 버전 설정",
     run: configureIosVersioning
   },
   {
-    name: 'configure-android-versioning',
-    description: 'Android 버전 정보 설정',
+    name: "configure-android-versioning",
+    description: "Android 버전 정보 설정",
     run: configureAndroidVersioning
   },
   {
-    name: 'configure-local-code-link',
-    description: '로컬 라이브러리 및 Metro 설정',
+    name: "configure-local-code-link",
+    description: "로컬 라이브러리 및 Metro 설정",
     run: configureLocalCodeLink
   },
   {
-    name: 'install-dependencies',
-    description: '템플릿 앱 npm install 실행',
+    name: "install-dependencies",
+    description: "템플릿 앱 npm install 실행",
     run: installDependencies
   },
   {
-    name: 'initialize-code-push',
-    description: 'code-push 초기 설정',
+    name: "initialize-code-push",
+    description: "code-push 초기 설정",
     run: initializeCodePush
   }
 ];
@@ -110,7 +110,7 @@ function normalizeVersion(input: string): string {
 }
 
 function buildProjectName(version: string): string {
-  const versionFragment = version.replace(/\./g, '');
+  const versionFragment = version.replace(/\./g, "");
   return `RN${versionFragment}`;
 }
 
@@ -122,19 +122,19 @@ async function createReactNativeTemplateApp(context: SetupContext): Promise<void
   }
 
   const initArgs = [
-    '@react-native-community/cli@latest',
-    'init',
+    "@react-native-community/cli@latest",
+    "init",
     context.projectName,
-    '--version',
+    "--version",
     context.rnVersion,
-    '--skip-install',
-    '--install-pods',
-    'false',
-    '--skip-git-init'
+    "--skip-install",
+    "--install-pods",
+    "false",
+    "--skip-git-init"
   ];
 
   console.log(
-    `[command] npx ${initArgs.join(' ')} (cwd: ${context.workingDirectory})`
+    `[command] npx ${initArgs.join(" ")} (cwd: ${context.workingDirectory})`
   );
 
   await executeCommand(getNpxBinary(), initArgs, context.workingDirectory);
@@ -149,23 +149,23 @@ function ensureDirectory(targetDir: string) {
 async function configureIosVersioning(context: SetupContext): Promise<void> {
   const pbxprojPath = path.join(
     context.projectPath,
-    'ios',
+    "ios",
     `${context.projectName}.xcodeproj`,
-    'project.pbxproj'
+    "project.pbxproj"
   );
-  const podfilePath = path.join(context.projectPath, 'ios', 'Podfile');
+  const podfilePath = path.join(context.projectPath, "ios", "Podfile");
   updateTextFile(pbxprojPath, (content) => {
     let nextContent = replaceAllOrThrow(
       content,
       /MARKETING_VERSION = [^;]+;/g,
-      'MARKETING_VERSION = 1.0.0;',
-      'MARKETING_VERSION'
+      "MARKETING_VERSION = 1.0.0;",
+      "MARKETING_VERSION"
     );
     nextContent = replaceAllOrThrow(
       nextContent,
       /IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/g,
-      'IPHONEOS_DEPLOYMENT_TARGET = 16.0;',
-      'IPHONEOS_DEPLOYMENT_TARGET'
+      "IPHONEOS_DEPLOYMENT_TARGET = 16.0;",
+      "IPHONEOS_DEPLOYMENT_TARGET"
     );
     return nextContent;
   });
@@ -175,7 +175,7 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       content,
       /platform :ios,.*\n/,
       "platform :ios, '16.0'\n",
-      'Podfile platform'
+      "Podfile platform"
     )
   );
 }
@@ -183,17 +183,17 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
 async function configureAndroidVersioning(context: SetupContext): Promise<void> {
   const buildGradlePath = path.join(
     context.projectPath,
-    'android',
-    'app',
-    'build.gradle'
+    "android",
+    "app",
+    "build.gradle"
   );
 
   updateTextFile(buildGradlePath, (content) =>
     replaceAllOrThrow(
       content,
       /versionName\s+"[^"]+"/g,
-      'versionName "1.0.0"',
-      'versionName'
+      "versionName \"1.0.0\"",
+      "versionName"
     )
   );
 }
@@ -204,32 +204,32 @@ async function configureLocalCodeLink(context: SetupContext): Promise<void> {
 }
 
 function applyLocalPackageDependency(context: SetupContext) {
-  const packageJsonPath = path.join(context.projectPath, 'package.json');
+  const packageJsonPath = path.join(context.projectPath, "package.json");
   if (!fs.existsSync(packageJsonPath)) {
     throw new Error(`package.json을 찾을 수 없습니다: ${packageJsonPath}`);
   }
 
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
     dependencies?: Record<string, string>;
     [key: string]: unknown;
   };
 
   packageJson.dependencies = packageJson.dependencies ?? {};
-  packageJson.dependencies['@bravemobile/react-native-code-push'] = 'file:../..';
+  packageJson.dependencies["@bravemobile/react-native-code-push"] = "file:../..";
 
   fs.writeFileSync(
     packageJsonPath,
-    JSON.stringify(packageJson, null, 2) + '\n',
-    'utf8'
+    JSON.stringify(packageJson, null, 2) + "\n",
+    "utf8"
   );
 }
 
 function copyMetroConfigTemplate(context: SetupContext) {
   const templatePath = path.resolve(
     __dirname,
-    '../../Examples/CodePushDemoApp/metro.config.js'
+    "../../Examples/CodePushDemoApp/metro.config.js"
   );
-  const destinationPath = path.join(context.projectPath, 'metro.config.js');
+  const destinationPath = path.join(context.projectPath, "metro.config.js");
 
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Metro 템플릿 파일이 없습니다: ${templatePath}`);
@@ -239,17 +239,17 @@ function copyMetroConfigTemplate(context: SetupContext) {
 }
 
 async function installDependencies(context: SetupContext): Promise<void> {
-  const installArgs = ['install', '--quiet', '--no-progress'];
+  const installArgs = ["install", "--quiet", "--no-progress"];
   console.log(
-    `[command] ${getNpmBinary()} ${installArgs.join(' ')} (cwd: ${context.projectPath})`
+    `[command] ${getNpmBinary()} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
   );
   await executeCommand(getNpmBinary(), installArgs, context.projectPath);
 }
 
 async function initializeCodePush(context: SetupContext): Promise<void> {
-  const args = ['code-push', 'init'];
+  const args = ["code-push", "init"];
   console.log(
-    `[command] npx ${args.join(' ')} (cwd: ${context.projectPath})`
+    `[command] npx ${args.join(" ")} (cwd: ${context.projectPath})`
   );
   await executeCommand(getNpxBinary(), args, context.projectPath);
 }
@@ -261,7 +261,7 @@ function updateTextFile(
   if (!fs.existsSync(filePath)) {
     throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
   }
-  const original = fs.readFileSync(filePath, 'utf8');
+  const original = fs.readFileSync(filePath, "utf8");
   const mutated = mutator(original);
   if (original !== mutated) {
     fs.writeFileSync(filePath, mutated);
@@ -290,14 +290,14 @@ function executeCommand(command: string, args: string[], cwd: string): Promise<v
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      stdio: 'inherit'
+      stdio: "inherit"
     });
 
-    child.on('error', (error) => {
+    child.on("error", (error) => {
       reject(error);
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       if (code === 0) {
         resolve();
       } else {
@@ -308,11 +308,11 @@ function executeCommand(command: string, args: string[], cwd: string): Promise<v
 }
 
 function getNpxBinary(): string {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  return process.platform === "win32" ? "npx.cmd" : "npx";
 }
 
 function getNpmBinary(): string {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
 void main();
