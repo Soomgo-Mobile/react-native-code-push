@@ -23,6 +23,9 @@ type SetupStep = {
   run: (context: SetupContext) => Promise<void>;
 };
 
+const NPX_BINARY = "npx";
+const NPM_BINARY = "npm";
+
 const program = new Command()
   .name("setup-automation")
   .description("React Native CodePush test app setup automation")
@@ -148,7 +151,7 @@ async function createReactNativeTemplateApp(context: SetupContext): Promise<void
     `[command] npx ${initArgs.join(" ")} (cwd: ${context.workingDirectory})`
   );
 
-  await executeCommand(getNpxBinary(), initArgs, context.workingDirectory);
+  await executeCommand(NPX_BINARY, initArgs, context.workingDirectory);
 }
 
 function ensureDirectory(targetDir: string) {
@@ -275,9 +278,9 @@ async function ensureRequiredDevDependencies(context: SetupContext): Promise<voi
     ...missing.map((pkg) => (pkg.version ? `${pkg.name}@${pkg.version}` : pkg.name))
   ];
   console.log(
-    `[command] ${getNpmBinary()} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
+    `[command] ${NPM_BINARY} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
   );
-  await executeCommand(getNpmBinary(), installArgs, context.projectPath);
+  await executeCommand(NPM_BINARY, installArgs, context.projectPath);
 }
 
 function copyMetroConfigTemplate(context: SetupContext) {
@@ -356,9 +359,9 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
 async function installDependencies(context: SetupContext): Promise<void> {
   const installArgs = ["install", "--quiet", "--no-progress"];
   console.log(
-    `[command] ${getNpmBinary()} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
+    `[command] ${NPM_BINARY} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
   );
-  await executeCommand(getNpmBinary(), installArgs, context.projectPath);
+  await executeCommand(NPM_BINARY, installArgs, context.projectPath);
 }
 
 async function initializeCodePush(context: SetupContext): Promise<void> {
@@ -366,7 +369,7 @@ async function initializeCodePush(context: SetupContext): Promise<void> {
   console.log(
     `[command] npx ${args.join(" ")} (cwd: ${context.projectPath})`
   );
-  await executeCommand(getNpxBinary(), args, context.projectPath);
+  await executeCommand(NPX_BINARY, args, context.projectPath);
 }
 
 function updateTextFile(
@@ -420,14 +423,6 @@ function executeCommand(command: string, args: string[], cwd: string): Promise<v
       }
     });
   });
-}
-
-function getNpxBinary(): string {
-  return process.platform === "win32" ? "npx.cmd" : "npx";
-}
-
-function getNpmBinary(): string {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
 void main();
