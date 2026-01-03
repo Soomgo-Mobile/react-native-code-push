@@ -68,6 +68,11 @@ const setupSteps: SetupStep[] = [
     run: configureTsNodeOptions
   },
   {
+    name: "apply-app-template",
+    description: "Replace App.tsx with test template",
+    run: applyAppTemplate
+  },
+  {
     name: "install-dependencies",
     description: "Run npm install inside template app",
     run: installDependencies
@@ -231,6 +236,8 @@ interface TemplatePackageJson {
   [key: string]: unknown;
 }
 
+const APP_TEMPLATE_IDENTIFIER_PLACEHOLDER = "__IDENTIFIER__";
+
 function applyLocalPackageDependency(context: SetupContext) {
   const packageJsonPath = path.join(context.projectPath, "package.json");
   if (!fs.existsSync(packageJsonPath)) {
@@ -354,6 +361,21 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
   if (serialized !== originalContent) {
     fs.writeFileSync(tsconfigPath, serialized, "utf8");
   }
+}
+
+async function applyAppTemplate(context: SetupContext): Promise<void> {
+  const templatePath = path.resolve(__dirname, "./templates/App.tsx.txt");
+  const destinationPath = path.join(context.projectPath, "App.tsx");
+
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`App template file does not exist: ${templatePath}`);
+  }
+
+  const template = fs.readFileSync(templatePath, "utf8");
+  const replaced = template
+    .split(APP_TEMPLATE_IDENTIFIER_PLACEHOLDER)
+    .join(context.projectName);
+  fs.writeFileSync(destinationPath, replaced, "utf8");
 }
 
 async function installDependencies(context: SetupContext): Promise<void> {
