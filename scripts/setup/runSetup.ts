@@ -207,14 +207,21 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
     "build.gradle"
   );
 
-  updateTextFile(buildGradlePath, (content) =>
-    replaceAllOrThrow(
+  updateTextFile(buildGradlePath, (content) => {
+    let next = replaceAllOrThrow(
       content,
       /versionName\s+"[^"]+"/g,
       "versionName \"1.0.0\"",
       "versionName"
-    )
-  );
+    );
+    next = replaceAllOrThrow(
+      next,
+      /def\s+enableProguardInReleaseBuilds\s*=\s*false/g,
+      "def enableProguardInReleaseBuilds = true",
+      "enableProguardInReleaseBuilds flag"
+    );
+    return next;
+  });
 }
 
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {
