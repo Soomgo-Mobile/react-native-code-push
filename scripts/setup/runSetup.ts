@@ -246,10 +246,12 @@ const REQUIRED_DEV_DEPENDENCIES: Array<{name: string; version?: string}> = [
 interface TemplatePackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
   [key: string]: unknown;
 }
 
 const APP_TEMPLATE_IDENTIFIER_PLACEHOLDER = "__IDENTIFIER__";
+const TEMPLATE_SYNC_SCRIPT_NAME = "sync-local-library";
 
 function applyLocalPackageDependency(context: SetupContext) {
   const packageJsonPath = path.join(context.projectPath, "package.json");
@@ -261,12 +263,37 @@ function applyLocalPackageDependency(context: SetupContext) {
   const packageJson = JSON.parse(originalContent) as TemplatePackageJson;
 
   packageJson.dependencies = packageJson.dependencies ?? {};
-  packageJson.dependencies["@bravemobile/react-native-code-push"] = "file:../..";
+  packageJson.dependencies["@bravemobile/react-native-code-push"] = "latest";
+  ensureLocalCodePushSyncScript(packageJson, context);
 
   const serialized = `${JSON.stringify(packageJson, null, 2)}\n`;
   if (serialized !== originalContent) {
     fs.writeFileSync(packageJsonPath, serialized, "utf8");
   }
+}
+
+function ensureLocalCodePushSyncScript(
+  packageJson: TemplatePackageJson,
+  context: SetupContext
+) {
+  const scripts = packageJson.scripts ?? {};
+  const syncScriptPath = path.resolve(__dirname, "./syncLocalLibrary.ts");
+  const relativeScriptPath = path.relative(context.projectPath, syncScriptPath);
+  const normalizedPath = relativeScriptPath.split(path.sep).join(path.posix.sep);
+  const syncScriptCommand = `ts-node --project tsconfig.json ${JSON.stringify(
+    normalizedPath
+  )}`;
+
+  scripts[TEMPLATE_SYNC_SCRIPT_NAME] = syncScriptCommand;
+
+  const postInstallCommand = `npm run ${TEMPLATE_SYNC_SCRIPT_NAME}`;
+  if (!scripts.postinstall) {
+    scripts.postinstall = postInstallCommand;
+  } else if (!scripts.postinstall.includes(postInstallCommand)) {
+    scripts.postinstall = `${scripts.postinstall} && ${postInstallCommand}`;
+  }
+
+  packageJson.scripts = scripts;
 }
 
 async function ensureRequiredDevDependencies(context: SetupContext): Promise<void> {
@@ -295,6 +322,7 @@ async function ensureRequiredDevDependencies(context: SetupContext): Promise<voi
     "--save-dev",
     "--quiet",
     "--no-progress",
+    "--ignore-scripts",
     ...missing.map((pkg) => (pkg.version ? `${pkg.name}@${pkg.version}` : pkg.name))
   ];
   console.log(
