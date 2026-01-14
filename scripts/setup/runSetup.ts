@@ -55,7 +55,7 @@ const setupSteps: SetupStep[] = [
   },
   {
     name: "configure-local-code-link",
-    description: "Configure local library link and Metro",
+    description: "Configure local library link",
     run: configureLocalCodeLink
   },
   {
@@ -234,7 +234,6 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
 
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {
   applyLocalPackageDependency(context);
-  copyMetroConfigTemplate(context);
   await ensureRequiredDevDependencies(context);
 }
 
@@ -336,20 +335,6 @@ async function ensureRequiredDevDependencies(context: SetupContext): Promise<voi
     `[command] ${NPM_BINARY} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
   );
   await executeCommand(NPM_BINARY, installArgs, context.projectPath);
-}
-
-function copyMetroConfigTemplate(context: SetupContext) {
-  const templatePath = path.resolve(
-    __dirname,
-    "../../Examples/CodePushDemoApp/metro.config.js"
-  );
-  const destinationPath = path.join(context.projectPath, "metro.config.js");
-
-  if (!fs.existsSync(templatePath)) {
-    throw new Error(`Metro template file does not exist: ${templatePath}`);
-  }
-
-  fs.copyFileSync(templatePath, destinationPath);
 }
 
 async function createCodePushConfigFile(context: SetupContext): Promise<void> {
