@@ -18,6 +18,8 @@ async function main() {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`❌ Failed to sync local library: ${message}`);
     process.exitCode = 1;
+  } finally {
+    fs.rmSync(LOCAL_NPM_CACHE, { recursive: true, force: true });
   }
 }
 
