@@ -20,8 +20,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 const IS_RELEASING_BUNDLE = false;
 
 const REACT_NATIVE_VERSION = (() => {
-  const { major, minor, patch } = Platform.constants.reactNativeVersion;
-  return `${major}.${minor}.${patch}`;
+  const { major, minor, patch, prerelease } = Platform.constants.reactNativeVersion;
+  return `${major}.${minor}.${patch}` + (prerelease ? `-${prerelease}` : '');
 })();
 
 function App() {
