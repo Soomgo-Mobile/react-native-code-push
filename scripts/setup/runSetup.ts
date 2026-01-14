@@ -288,7 +288,12 @@ function ensureLocalCodePushSyncScript(
 
   scripts[TEMPLATE_SYNC_SCRIPT_NAME] = syncScriptCommand;
 
-  const postInstallCommand = `npm run ${TEMPLATE_SYNC_SCRIPT_NAME}`;
+  const postInstallCommand = [
+    `npm run ${TEMPLATE_SYNC_SCRIPT_NAME}`,
+    "bundle install",
+    "cd ios",
+    "bundle exec pod install"
+  ].join(" && ");
   if (!scripts.postinstall) {
     scripts.postinstall = postInstallCommand;
   } else if (!scripts.postinstall.includes(postInstallCommand)) {
