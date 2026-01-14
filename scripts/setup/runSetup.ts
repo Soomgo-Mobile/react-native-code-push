@@ -8,6 +8,7 @@ import ts from "typescript";
 interface SetupCliOptions {
   rnVersion: string;
   workingDir: string;
+  skipPodInstall?: boolean;
 }
 
 interface SetupContext {
@@ -15,6 +16,7 @@ interface SetupContext {
   projectName: string;
   workingDirectory: string;
   projectPath: string;
+  skipPodInstall: boolean;
 }
 
 type SetupStep = {
@@ -35,6 +37,11 @@ const program = new Command()
     "-w, --working-dir <path>",
     "Directory where the template app will be created",
     path.resolve(process.cwd(), "Examples")
+  )
+  .option(
+    "--skip-pod-install",
+    "Skip bundle install and bundle exec pod install during template postinstall",
+    false
   );
 
 const setupSteps: SetupStep[] = [
@@ -79,6 +86,11 @@ const setupSteps: SetupStep[] = [
     run: installDependencies
   },
   {
+    name: "install-ios-pods",
+    description: "Install iOS pods",
+    run: installIosPods
+  },
+  {
     name: "build-code-push-cli",
     description: "Build code-push CLI workspace",
     run: buildCodePushCli
@@ -103,7 +115,8 @@ async function main() {
       rnVersion: normalizedVersion,
       projectName,
       workingDirectory: workingDir,
-      projectPath
+      projectPath,
+      skipPodInstall: options.skipPodInstall ?? false
     };
 
     await runSetup(context);
@@ -253,6 +266,7 @@ interface TemplatePackageJson {
 
 const APP_TEMPLATE_IDENTIFIER_PLACEHOLDER = "__IDENTIFIER__";
 const TEMPLATE_SYNC_SCRIPT_NAME = "sync-local-library";
+const TEMPLATE_POD_INSTALL_SCRIPT_NAME = "setup:pods";
 
 function applyLocalPackageDependency(context: SetupContext) {
   const packageJsonPath = path.join(context.projectPath, "package.json");
@@ -286,13 +300,10 @@ function ensureLocalCodePushSyncScript(
   )}`;
 
   scripts[TEMPLATE_SYNC_SCRIPT_NAME] = syncScriptCommand;
+  scripts[TEMPLATE_POD_INSTALL_SCRIPT_NAME] =
+    "bundle install && cd ios && bundle exec pod install";
 
-  const postInstallCommand = [
-    `npm run ${TEMPLATE_SYNC_SCRIPT_NAME}`,
-    "bundle install",
-    "cd ios",
-    "bundle exec pod install"
-  ].join(" && ");
+  const postInstallCommand = `npm run ${TEMPLATE_SYNC_SCRIPT_NAME}`;
   if (!scripts.postinstall) {
     scripts.postinstall = postInstallCommand;
   } else if (!scripts.postinstall.includes(postInstallCommand)) {
@@ -417,6 +428,19 @@ async function installDependencies(context: SetupContext): Promise<void> {
     `[command] ${NPM_BINARY} ${installArgs.join(" ")} (cwd: ${context.projectPath})`
   );
   await executeCommand(NPM_BINARY, installArgs, context.projectPath);
+}
+
+async function installIosPods(context: SetupContext): Promise<void> {
+  if (context.skipPodInstall) {
+    console.log("[skip] --skip-pod-install enabled");
+    return;
+  }
+
+  const args = ["run", TEMPLATE_POD_INSTALL_SCRIPT_NAME];
+  console.log(
+    `[command] ${NPM_BINARY} ${args.join(" ")} (cwd: ${context.projectPath})`
+  );
+  await executeCommand(NPM_BINARY, args, context.projectPath);
 }
 
 async function buildCodePushCli(_context: SetupContext): Promise<void> {
