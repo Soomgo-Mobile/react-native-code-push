@@ -27,7 +27,6 @@ type SetupStep = {
 
 const NPX_BINARY = "npx";
 const NPM_BINARY = "npm";
-const REPO_ROOT = path.resolve(__dirname, "../..");
 
 const program = new Command()
   .name("setup-automation")
@@ -89,11 +88,6 @@ const setupSteps: SetupStep[] = [
     name: "install-ios-pods",
     description: "Install iOS pods",
     run: installIosPods
-  },
-  {
-    name: "build-code-push-cli",
-    description: "Build code-push CLI workspace",
-    run: buildCodePushCli
   },
   {
     name: "initialize-code-push",
@@ -441,14 +435,6 @@ async function installIosPods(context: SetupContext): Promise<void> {
     `[command] ${NPM_BINARY} ${args.join(" ")} (cwd: ${context.projectPath})`
   );
   await executeCommand(NPM_BINARY, args, context.projectPath);
-}
-
-async function buildCodePushCli(_context: SetupContext): Promise<void> {
-  const args = ["run", "build:cli"];
-  console.log(
-    `[command] ${NPM_BINARY} ${args.join(" ")} (cwd: ${REPO_ROOT})`
-  );
-  await executeCommand(NPM_BINARY, args, REPO_ROOT);
 }
 
 async function initializeCodePush(context: SetupContext): Promise<void> {
