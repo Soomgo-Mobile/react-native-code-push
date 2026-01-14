@@ -135,7 +135,9 @@ function normalizeVersion(input: string): string {
 }
 
 function buildProjectName(version: string): string {
-  const versionFragment = version.replace(/\./g, "");
+  const versionFragment = version
+    .replace(/[.-]/g, "")
+    .replace(/[a-z]/g, (char) => char.toUpperCase());
   return `RN${versionFragment}`;
 }
 
