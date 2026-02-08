@@ -113,7 +113,7 @@ async function main() {
       skipPodInstall: options.skipPodInstall ?? false
     };
 
-    await runSetup(context);
+    await runSetupExampleApp(context);
     console.log(`\n✅ Template app created successfully: ${context.projectPath}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -122,7 +122,7 @@ async function main() {
   }
 }
 
-async function runSetup(context: SetupContext) {
+async function runSetupExampleApp(context: SetupContext) {
   for (const step of setupSteps) {
     console.log(`\n[${step.name}] ${step.description}`);
     await step.run(context);
