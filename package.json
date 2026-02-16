@@ -70,7 +70,8 @@
     "prepack": "npm run build:cli",
     "publish": "npm publish --access=public",
     "eslint": "eslint --quiet .",
-    "jest": "jest src/versioning/* expo/* && npm run --workspace cli test"
+    "jest": "jest src/versioning/* expo/* && npm run --workspace cli test",
+    "e2e": "ts-node --project e2e/tsconfig.json e2e/run.ts"
   },
   "repository": {
     "type": "git",
