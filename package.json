@@ -83,8 +83,8 @@
     "semver": "^7.3.5",
     "shelljs": "^0.10.0",
     "xcode": "^3.0.1",
-    "yazl": "^3.3.1",
-    "yauzl": "^3.2.0"
+    "yauzl": "^3.2.0",
+    "yazl": "^3.3.1"
   },
   "peerDependencies": {
     "expo": ">=50.0.0",
@@ -101,6 +101,7 @@
     "@babel/preset-typescript": "^7.27.1",
     "@eslint/js": "^9.13.0",
     "@types/assert": "^1.5.2",
+    "@types/express": "^5.0.6",
     "@types/mkdirp": "^1.0.1",
     "@types/mocha": "^9.0.0",
     "@types/node": "^18.19.129",

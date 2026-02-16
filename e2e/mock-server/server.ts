@@ -1,5 +1,4 @@
 import express from "express";
-import path from "path";
 import { MOCK_DATA_DIR, MOCK_SERVER_PORT } from "../config";
 import type { Server } from "http";
 
@@ -10,17 +9,18 @@ export function startMockServer(): Promise<Server> {
     const app = express();
     app.use(express.static(MOCK_DATA_DIR));
 
-    app.use((_req, res) => {
+    app.use((_req: express.Request, res: express.Response) => {
       res.status(404).json({ error: "Not found" });
     });
 
-    server = app.listen(MOCK_SERVER_PORT, () => {
+    const s = app.listen(MOCK_SERVER_PORT, () => {
       console.log(`Mock server started on port ${MOCK_SERVER_PORT}`);
       console.log(`Serving files from: ${MOCK_DATA_DIR}`);
-      resolve(server!);
+      resolve(s);
     });
 
-    server.on("error", reject);
+    s.on("error", reject);
+    server = s;
   });
 }
 
