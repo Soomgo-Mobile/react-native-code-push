@@ -32,6 +32,10 @@ function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
     `const CODEPUSH_HOST = '${host}'`,
   );
   content = content.replace(
+    /const IS_RELEASING_BUNDLE = true/,
+    "const IS_RELEASING_BUNDLE = false",
+  );
+  content = content.replace(
     /CodePush\.sync\(\s*\{\s*updateDialog:\s*true\s*\}/,
     "CodePush.sync({}",
   );
