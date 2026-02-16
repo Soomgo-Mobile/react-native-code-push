@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import path from "path";
 
 export async function buildApp(
   appPath: string,
@@ -25,13 +26,10 @@ function buildIos(appPath: string, simulator?: string): Promise<void> {
 }
 
 function buildAndroid(appPath: string): Promise<void> {
-  const args = [
-    "react-native", "build-android",
-    "--mode", "release",
-    "--active-arch-only",
-  ];
-  console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
-  return executeCommand("npx", args, appPath);
+  const cwd = path.join(appPath, "android");
+  const args = ["assembleRelease", "-PreactNativeArchitectures=arm64-v8a"];
+  console.log(`[command] ./gradlew ${args.join(" ")} (cwd: ${cwd})`);
+  return executeCommand("./gradlew", args, cwd);
 }
 
 function executeCommand(command: string, args: string[], cwd: string): Promise<void> {
