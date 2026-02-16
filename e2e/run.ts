@@ -53,10 +53,20 @@ async function main() {
     console.log("\n=== [start-mock-server] ===");
     await startMockServer();
 
-    // 5. Run Maestro
-    console.log("\n=== [run-maestro] ===");
+    // 5. Run Maestro — Phase 1: main flows
+    console.log("\n=== [run-maestro: phase 1] ===");
     const appId = getAppId(appPath, options.platform);
-    await runMaestro(options.platform, appId);
+    const flowsDir = path.resolve(__dirname, "flows");
+    await runMaestro(flowsDir, options.platform, appId);
+
+    // 6. Disable release for rollback test
+    console.log("\n=== [disable-release] ===");
+    disableRelease(options.platform, options.app, "1.0.0");
+
+    // 7. Run Maestro — Phase 2: rollback flow
+    console.log("\n=== [run-maestro: phase 2 (rollback)] ===");
+    const rollbackDir = path.resolve(__dirname, "flows-rollback");
+    await runMaestro(rollbackDir, options.platform, appId);
 
     console.log("\n=== E2E tests passed ===");
   } catch (error) {
@@ -64,7 +74,7 @@ async function main() {
     console.error(`\nE2E test failed: ${message}`);
     process.exitCode = 1;
   } finally {
-    // 6. Cleanup
+    // 8. Cleanup
     console.log("\n=== [cleanup] ===");
     await stopMockServer();
     restoreConfig(appPath);
@@ -94,8 +104,26 @@ function getAppId(appPath: string, platform: "ios" | "android"): string {
   return match[1];
 }
 
-function runMaestro(platform: "ios" | "android", appId: string): Promise<void> {
-  const flowsDir = path.resolve(__dirname, "flows");
+function disableRelease(
+  platform: "ios" | "android",
+  appName: string,
+  binaryVersion: string,
+): void {
+  const historyPath = path.join(
+    MOCK_DATA_DIR, "histories", platform, appName, `${binaryVersion}.json`,
+  );
+  if (!fs.existsSync(historyPath)) {
+    throw new Error(`Release history not found: ${historyPath}`);
+  }
+  const history = JSON.parse(fs.readFileSync(historyPath, "utf8"));
+  for (const version of Object.keys(history)) {
+    history[version].enabled = false;
+  }
+  fs.writeFileSync(historyPath, JSON.stringify(history), "utf8");
+  console.log(`All releases disabled in: ${historyPath}`);
+}
+
+function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string): Promise<void> {
   const args = ["test", flowsDir, "--env", `APP_ID=${appId}`];
 
   if (platform === "android") {
