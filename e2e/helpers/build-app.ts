@@ -14,7 +14,7 @@ export async function buildApp(
 
 function buildIos(appPath: string, simulator?: string): Promise<void> {
   const args = [
-    "react-native", "build-ios",
+    "react-native", "run-ios",
     "--mode", "Release",
   ];
   if (simulator) {
@@ -26,7 +26,7 @@ function buildIos(appPath: string, simulator?: string): Promise<void> {
 
 function buildAndroid(appPath: string): Promise<void> {
   const args = [
-    "react-native", "build-android",
+    "react-native", "run-android",
     "--mode", "release",
     "--active-arch-only",
   ];
