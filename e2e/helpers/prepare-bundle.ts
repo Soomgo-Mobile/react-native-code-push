@@ -43,6 +43,7 @@ function runCodePushRelease(
     "-v", "1.0.1",
     "-p", platform,
     "-i", appName,
+    "-e", "index.js",
     "-m", "true",
   ];
 
