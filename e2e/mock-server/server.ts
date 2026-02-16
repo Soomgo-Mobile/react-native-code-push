@@ -7,6 +7,12 @@ let server: Server | null = null;
 export function startMockServer(): Promise<Server> {
   return new Promise((resolve, reject) => {
     const app = express();
+
+    app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
+      console.log(`[mock-server] ${req.method} ${req.url}`);
+      next();
+    });
+
     app.use(express.static(MOCK_DATA_DIR));
 
     app.use((_req: express.Request, res: express.Response) => {
