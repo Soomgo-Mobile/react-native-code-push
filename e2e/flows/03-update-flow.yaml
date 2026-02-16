@@ -32,4 +32,7 @@ appId: ${APP_ID}
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 2000
-- assertVisible: "packageHash"
+- scrollUntilVisible:
+    element: "packageHash"
+    direction: DOWN
+    timeout: 5000
