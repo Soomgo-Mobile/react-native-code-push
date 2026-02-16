@@ -28,6 +28,7 @@ function buildAndroid(appPath: string): Promise<void> {
   const args = [
     "react-native", "build-android",
     "--mode", "release",
+    "--active-arch-only",
   ];
   console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
   return executeCommand("npx", args, appPath);
