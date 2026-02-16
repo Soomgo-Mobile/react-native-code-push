@@ -12,5 +12,5 @@ appId: ${APP_ID}
     timeout: 5000
 
 # UPDATED! should be gone
-- assertVisible: "React Native"
+- assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"

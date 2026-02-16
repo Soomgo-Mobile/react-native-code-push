@@ -1,7 +1,7 @@
 appId: ${APP_ID}
 ---
 - launchApp
-- assertVisible: "React Native"
+- assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
 
 # Check for updates triggers sync with updateDialog: true
@@ -18,4 +18,4 @@ appId: ${APP_ID}
 
 # After restart, UPDATED! should be visible
 - assertVisible: "UPDATED!"
-- assertVisible: "React Native"
+- assertVisible: "React Native.*"

@@ -1,7 +1,7 @@
 appId: ${APP_ID}
 ---
 - launchApp
-- assertVisible: "React Native"
+- assertVisible: "React Native.*"
 - assertVisible: "Check for updates"
 - assertVisible: "Clear updates"
 - assertVisible: "Restart app"
