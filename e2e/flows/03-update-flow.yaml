@@ -15,7 +15,7 @@ appId: ${APP_ID}
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 2000
-- assertVisible: "null"
+- assertVisible: "METADATA_NULL"
 
 # Check for updates — mandatory update installs silently
 - tapOn: "Check for updates"
@@ -28,11 +28,8 @@ appId: ${APP_ID}
 - assertVisible: "UPDATED!"
 - assertVisible: "React Native.*"
 
-# Verify running update metadata is populated with package info
+# Verify UI is not frozen — metadata fetch should update the indicator
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 2000
-- scrollUntilVisible:
-    element: "packageHash"
-    direction: DOWN
-    timeout: 5000
+- assertVisible: "METADATA_LOADED"

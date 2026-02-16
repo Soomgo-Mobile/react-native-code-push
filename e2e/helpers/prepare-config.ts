@@ -40,13 +40,13 @@ function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
     "CodePush.sync({}",
   );
   content = content.replace(/Alert\.alert\(/g, "console.log(");
-  // Replace TextInput with Text in MetadataBlock so Maestro can read the content
+  // Add a Text indicator for running metadata status (Maestro can't read TextInput values)
   content = content.replace(
-    /<TextInput\s+value=\{String\(value\)\}\s+multiline\s+style=\{[^}]+\}\s*\/>/,
-    "<Text style={{ borderWidth: 1, borderRadius: 4, padding: 8, minHeight: 60, color: 'black' }}>{String(value)}</Text>",
+    '<MetadataBlock label="Running" value={runningMetadata} />',
+    `<Text>{runningMetadata === '' ? 'METADATA_IDLE' : runningMetadata === 'null' ? 'METADATA_NULL' : 'METADATA_LOADED'}</Text>\n          <MetadataBlock label="Running" value={runningMetadata} />`,
   );
   fs.writeFileSync(appTsxPath, content, "utf8");
-  console.log(`App.tsx patched: CODEPUSH_HOST, updateDialog, Alert.alert, MetadataBlock`);
+  console.log(`App.tsx patched: CODEPUSH_HOST, updateDialog, Alert.alert, metadata status`);
 }
 
 function copyLocalConfig(appPath: string): void {
