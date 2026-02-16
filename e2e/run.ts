@@ -11,6 +11,7 @@ import { startMockServer, stopMockServer } from "./mock-server/server";
 interface CliOptions {
   app: string;
   platform: "ios" | "android";
+  simulator?: string;
   maestroOnly?: boolean;
 }
 
@@ -19,6 +20,7 @@ const program = new Command()
   .description("Run E2E tests with Maestro for CodePush example apps")
   .requiredOption("--app <name>", "Example app name (e.g. RN0840RC5)")
   .requiredOption("--platform <type>", "Platform: ios or android")
+  .option("--simulator <name>", "iOS simulator name (default: booted)")
   .option("--maestro-only", "Skip build, only run Maestro flows", false);
 
 async function main() {
@@ -39,7 +41,7 @@ async function main() {
     // 2. Build (unless --maestro-only)
     if (!options.maestroOnly) {
       console.log("\n=== [build] ===");
-      await buildApp(appPath, options.platform);
+      await buildApp(appPath, options.platform, options.simulator);
     }
 
     // 3. Prepare update bundle

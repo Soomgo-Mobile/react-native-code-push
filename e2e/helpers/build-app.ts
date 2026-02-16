@@ -3,20 +3,23 @@ import { spawn } from "child_process";
 export async function buildApp(
   appPath: string,
   platform: "ios" | "android",
+  simulator?: string,
 ): Promise<void> {
   if (platform === "ios") {
-    await buildIos(appPath);
+    await buildIos(appPath, simulator);
   } else {
     await buildAndroid(appPath);
   }
 }
 
-function buildIos(appPath: string): Promise<void> {
+function buildIos(appPath: string, simulator?: string): Promise<void> {
   const args = [
     "react-native", "build-ios",
     "--mode", "Release",
-    "--simulator", "iPhone 16",
   ];
+  if (simulator) {
+    args.push("--simulator", simulator);
+  }
   console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
   return executeCommand("npx", args, appPath);
 }
