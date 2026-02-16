@@ -2,7 +2,20 @@ appId: ${APP_ID}
 ---
 - launchApp
 - assertVisible: "React Native.*"
+
+# Ensure clean state — clear any previous updates
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
+
+# Verify no running update metadata
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 2000
+- assertVisible: "null"
 
 # Check for updates — mandatory update installs silently
 - tapOn: "Check for updates"
@@ -14,3 +27,9 @@ appId: ${APP_ID}
 # After restart, UPDATED! should be visible
 - assertVisible: "UPDATED!"
 - assertVisible: "React Native.*"
+
+# Verify running update metadata is populated with package info
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 2000
+- assertVisible: "packageHash"
