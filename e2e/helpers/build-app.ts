@@ -16,6 +16,7 @@ function buildIos(appPath: string, simulator?: string): Promise<void> {
   const args = [
     "react-native", "run-ios",
     "--mode", "Release",
+    "--no-packager",
   ];
   if (simulator) {
     args.push("--simulator", simulator);
@@ -29,6 +30,7 @@ function buildAndroid(appPath: string): Promise<void> {
     "react-native", "run-android",
     "--mode", "release",
     "--active-arch-only",
+    "--no-packager",
   ];
   console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
   return executeCommand("npx", args, appPath);
