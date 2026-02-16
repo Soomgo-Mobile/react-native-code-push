@@ -1,0 +1,9 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "React Native"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native"
+- assertVisible: "Check for updates"

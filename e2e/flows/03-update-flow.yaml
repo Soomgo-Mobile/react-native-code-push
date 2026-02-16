@@ -1,0 +1,21 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "React Native"
+- assertNotVisible: "UPDATED!"
+
+# Check for updates triggers sync with updateDialog: true
+- tapOn: "Check for updates"
+
+# Mandatory update dialog appears — tap "Install"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "Install"
+
+# Wait for download + install + auto-restart (mandatory = IMMEDIATE)
+- waitForAnimationToEnd:
+    timeout: 30000
+
+# After restart, UPDATED! should be visible
+- assertVisible: "UPDATED!"
+- assertVisible: "React Native"
