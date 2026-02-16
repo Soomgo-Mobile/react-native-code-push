@@ -35,9 +35,9 @@ function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
     /CodePush\.sync\(\s*\{\s*updateDialog:\s*true\s*\}/,
     "CodePush.sync({}",
   );
+  content = content.replace(/Alert\.alert\(/g, "console.log(");
   fs.writeFileSync(appTsxPath, content, "utf8");
-  console.log(`App.tsx CODEPUSH_HOST set to: ${host}`);
-  console.log("App.tsx updateDialog removed for silent mandatory update");
+  console.log(`App.tsx patched: CODEPUSH_HOST, updateDialog, Alert.alert`);
 }
 
 function copyLocalConfig(appPath: string): void {
