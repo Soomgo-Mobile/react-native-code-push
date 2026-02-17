@@ -86,7 +86,7 @@ function App() {
           />
           <Button title="Restart app" onPress={() => CodePush.restartApp()} />
           <Button title="Get update metadata" onPress={handleMetadata} />
-          <Text>{runningMetadata === '' ? 'METADATA_IDLE' : runningMetadata === 'null' ? 'METADATA_NULL' : 'METADATA_LOADED'}</Text>
+          <Text>{runningMetadata === '' ? 'METADATA_IDLE' : runningMetadata === 'null' ? 'METADATA_NULL' : `METADATA_V${JSON.parse(runningMetadata).label}`}</Text>
           <MetadataBlock label="Running" value={runningMetadata} />
           <MetadataBlock label="Pending" value={pendingMetadata} />
           <MetadataBlock label="Latest" value={latestMetadata} />

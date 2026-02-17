@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { getAppPath, MOCK_DATA_DIR } from "./config";
 import { prepareConfig, restoreConfig } from "./helpers/prepare-config";
-import { prepareBundle, runCodePushCommand } from "./helpers/prepare-bundle";
+import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker } from "./helpers/prepare-bundle";
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
 
@@ -71,10 +71,63 @@ async function main() {
       "-e", "false",
     ]);
 
-    // 7. Run Maestro — Phase 2: rollback flow
-    console.log("\n=== [run-maestro: phase 2 (rollback)] ===");
+    // 7. Run Maestro — Phase 2: rollback to binary
+    console.log("\n=== [run-maestro: phase 2 (rollback to binary)] ===");
     const rollbackDir = path.resolve(__dirname, "flows-rollback");
     await runMaestro(rollbackDir, options.platform, appId);
+
+    // 8. Prepare partial rollback: release 1.0.1 + 1.0.2 with different hashes
+    console.log("\n=== [prepare-bundle: partial rollback] ===");
+    cleanMockData();
+    setReleasingBundle(appPath, true);
+    try {
+      await runCodePushCommand(appPath, options.platform, options.app, [
+        "code-push", "create-history",
+        "-c", "code-push.config.local.ts",
+        "-b", "1.0.0",
+        "-p", options.platform,
+        "-i", options.app,
+      ]);
+      setReleaseMarker(appPath, "1.0.1");
+      await runCodePushCommand(appPath, options.platform, options.app, [
+        "code-push", "release",
+        "-c", "code-push.config.local.ts",
+        "-b", "1.0.0", "-v", "1.0.1",
+        "-p", options.platform, "-i", options.app,
+        "-e", "index.js", "-m", "true",
+      ]);
+      setReleaseMarker(appPath, "1.0.2");
+      await runCodePushCommand(appPath, options.platform, options.app, [
+        "code-push", "release",
+        "-c", "code-push.config.local.ts",
+        "-b", "1.0.0", "-v", "1.0.2",
+        "-p", options.platform, "-i", options.app,
+        "-e", "index.js", "-m", "true",
+      ]);
+    } finally {
+      clearReleaseMarker(appPath);
+      setReleasingBundle(appPath, false);
+    }
+
+    // 9. Run Maestro — update to 1.0.2
+    console.log("\n=== [run-maestro: partial rollback — update to 1.0.2] ===");
+    const updateFlow = path.resolve(__dirname, "flows-partial-rollback/01-update-to-latest.yaml");
+    await runMaestro(updateFlow, options.platform, appId);
+
+    // 10. Disable only 1.0.2 → rollback target is 1.0.1 (not binary)
+    console.log("\n=== [disable-release: 1.0.2 only] ===");
+    await runCodePushCommand(appPath, options.platform, options.app, [
+      "code-push", "update-history",
+      "-c", "code-push.config.local.ts",
+      "-b", "1.0.0", "-v", "1.0.2",
+      "-p", options.platform, "-i", options.app,
+      "-e", "false",
+    ]);
+
+    // 11. Run Maestro — rollback from 1.0.2 to 1.0.1
+    console.log("\n=== [run-maestro: partial rollback — rollback to 1.0.1] ===");
+    const rollbackFlow = path.resolve(__dirname, "flows-partial-rollback/02-rollback-to-previous.yaml");
+    await runMaestro(rollbackFlow, options.platform, appId);
 
     console.log("\n=== E2E tests passed ===");
   } catch (error) {

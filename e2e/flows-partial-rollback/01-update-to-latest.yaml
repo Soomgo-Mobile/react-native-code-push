@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+---
+# App should be on binary (after phase 2 rollback)
+- launchApp
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
+# Sync — should update to 1.0.2 (latest enabled)
+- tapOn: "Check for updates"
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "UPDATED!"
+
+# Verify running version is 1.0.2
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.0.2"

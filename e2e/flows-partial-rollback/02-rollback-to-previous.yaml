@@ -1,0 +1,24 @@
+appId: ${APP_ID}
+---
+# App should be on 1.0.2 (from previous update)
+- launchApp
+- assertVisible: "UPDATED!"
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.0.2"
+
+# Sync — 1.0.2 is disabled, triggers rollback/update to 1.0.1
+- tapOn: "Check for updates"
+- waitForAnimationToEnd:
+    timeout: 30000
+
+# After rollback to 1.0.1, UPDATED! should still be visible
+- assertVisible: "UPDATED!"
+- assertVisible: "React Native.*"
+
+# Verify running version is 1.0.1 (not 1.0.0 binary)
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.0.1"

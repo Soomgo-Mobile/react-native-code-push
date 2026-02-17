@@ -3,20 +3,49 @@ import path from "path";
 import { spawn } from "child_process";
 import { MOCK_DATA_DIR, getMockServerHost } from "../config";
 
+export function setReleasingBundle(appPath: string, value: boolean): void {
+  const appTsxPath = path.join(appPath, "App.tsx");
+  let content = fs.readFileSync(appTsxPath, "utf8");
+  content = content.replace(
+    value
+      ? /const IS_RELEASING_BUNDLE = false/
+      : /const IS_RELEASING_BUNDLE = true/,
+    `const IS_RELEASING_BUNDLE = ${value}`,
+  );
+  fs.writeFileSync(appTsxPath, content, "utf8");
+}
+
+const RELEASE_MARKER_PATTERN = /^console\.log\("E2E_MARKER_.*"\);$/m;
+
+/**
+ * Add a unique code statement to App.tsx to ensure different bundle hashes
+ * for releases with otherwise identical content.
+ */
+export function setReleaseMarker(appPath: string, version: string): void {
+  const appTsxPath = path.join(appPath, "App.tsx");
+  let content = fs.readFileSync(appTsxPath, "utf8");
+  const marker = `console.log("E2E_MARKER_${version}");`;
+  if (RELEASE_MARKER_PATTERN.test(content)) {
+    content = content.replace(RELEASE_MARKER_PATTERN, marker);
+  } else {
+    content = `${marker}\n${content}`;
+  }
+  fs.writeFileSync(appTsxPath, content, "utf8");
+}
+
+export function clearReleaseMarker(appPath: string): void {
+  const appTsxPath = path.join(appPath, "App.tsx");
+  let content = fs.readFileSync(appTsxPath, "utf8");
+  content = content.replace(RELEASE_MARKER_PATTERN, "").replace(/^\n+/, "");
+  fs.writeFileSync(appTsxPath, content, "utf8");
+}
+
 export async function prepareBundle(
   appPath: string,
   platform: "ios" | "android",
   appName: string,
 ): Promise<void> {
-  const appTsxPath = path.join(appPath, "App.tsx");
-
-  // Temporarily set IS_RELEASING_BUNDLE = true
-  let content = fs.readFileSync(appTsxPath, "utf8");
-  content = content.replace(
-    /const IS_RELEASING_BUNDLE = false/,
-    "const IS_RELEASING_BUNDLE = true",
-  );
-  fs.writeFileSync(appTsxPath, content, "utf8");
+  setReleasingBundle(appPath, true);
 
   try {
     await runCodePushCommand(appPath, platform, appName, [
@@ -28,13 +57,7 @@ export async function prepareBundle(
     ]);
     await runCodePushRelease(appPath, platform, appName);
   } finally {
-    // Restore IS_RELEASING_BUNDLE = false
-    content = fs.readFileSync(appTsxPath, "utf8");
-    content = content.replace(
-      /const IS_RELEASING_BUNDLE = true/,
-      "const IS_RELEASING_BUNDLE = false",
-    );
-    fs.writeFileSync(appTsxPath, content, "utf8");
+    setReleasingBundle(appPath, false);
   }
 }
 

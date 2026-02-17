@@ -34,4 +34,4 @@ appId: ${APP_ID}
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 3000
-- assertVisible: "METADATA_LOADED"
+- assertVisible: "METADATA_V1.0.1"
