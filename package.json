@@ -100,7 +100,6 @@
     "archiver": "latest",
     "babel-jest": "^29.7.0",
     "body-parser": "latest",
-    "code-push-plugin-testing-framework": "file:./code-push-plugin-testing-framework",
     "eslint": "^9.13.0",
     "eslint-plugin-react": "^7.37.2",
     "express": "latest",
