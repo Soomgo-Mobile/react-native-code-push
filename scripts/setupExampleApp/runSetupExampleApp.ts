@@ -207,6 +207,12 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;',
       "CODE_SIGN_IDENTITY"
     );
+    nextContent = replaceAllOrThrow(
+      nextContent,
+      /SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";/g,
+      'SUPPORTED_PLATFORMS = iphonesimulator;',
+      "SUPPORTED_PLATFORMS"
+    );
     return nextContent;
   });
 
@@ -243,6 +249,23 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
     );
     return next;
   });
+
+  const manifestPath = path.join(
+    context.projectPath,
+    "android",
+    "app",
+    "src",
+    "main",
+    "AndroidManifest.xml"
+  );
+  updateTextFile(manifestPath, (content) =>
+    replaceAllOrThrow(
+      content,
+      /android:usesCleartextTraffic="\$\{usesCleartextTraffic\}"/,
+      'android:usesCleartextTraffic="true"',
+      "usesCleartextTraffic"
+    )
+  );
 }
 
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {

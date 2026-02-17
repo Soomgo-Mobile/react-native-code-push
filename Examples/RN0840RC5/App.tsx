@@ -16,7 +16,7 @@ import axios from 'axios';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Set this to true before run `npx code-push release` to release a new bundle
-const IS_RELEASING_BUNDLE = false;
+const IS_RELEASING_BUNDLE = true;
 
 const REACT_NATIVE_VERSION = (() => {
   const { major, minor, patch, prerelease } = Platform.constants.reactNativeVersion;
@@ -32,8 +32,7 @@ function App() {
   const [latestMetadata, setLatestMetadata] = useState('');
 
   const handleSync = useCallback(() => {
-    CodePush.sync(
-      {},
+    CodePush.sync({},
       status => {
         setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');
       },
@@ -116,8 +115,8 @@ function MetadataBlock({
   );
 }
 
-const CODEPUSH_HOST = 'PLACEHOLDER';
-const IDENTIFIER = '__IDENTIFIER__';
+const CODEPUSH_HOST = 'http://10.0.2.2:18081';
+const IDENTIFIER = 'RN0840RC5';
 
 async function releaseHistoryFetcher(
   updateRequest: UpdateCheckRequest,

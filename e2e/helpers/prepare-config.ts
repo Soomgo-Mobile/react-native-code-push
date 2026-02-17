@@ -7,14 +7,10 @@ const BACKUP_SUFFIX = ".e2e-backup";
 export function prepareConfig(appPath: string, platform: "ios" | "android"): void {
   patchAppTsx(appPath, platform);
   copyLocalConfig(appPath);
-  if (platform === "android") {
-    patchAndroidManifest(appPath);
-  }
 }
 
 export function restoreConfig(appPath: string): void {
   restoreFile(path.join(appPath, "App.tsx"));
-  restoreFile(getAndroidManifestPath(appPath));
   const localConfig = path.join(appPath, "code-push.config.local.ts");
   if (fs.existsSync(localConfig)) {
     fs.unlinkSync(localConfig);
@@ -35,18 +31,8 @@ function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
     /const IS_RELEASING_BUNDLE = true/,
     "const IS_RELEASING_BUNDLE = false",
   );
-  content = content.replace(
-    /CodePush\.sync\(\s*\{\s*updateDialog:\s*true\s*\}/,
-    "CodePush.sync({}",
-  );
-  content = content.replace(/Alert\.alert\(/g, "console.log(");
-  // Add a Text indicator for running metadata status (Maestro can't read TextInput values)
-  content = content.replace(
-    '<MetadataBlock label="Running" value={runningMetadata} />',
-    `<Text>{runningMetadata === '' ? 'METADATA_IDLE' : runningMetadata === 'null' ? 'METADATA_NULL' : 'METADATA_LOADED'}</Text>\n          <MetadataBlock label="Running" value={runningMetadata} />`,
-  );
   fs.writeFileSync(appTsxPath, content, "utf8");
-  console.log(`App.tsx patched: CODEPUSH_HOST, updateDialog, Alert.alert, metadata status`);
+  console.log(`App.tsx patched: CODEPUSH_HOST, IS_RELEASING_BUNDLE`);
 }
 
 function copyLocalConfig(appPath: string): void {
@@ -54,26 +40,6 @@ function copyLocalConfig(appPath: string): void {
   const destPath = path.join(appPath, "code-push.config.local.ts");
   fs.copyFileSync(templatePath, destPath);
   console.log("code-push.config.local.ts copied to app directory");
-}
-
-function getAndroidManifestPath(appPath: string): string {
-  return path.join(appPath, "android", "app", "src", "main", "AndroidManifest.xml");
-}
-
-function patchAndroidManifest(appPath: string): void {
-  const manifestPath = getAndroidManifestPath(appPath);
-  if (!fs.existsSync(manifestPath)) {
-    return;
-  }
-  backupFile(manifestPath);
-
-  let content = fs.readFileSync(manifestPath, "utf8");
-  content = content.replace(
-    /android:usesCleartextTraffic="\$\{usesCleartextTraffic\}"/,
-    'android:usesCleartextTraffic="true"',
-  );
-  fs.writeFileSync(manifestPath, content, "utf8");
-  console.log("AndroidManifest.xml usesCleartextTraffic set to true");
 }
 
 function backupFile(filePath: string): void {
