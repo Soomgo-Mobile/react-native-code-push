@@ -1,0 +1,16 @@
+appId: ${APP_ID}
+---
+# App should have the update installed from phase 1
+- launchApp
+- assertVisible: "UPDATED!"
+
+# Check for updates — server has disabled the release, triggers rollback to binary
+- tapOn: "Check for updates"
+
+# sync() detects disabled release, calls clearUpdates() + restartApp() automatically
+- waitForAnimationToEnd:
+    timeout: 30000
+
+# After rollback, UPDATED! should be gone
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"

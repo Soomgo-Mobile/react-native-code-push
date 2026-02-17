@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   Button,
   Platform,
   ScrollView,
@@ -34,7 +33,7 @@ function App() {
 
   const handleSync = useCallback(() => {
     CodePush.sync(
-      { updateDialog: true },
+      {},
       status => {
         setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');
       },
@@ -42,11 +41,11 @@ function App() {
         setProgress(Math.round((receivedBytes / totalBytes) * 100));
       },
       mismatch => {
-        Alert.alert('CodePush mismatch', JSON.stringify(mismatch, null, 2));
+        console.log('CodePush mismatch', JSON.stringify(mismatch, null, 2));
       },
     ).catch(error => {
       console.error(error);
-      Alert.alert('Sync failed', error.message ?? 'Unknown error');
+      console.log('Sync failed', error.message ?? 'Unknown error');
     });
   }, []);
 
@@ -56,9 +55,9 @@ function App() {
       CodePush.getUpdateMetadata(CodePush.UpdateState.PENDING),
       CodePush.getUpdateMetadata(CodePush.UpdateState.LATEST),
     ]);
-    setRunningMetadata(JSON.stringify(running, null, 2));
-    setPendingMetadata(JSON.stringify(pending, null, 2));
-    setLatestMetadata(JSON.stringify(latest, null, 2));
+    setRunningMetadata(JSON.stringify(running ?? null, null, 2));
+    setPendingMetadata(JSON.stringify(pending ?? null, null, 2));
+    setLatestMetadata(JSON.stringify(latest ?? null, null, 2));
   }, []);
 
   return (
@@ -88,6 +87,7 @@ function App() {
           />
           <Button title="Restart app" onPress={() => CodePush.restartApp()} />
           <Button title="Get update metadata" onPress={handleMetadata} />
+          <Text>{runningMetadata === '' ? 'METADATA_IDLE' : runningMetadata === 'null' ? 'METADATA_NULL' : `METADATA_V${JSON.parse(runningMetadata).label}`}</Text>
           <MetadataBlock label="Running" value={runningMetadata} />
           <MetadataBlock label="Pending" value={pendingMetadata} />
           <MetadataBlock label="Latest" value={latestMetadata} />
@@ -152,14 +152,14 @@ export default CodePush({
   checkFrequency: CodePush.CheckFrequency.MANUAL,
   releaseHistoryFetcher,
   onUpdateSuccess: label => {
-    Alert.alert('Update success', label);
+    console.log('Update success', label);
   },
   onUpdateRollback: label => {
-    Alert.alert('Update rolled back', label);
+    console.log('Update rolled back', label);
   },
   onSyncError: (label, error) => {
     console.error(error);
-    Alert.alert('Sync error', label);
+    console.log('Sync error', label);
   },
   onDownloadStart: label => {
     console.log('Download start', label);

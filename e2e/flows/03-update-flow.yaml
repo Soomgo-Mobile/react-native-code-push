@@ -1,0 +1,37 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "React Native.*"
+
+# Ensure clean state — clear any previous updates
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
+# Verify no running update metadata
+- assertVisible: "METADATA_IDLE"
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_NULL"
+
+# Check for updates — mandatory update installs silently
+- tapOn: "Check for updates"
+
+# Wait for download + install + auto-restart (mandatory = IMMEDIATE)
+- waitForAnimationToEnd:
+    timeout: 30000
+
+# After restart, UPDATED! should be visible
+- assertVisible: "UPDATED!"
+- assertVisible: "React Native.*"
+
+# Verify UI is not frozen — metadata fetch should update the indicator
+- assertVisible: "METADATA_IDLE"
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.0.1"
