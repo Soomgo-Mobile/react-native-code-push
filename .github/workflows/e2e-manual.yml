@@ -80,7 +80,7 @@ jobs:
 
   e2e-android:
     if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
