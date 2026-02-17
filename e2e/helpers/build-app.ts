@@ -20,7 +20,7 @@ async function buildIos(appPath: string, simulator?: string): Promise<void> {
     "react-native", "run-ios",
     "--mode", "Release",
     "--no-packager",
-    "--extra-params", "CODE_SIGNING_ALLOWED=NO",
+    "--extra-params", "CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO",
   ];
   if (simulator) {
     args.push("--simulator", simulator);
