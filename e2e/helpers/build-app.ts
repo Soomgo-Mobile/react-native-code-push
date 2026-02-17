@@ -1,5 +1,4 @@
-import { execSync, spawn } from "child_process";
-import path from "path";
+import { spawn } from "child_process";
 
 export async function buildApp(
   appPath: string,
@@ -17,63 +16,16 @@ async function buildIos(appPath: string, simulator?: string): Promise<void> {
   console.log(`[command] npm run setup:pods (cwd: ${appPath})`);
   await executeCommand("npm", ["run", "setup:pods"], appPath);
 
-  const appName = path.basename(appPath);
-  const destination = simulator
-    ? `platform=iOS Simulator,name=${simulator}`
-    : `platform=iOS Simulator,id=${getBootedSimulatorId()}`;
-
   const args = [
-    "-workspace", `ios/${appName}.xcworkspace`,
-    "-scheme", appName,
-    "-configuration", "Release",
-    "-sdk", "iphonesimulator",
-    "-destination", destination,
-    "-derivedDataPath", "ios/build",
-    "CODE_SIGN_IDENTITY=-",
-    "CODE_SIGNING_REQUIRED=NO",
-    "CODE_SIGNING_ALLOWED=NO",
+    "react-native", "run-ios",
+    "--mode", "Release",
+    "--no-packager",
   ];
-
-  console.log(`[command] xcodebuild ${args.join(" ")} (cwd: ${appPath})`);
-  await executeCommand("xcodebuild", args, appPath);
-
-  // Install on simulator
-  const appBundlePath = `ios/build/Build/Products/Release-iphonesimulator/${appName}.app`;
-  const simId = simulator
-    ? getSimulatorId(simulator)
-    : getBootedSimulatorId();
-
-  console.log(`[command] xcrun simctl install ${simId} ${appBundlePath}`);
-  await executeCommand("xcrun", ["simctl", "install", simId, appBundlePath], appPath);
-
-  console.log(`[command] xcrun simctl launch ${simId} org.reactjs.native.example.${appName}`);
-  await executeCommand("xcrun", ["simctl", "launch", simId, `org.reactjs.native.example.${appName}`], appPath);
-}
-
-function getBootedSimulatorId(): string {
-  const output = execSync("xcrun simctl list devices booted -j", { encoding: "utf8" });
-  const data = JSON.parse(output);
-  for (const runtime of Object.values(data.devices) as any[]) {
-    for (const device of runtime) {
-      if (device.state === "Booted") {
-        return device.udid;
-      }
-    }
+  if (simulator) {
+    args.push("--simulator", simulator);
   }
-  throw new Error("No booted iOS simulator found");
-}
-
-function getSimulatorId(name: string): string {
-  const output = execSync("xcrun simctl list devices available -j", { encoding: "utf8" });
-  const data = JSON.parse(output);
-  for (const runtime of Object.values(data.devices) as any[]) {
-    for (const device of runtime) {
-      if (device.name === name) {
-        return device.udid;
-      }
-    }
-  }
-  throw new Error(`Simulator "${name}" not found`);
+  console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
+  return executeCommand("npx", args, appPath);
 }
 
 function buildAndroid(appPath: string): Promise<void> {

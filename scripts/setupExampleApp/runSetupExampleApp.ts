@@ -201,6 +201,12 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       "IPHONEOS_DEPLOYMENT_TARGET = 16.0;",
       "IPHONEOS_DEPLOYMENT_TARGET"
     );
+    nextContent = replaceAllOrThrow(
+      nextContent,
+      /"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer";/g,
+      '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";',
+      "CODE_SIGN_IDENTITY"
+    );
     return nextContent;
   });
 
