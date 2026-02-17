@@ -54,6 +54,8 @@
     "setup": "npm install --quiet --no-progress",
     "setup-example-app": "ts-node --project scripts/setupExampleApp/tsconfig.json scripts/setupExampleApp/runSetupExampleApp.ts",
     "type:cli": "npm run --workspace cli typecheck",
+    "type:e2e": "tsc --project e2e/tsconfig.json --noEmit",
+    "typecheck": "npm run type:cli && npm run type:e2e",
     "build:cli": "npm run --workspace cli clean && npm run --workspace cli build",
     "prepack": "npm run build:cli",
     "publish": "npm publish --access=public",
