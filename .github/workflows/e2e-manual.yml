@@ -126,7 +126,4 @@ jobs:
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: |
-            npm run e2e -- \
-              --app "${{ inputs.app }}" \
-              --platform android
+          script: npm run e2e -- --app "${{ inputs.app }}" --platform android
