@@ -204,7 +204,7 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
     nextContent = replaceAllOrThrow(
       nextContent,
       /"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer";/g,
-      '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";',
+      '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;',
       "CODE_SIGN_IDENTITY"
     );
     return nextContent;
