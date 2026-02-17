@@ -59,7 +59,7 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Boot iOS simulator
+      - name: Select iOS simulator
         id: boot-simulator
         run: |
           SIMULATOR_NAME="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $1; exit}' | xargs)"
@@ -68,7 +68,6 @@ jobs:
             exit 1
           fi
           xcrun simctl boot "$SIMULATOR_NAME" || true
-          xcrun simctl bootstatus "$SIMULATOR_NAME" -b
           echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run iOS E2E
