@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { execSync, spawn } from "child_process";
 
 export async function buildApp(
   appPath: string,
@@ -12,18 +12,38 @@ export async function buildApp(
   }
 }
 
+const DEFAULT_SIMULATOR = "iPhone 16";
+
+function getBootedSimulatorName(): string | undefined {
+  try {
+    const output = execSync(
+      "xcrun simctl list devices booted -j",
+      { encoding: "utf8" },
+    );
+    const data = JSON.parse(output) as {
+      devices: Record<string, Array<{ name: string; state: string }>>;
+    };
+    for (const runtime of Object.values(data.devices)) {
+      const booted = runtime.find((d) => d.state === "Booted");
+      if (booted) return booted.name;
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
 async function buildIos(appPath: string, simulator?: string): Promise<void> {
   console.log(`[command] npm run setup:pods (cwd: ${appPath})`);
   await executeCommand("npm", ["run", "setup:pods"], appPath);
 
+  const sim = simulator ?? getBootedSimulatorName() ?? DEFAULT_SIMULATOR;
   const args = [
     "react-native", "run-ios",
     "--mode", "Release",
     "--no-packager",
+    "--simulator", sim,
   ];
-  if (simulator) {
-    args.push("--simulator", simulator);
-  }
   console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
   return executeCommand("npx", args, appPath);
 }

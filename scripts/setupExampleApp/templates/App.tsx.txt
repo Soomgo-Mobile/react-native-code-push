@@ -55,9 +55,9 @@ function App() {
       CodePush.getUpdateMetadata(CodePush.UpdateState.PENDING),
       CodePush.getUpdateMetadata(CodePush.UpdateState.LATEST),
     ]);
-    setRunningMetadata(JSON.stringify(running, null, 2));
-    setPendingMetadata(JSON.stringify(pending, null, 2));
-    setLatestMetadata(JSON.stringify(latest, null, 2));
+    setRunningMetadata(JSON.stringify(running ?? null, null, 2));
+    setPendingMetadata(JSON.stringify(pending ?? null, null, 2));
+    setLatestMetadata(JSON.stringify(latest ?? null, null, 2));
   }, []);
 
   return (

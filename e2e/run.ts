@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { getAppPath, MOCK_DATA_DIR } from "./config";
 import { prepareConfig, restoreConfig } from "./helpers/prepare-config";
-import { prepareBundle } from "./helpers/prepare-bundle";
+import { prepareBundle, runCodePushCommand } from "./helpers/prepare-bundle";
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
 
@@ -61,7 +61,15 @@ async function main() {
 
     // 6. Disable release for rollback test
     console.log("\n=== [disable-release] ===");
-    disableRelease(options.platform, options.app, "1.0.0");
+    await runCodePushCommand(appPath, options.platform, options.app, [
+      "code-push", "update-history",
+      "-c", "code-push.config.local.ts",
+      "-b", "1.0.0",
+      "-v", "1.0.1",
+      "-p", options.platform,
+      "-i", options.app,
+      "-e", "false",
+    ]);
 
     // 7. Run Maestro — Phase 2: rollback flow
     console.log("\n=== [run-maestro: phase 2 (rollback)] ===");
@@ -102,25 +110,6 @@ function getAppId(appPath: string, platform: "ios" | "android"): string {
     throw new Error("Could not find applicationId in build.gradle");
   }
   return match[1];
-}
-
-function disableRelease(
-  platform: "ios" | "android",
-  appName: string,
-  binaryVersion: string,
-): void {
-  const historyPath = path.join(
-    MOCK_DATA_DIR, "histories", platform, appName, `${binaryVersion}.json`,
-  );
-  if (!fs.existsSync(historyPath)) {
-    throw new Error(`Release history not found: ${historyPath}`);
-  }
-  const history = JSON.parse(fs.readFileSync(historyPath, "utf8"));
-  for (const version of Object.keys(history)) {
-    history[version].enabled = false;
-  }
-  fs.writeFileSync(historyPath, JSON.stringify(history), "utf8");
-  console.log(`All releases disabled in: ${historyPath}`);
 }
 
 function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string): Promise<void> {

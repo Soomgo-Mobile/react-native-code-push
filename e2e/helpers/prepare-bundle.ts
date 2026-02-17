@@ -19,6 +19,13 @@ export async function prepareBundle(
   fs.writeFileSync(appTsxPath, content, "utf8");
 
   try {
+    await runCodePushCommand(appPath, platform, appName, [
+      "code-push", "create-history",
+      "-c", "code-push.config.local.ts",
+      "-b", "1.0.0",
+      "-p", platform,
+      "-i", appName,
+    ]);
     await runCodePushRelease(appPath, platform, appName);
   } finally {
     // Restore IS_RELEASING_BUNDLE = false
@@ -36,7 +43,7 @@ function runCodePushRelease(
   platform: "ios" | "android",
   appName: string,
 ): Promise<void> {
-  const args = [
+  return runCodePushCommand(appPath, platform, appName, [
     "code-push", "release",
     "-c", "code-push.config.local.ts",
     "-b", "1.0.0",
@@ -45,8 +52,15 @@ function runCodePushRelease(
     "-i", appName,
     "-e", "index.js",
     "-m", "true",
-  ];
+  ]);
+}
 
+export function runCodePushCommand(
+  appPath: string,
+  platform: "ios" | "android",
+  appName: string,
+  args: string[],
+): Promise<void> {
   console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
 
   return new Promise((resolve, reject) => {
@@ -62,7 +76,7 @@ function runCodePushRelease(
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`code-push release failed (exit code: ${code})`));
+      else reject(new Error(`npx ${args[0]} ${args[1]} failed (exit code: ${code})`));
     });
   });
 }
