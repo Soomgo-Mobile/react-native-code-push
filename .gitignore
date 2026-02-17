@@ -169,3 +169,6 @@ cli/dist/
 !bin/
 bin/*
 !bin/code-push.js
+
+# E2E mock server data
+e2e/mock-server/data/

@@ -12,7 +12,10 @@ export async function buildApp(
   }
 }
 
-function buildIos(appPath: string, simulator?: string): Promise<void> {
+async function buildIos(appPath: string, simulator?: string): Promise<void> {
+  console.log(`[command] npm run setup:pods (cwd: ${appPath})`);
+  await executeCommand("npm", ["run", "setup:pods"], appPath);
+
   const args = [
     "react-native", "run-ios",
     "--mode", "Release",

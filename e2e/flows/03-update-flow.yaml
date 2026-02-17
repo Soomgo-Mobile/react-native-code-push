@@ -12,9 +12,10 @@ appId: ${APP_ID}
 - assertNotVisible: "UPDATED!"
 
 # Verify no running update metadata
+- assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
-    timeout: 2000
+    timeout: 3000
 - assertVisible: "METADATA_NULL"
 
 # Check for updates — mandatory update installs silently
@@ -29,7 +30,8 @@ appId: ${APP_ID}
 - assertVisible: "React Native.*"
 
 # Verify UI is not frozen — metadata fetch should update the indicator
+- assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
-    timeout: 2000
+    timeout: 3000
 - assertVisible: "METADATA_LOADED"
