@@ -37,6 +37,14 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Ruby (cache gems)
+        uses: ruby/setup-ruby@v1
+        env:
+          BUNDLE_GEMFILE: Examples/${{ inputs.app }}/Gemfile
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
       - name: Install root dependencies
         run: npm i
 
