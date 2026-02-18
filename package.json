@@ -53,6 +53,7 @@
   "scripts": {
     "setup": "npm install --quiet --no-progress",
     "setup-example-app": "ts-node --project scripts/setupExampleApp/tsconfig.json scripts/setupExampleApp/runSetupExampleApp.ts",
+    "setup-expo-example-app": "ts-node --project scripts/setupExpoExampleApp/tsconfig.json scripts/setupExpoExampleApp/runSetupExpoExampleApp.ts",
     "type:cli": "npm run --workspace cli typecheck",
     "type:e2e": "tsc --project e2e/tsconfig.json --noEmit",
     "typecheck": "npm run type:cli && npm run type:e2e",

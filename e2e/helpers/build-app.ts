@@ -1,4 +1,6 @@
 import { execSync, spawn } from "child_process";
+import fs from "fs";
+import path from "path";
 
 export async function buildApp(
   appPath: string,
@@ -34,6 +36,16 @@ function getBootedSimulatorName(): string | undefined {
 }
 
 async function buildIos(appPath: string, simulator?: string): Promise<void> {
+  if (isExpoApp(appPath)) {
+    const args = ["expo", "run:ios", "--configuration", "Release", "--no-bundler"];
+    if (simulator) {
+      args.push("--device", simulator);
+    }
+    console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
+    await executeCommand("npx", args, appPath);
+    return;
+  }
+
   console.log(`[command] npm run setup:pods (cwd: ${appPath})`);
   await executeCommand("npm", ["run", "setup:pods"], appPath);
 
@@ -49,6 +61,12 @@ async function buildIos(appPath: string, simulator?: string): Promise<void> {
 }
 
 function buildAndroid(appPath: string): Promise<void> {
+  if (isExpoApp(appPath)) {
+    const args = ["expo", "run:android", "--variant", "release", "--no-bundler"];
+    console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
+    return executeCommand("npx", args, appPath);
+  }
+
   const args = [
     "react-native", "run-android",
     "--mode", "release",
@@ -57,6 +75,23 @@ function buildAndroid(appPath: string): Promise<void> {
   ];
   console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
   return executeCommand("npx", args, appPath);
+}
+
+function isExpoApp(appPath: string): boolean {
+  const packageJsonPath = path.join(appPath, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    return false;
+  }
+
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+
+  return Boolean(
+    packageJson.dependencies?.expo
+    || packageJson.devDependencies?.expo
+  );
 }
 
 function executeCommand(command: string, args: string[], cwd: string): Promise<void> {

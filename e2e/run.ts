@@ -4,13 +4,14 @@ import path from "path";
 import fs from "fs";
 import { getAppPath, MOCK_DATA_DIR } from "./config";
 import { prepareConfig, restoreConfig } from "./helpers/prepare-config";
-import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker } from "./helpers/prepare-bundle";
+import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker, getCodePushReleaseArgs } from "./helpers/prepare-bundle";
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
 
 interface CliOptions {
   app: string;
   platform: "ios" | "android";
+  framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
 }
@@ -20,6 +21,7 @@ const program = new Command()
   .description("Run E2E tests with Maestro for CodePush example apps")
   .requiredOption("--app <name>", "Example app name (e.g. RN0840RC5)")
   .requiredOption("--platform <type>", "Platform: ios or android")
+  .option("--framework <type>", "Framework: expo")
   .option("--simulator <name>", "iOS simulator name (default: booted)")
   .option("--maestro-only", "Skip build, only run Maestro flows", false);
 
@@ -47,7 +49,7 @@ async function main() {
     // 3. Prepare update bundle
     console.log("\n=== [prepare-bundle] ===");
     cleanMockData();
-    await prepareBundle(appPath, options.platform, options.app);
+    await prepareBundle(appPath, options.platform, options.app, options.framework);
 
     // 4. Start mock server
     console.log("\n=== [start-mock-server] ===");
@@ -80,6 +82,7 @@ async function main() {
     console.log("\n=== [prepare-bundle: partial rollback] ===");
     cleanMockData();
     setReleasingBundle(appPath, true);
+    const { entryFile, frameworkArgs } = getCodePushReleaseArgs(options.framework);
     try {
       await runCodePushCommand(appPath, options.platform, options.app, [
         "code-push", "create-history",
@@ -93,16 +96,18 @@ async function main() {
         "code-push", "release",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.1",
+        ...frameworkArgs,
         "-p", options.platform, "-i", options.app,
-        "-e", "index.js", "-m", "true",
+        "-e", entryFile, "-m", "true",
       ]);
       setReleaseMarker(appPath, "1.0.2");
       await runCodePushCommand(appPath, options.platform, options.app, [
         "code-push", "release",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.2",
+        ...frameworkArgs,
         "-p", options.platform, "-i", options.app,
-        "-e", "index.js", "-m", "true",
+        "-e", entryFile, "-m", "true",
       ]);
     } finally {
       clearReleaseMarker(appPath);
@@ -152,7 +157,24 @@ function cleanMockData(): void {
 function getAppId(appPath: string, platform: "ios" | "android"): string {
   if (platform === "ios") {
     const appJsonPath = path.join(appPath, "app.json");
-    const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8"));
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8")) as {
+      name?: string;
+      expo?: {
+        ios?: {
+          bundleIdentifier?: string;
+        };
+      };
+    };
+
+    const expoBundleIdentifier = appJson.expo?.ios?.bundleIdentifier;
+    if (typeof expoBundleIdentifier === "string" && expoBundleIdentifier.length > 0) {
+      return expoBundleIdentifier;
+    }
+
+    if (typeof appJson.name !== "string" || appJson.name.length === 0) {
+      throw new Error("Could not find iOS app identifier in app.json");
+    }
+
     return `org.reactjs.native.example.${appJson.name}`;
   }
   // Android: read from build.gradle
