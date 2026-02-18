@@ -155,17 +155,20 @@ function cleanMockData(): void {
 }
 
 function getAppId(appPath: string, platform: "ios" | "android"): string {
-  if (platform === "ios") {
-    const appJsonPath = path.join(appPath, "app.json");
-    const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8")) as {
-      name?: string;
-      expo?: {
-        ios?: {
-          bundleIdentifier?: string;
-        };
+  const appJsonPath = path.join(appPath, "app.json");
+  const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8")) as {
+    name?: string;
+    expo?: {
+      ios?: {
+        bundleIdentifier?: string;
+      };
+      android?: {
+        package?: string;
       };
     };
+  };
 
+  if (platform === "ios") {
     const expoBundleIdentifier = appJson.expo?.ios?.bundleIdentifier;
     if (typeof expoBundleIdentifier === "string" && expoBundleIdentifier.length > 0) {
       return expoBundleIdentifier;
@@ -177,14 +180,26 @@ function getAppId(appPath: string, platform: "ios" | "android"): string {
 
     return buildCodePushBundleIdentifier(appJson.name);
   }
-  // Android: read from build.gradle
+
+  const expoAndroidPackage = appJson.expo?.android?.package;
+  if (typeof expoAndroidPackage === "string" && expoAndroidPackage.length > 0) {
+    return expoAndroidPackage;
+  }
+
+  // Android: fallback to build.gradle
   const buildGradlePath = path.join(appPath, "android", "app", "build.gradle");
   const content = fs.readFileSync(buildGradlePath, "utf8");
-  const match = content.match(/applicationId\s+"([^"]+)"/);
-  if (!match) {
-    throw new Error("Could not find applicationId in build.gradle");
+  const applicationIdMatch = content.match(/applicationId\s+["']([^"']+)["']/);
+  if (applicationIdMatch) {
+    return applicationIdMatch[1];
   }
-  return match[1];
+
+  const namespaceMatch = content.match(/namespace\s+["']([^"']+)["']/);
+  if (namespaceMatch) {
+    return namespaceMatch[1];
+  }
+
+  throw new Error(`Could not find Android app identifier in ${buildGradlePath}`);
 }
 
 function buildCodePushBundleIdentifier(appName: string): string {
