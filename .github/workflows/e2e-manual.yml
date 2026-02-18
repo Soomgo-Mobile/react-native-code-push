@@ -17,6 +17,11 @@ on:
           - both
           - ios
           - android
+      expo:
+        description: Run E2E with Expo framework
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   e2e-ios:
@@ -77,10 +82,11 @@ jobs:
 
       - name: Run iOS E2E
         run: |
-          npm run e2e -- \
-            --app "${{ inputs.app }}" \
-            --platform ios \
-            --simulator "${{ steps.boot-simulator.outputs.simulator }}"
+          if [ "${{ inputs.expo }}" = "true" ]; then
+            npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
+          else
+            npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}"
+          fi
 
   e2e-android:
     if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
@@ -131,4 +137,9 @@ jobs:
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: npm run e2e -- --app "${{ inputs.app }}" --platform android
+          script: |
+            if [ "${{ inputs.expo }}" = "true" ]; then
+              npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo
+            else
+              npm run e2e -- --app "${{ inputs.app }}" --platform android
+            fi
