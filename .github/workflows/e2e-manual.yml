@@ -1,0 +1,134 @@
+name: E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Example app name (e.g. RN0840)
+        required: true
+        default: RN0840
+        type: string
+      platform:
+        description: Platform to test
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - ios
+          - android
+
+jobs:
+  e2e-ios:
+    if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Ruby (cache gems)
+        uses: ruby/setup-ruby@v1
+        env:
+          BUNDLE_GEMFILE: Examples/${{ inputs.app }}/Gemfile
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install root dependencies
+        run: npm i
+
+      - name: Install example app dependencies
+        run: npm i
+        working-directory: Examples/${{ inputs.app }}
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            Examples/${{ inputs.app }}/ios/Pods
+          key: ${{ runner.os }}-pods-${{ inputs.app }}-${{ hashFiles(format('Examples/{0}/ios/Podfile', inputs.app), format('Examples/{0}/ios/Podfile.lock', inputs.app), format('Examples/{0}/Gemfile.lock', inputs.app)) }}
+          restore-keys: |
+            ${{ runner.os }}-pods-${{ inputs.app }}-
+
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Select iOS simulator
+        id: boot-simulator
+        run: |
+          SIMULATOR_NAME="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $1; exit}' | xargs)"
+          if [ -z "$SIMULATOR_NAME" ]; then
+            echo "No available iPhone simulator found."
+            exit 1
+          fi
+          xcrun simctl boot "$SIMULATOR_NAME" || true
+          echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS E2E
+        run: |
+          npm run e2e -- \
+            --app "${{ inputs.app }}" \
+            --platform ios \
+            --simulator "${{ steps.boot-simulator.outputs.simulator }}"
+
+  e2e-android:
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install root dependencies
+        run: npm i
+
+      - name: Install example app dependencies
+        run: npm i
+        working-directory: Examples/${{ inputs.app }}
+
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Run Android E2E
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          emulator-boot-timeout: 900
+          script: npm run e2e -- --app "${{ inputs.app }}" --platform android
