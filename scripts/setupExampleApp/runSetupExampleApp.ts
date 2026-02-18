@@ -210,17 +210,15 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       "IPHONEOS_DEPLOYMENT_TARGET = 16.0;",
       "IPHONEOS_DEPLOYMENT_TARGET"
     );
-    nextContent = replaceAllOrThrow(
+    nextContent = replaceAllIfFound(
       nextContent,
       /"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer";/g,
       '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;',
-      "CODE_SIGN_IDENTITY"
     );
-    nextContent = replaceAllOrThrow(
+    nextContent = replaceAllIfFound(
       nextContent,
       /SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";/g,
       'SUPPORTED_PLATFORMS = iphonesimulator;',
-      "SUPPORTED_PLATFORMS"
     );
     nextContent = replaceAllOrThrow(
       nextContent,
@@ -529,6 +527,14 @@ function replaceAllOrThrow(
   }
 
   return replaced;
+}
+
+function replaceAllIfFound(
+  input: string,
+  matcher: RegExp,
+  replacement: string,
+): string {
+  return input.replace(matcher, () => replacement);
 }
 
 function executeCommand(command: string, args: string[], cwd: string): Promise<void> {
