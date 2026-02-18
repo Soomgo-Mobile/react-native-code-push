@@ -575,10 +575,10 @@ function ensureExpoPlugin(
 
 function buildExpoBundleIdentifier(projectName: string): string {
   const normalized = projectName.toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const safeSuffix = normalized.length > 0 ? normalized : "expoexampleapp";
-  const startsWithDigit = /^[0-9]/.test(safeSuffix);
-  const suffix = startsWithDigit ? `app${safeSuffix}` : safeSuffix;
-  return `org.reactjs.native.example.${suffix}`;
+  if (normalized.length === 0) {
+    throw new Error(`Invalid project name for bundle identifier: ${projectName}`);
+  }
+  return `com.codepush.${normalized}`;
 }
 
 function ensureDirectory(targetDir: string) {

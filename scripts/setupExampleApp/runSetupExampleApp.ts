@@ -148,6 +148,14 @@ function buildProjectName(version: string): string {
   return `RN${versionFragment}`;
 }
 
+function buildCodePushBundleIdentifier(projectName: string): string {
+  const normalized = projectName.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (normalized.length === 0) {
+    throw new Error(`Invalid project name for bundle identifier: ${projectName}`);
+  }
+  return `com.codepush.${normalized}`;
+}
+
 async function createReactNativeTemplateApp(context: SetupContext): Promise<void> {
   ensureDirectory(context.workingDirectory);
 
@@ -181,6 +189,7 @@ function ensureDirectory(targetDir: string) {
 }
 
 async function configureIosVersioning(context: SetupContext): Promise<void> {
+  const bundleIdentifier = buildCodePushBundleIdentifier(context.projectName);
   const pbxprojPath = path.join(
     context.projectPath,
     "ios",
@@ -213,6 +222,12 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       'SUPPORTED_PLATFORMS = iphonesimulator;',
       "SUPPORTED_PLATFORMS"
     );
+    nextContent = replaceAllOrThrow(
+      nextContent,
+      /PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/g,
+      `PRODUCT_BUNDLE_IDENTIFIER = "${bundleIdentifier}";`,
+      "PRODUCT_BUNDLE_IDENTIFIER"
+    );
     return nextContent;
   });
 
@@ -227,6 +242,7 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
 }
 
 async function configureAndroidVersioning(context: SetupContext): Promise<void> {
+  const bundleIdentifier = buildCodePushBundleIdentifier(context.projectName);
   const buildGradlePath = path.join(
     context.projectPath,
     "android",
@@ -246,6 +262,18 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
       /def\s+enableProguardInReleaseBuilds\s*=\s*false/g,
       "def enableProguardInReleaseBuilds = true",
       "enableProguardInReleaseBuilds flag"
+    );
+    next = replaceAllOrThrow(
+      next,
+      /namespace\s+"[^"]+"/g,
+      `namespace "${bundleIdentifier}"`,
+      "namespace"
+    );
+    next = replaceAllOrThrow(
+      next,
+      /applicationId\s+"[^"]+"/g,
+      `applicationId "${bundleIdentifier}"`,
+      "applicationId"
     );
     return next;
   });

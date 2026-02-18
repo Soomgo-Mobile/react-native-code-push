@@ -175,7 +175,7 @@ function getAppId(appPath: string, platform: "ios" | "android"): string {
       throw new Error("Could not find iOS app identifier in app.json");
     }
 
-    return `org.reactjs.native.example.${appJson.name}`;
+    return buildCodePushBundleIdentifier(appJson.name);
   }
   // Android: read from build.gradle
   const buildGradlePath = path.join(appPath, "android", "app", "build.gradle");
@@ -185,6 +185,14 @@ function getAppId(appPath: string, platform: "ios" | "android"): string {
     throw new Error("Could not find applicationId in build.gradle");
   }
   return match[1];
+}
+
+function buildCodePushBundleIdentifier(appName: string): string {
+  const normalized = appName.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (normalized.length === 0) {
+    throw new Error(`Invalid app name for bundle identifier: ${appName}`);
+  }
+  return `com.codepush.${normalized}`;
 }
 
 function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string): Promise<void> {
