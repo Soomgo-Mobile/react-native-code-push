@@ -325,6 +325,8 @@ function applyLocalPackageDependency(context: SetupContext) {
 
   packageJson.dependencies = packageJson.dependencies ?? {};
   packageJson.dependencies["@bravemobile/react-native-code-push"] = "latest";
+  packageJson.dependencies["react-native-safe-area-context"] =
+    packageJson.dependencies["react-native-safe-area-context"] ?? "^5.0.0";
   ensureLocalCodePushSyncScript(packageJson, context);
 
   const serialized = `${JSON.stringify(packageJson, null, 2)}\n`;
