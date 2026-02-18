@@ -20,12 +20,23 @@ npm run e2e -- --app RN0840 --platform ios
 npm run e2e -- --app RN0840 --platform ios --maestro-only
 ```
 
+### Expo 예제 앱
+
+```bash
+# Expo 예제 앱 전체 실행
+npm run e2e -- --app Expo55 --framework expo --platform ios
+
+# Expo 예제 앱 Maestro만 실행
+npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
+```
+
 ## CLI 옵션
 
 | 옵션 | 필수 | 설명 |
 |---|---|---|
 | `--app <name>` | 예 | 예제 앱 디렉토리 이름 (예: `RN0840`) |
 | `--platform <type>` | 예 | `ios` 또는 `android` |
+| `--framework <type>` | 아니오 | Expo 예제 앱인 경우 `expo` 지정 |
 | `--simulator <name>` | 아니오 | iOS 시뮬레이터 이름 (부팅된 시뮬레이터 자동 감지, 기본값 "iPhone 16") |
 | `--maestro-only` | 아니오 | 빌드 단계 생략, Maestro 플로우만 실행 |
 

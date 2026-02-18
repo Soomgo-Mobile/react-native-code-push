@@ -20,12 +20,23 @@ npm run e2e -- --app RN0840 --platform ios
 npm run e2e -- --app RN0840 --platform ios --maestro-only
 ```
 
+### Expo Example App
+
+```bash
+# Full run for Expo example app
+npm run e2e -- --app Expo55 --framework expo --platform ios
+
+# Maestro-only run for Expo example app
+npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
+```
+
 ## CLI Options
 
 | Option | Required | Description |
 |---|---|---|
 | `--app <name>` | Yes | Example app directory name (e.g. `RN0840`) |
 | `--platform <type>` | Yes | `ios` or `android` |
+| `--framework <type>` | No | Use `expo` for Expo example apps |
 | `--simulator <name>` | No | iOS simulator name (auto-detects booted simulator, defaults to "iPhone 16") |
 | `--maestro-only` | No | Skip build step, only run Maestro flows |
 
