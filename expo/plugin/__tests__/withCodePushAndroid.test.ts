@@ -174,5 +174,7 @@ describe("withAndroidMainApplicationDependency", () => {
     const packageListIndex = modifiedContent.indexOf("packageList =");
     const jsBundleIndex = modifiedContent.indexOf("jsBundleFilePath = CodePush.getJSBundleFile()");
     expect(jsBundleIndex).toBeGreaterThan(packageListIndex);
+    // Ensure plugin normalized the missing comma after packageList block.
+    expect(modifiedContent).toContain("        },\n      jsBundleFilePath = CodePush.getJSBundleFile(),");
   });
 });

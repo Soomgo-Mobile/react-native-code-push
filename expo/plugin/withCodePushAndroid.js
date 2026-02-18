@@ -28,11 +28,9 @@ function androidMainApplicationApplyImplementation(mainApplication, find, add, r
 }
 
 function addJsBundleFilePathArgument(mainApplication) {
-  if (mainApplication.includes(JS_BUNDLE_FILE_PATH_ARGUMENT)) {
-    return mainApplication;
-  }
-
-  const packageListArgumentPattern = /(packageList\s*=\s*\n\s*PackageList\(this\)[\s\S]+?\},?\s*\n)/;
+  // Capture packageList block plus optional existing jsBundleFilePath line.
+  // This allows us to normalize comma placement before injecting the new argument.
+  const packageListArgumentPattern = /(packageList\s*=\s*\n\s*PackageList\(this\)[\s\S]+?\},?\s*\n)(\s*jsBundleFilePath\s*=\s*CodePush\.getJSBundleFile\(\),\s*\n)?/;
 
   if (!packageListArgumentPattern.test(mainApplication)) {
     WarningAggregator.addWarningAndroid(
@@ -47,12 +45,15 @@ function addJsBundleFilePathArgument(mainApplication) {
     return mainApplication;
   }
 
-  return mainApplication.replace(packageListArgumentPattern, (match) => {
-    if (match.includes('jsBundleFilePath')) {
-      return match;
-    }
-
-    return `${match}      ${JS_BUNDLE_FILE_PATH_ARGUMENT},\n`;
+  return mainApplication.replace(packageListArgumentPattern, (match, packageListArgument, existingJsBundleArgument) => {
+    const trimmedMatch = packageListArgument.replace(/\s+$/, '');
+    // Kotlin call args need a trailing comma before the next named argument.
+    const hasTrailingComma = /,\s*$/.test(trimmedMatch);
+    const packageListArgumentWithComma = hasTrailingComma ? trimmedMatch : `${trimmedMatch},`;
+    const jsBundleArgument = existingJsBundleArgument
+      ? existingJsBundleArgument.replace(/\s+$/, '')
+      : `      ${JS_BUNDLE_FILE_PATH_ARGUMENT},`;
+    return `${packageListArgumentWithComma}\n${jsBundleArgument}\n`;
   });
 }
 
@@ -64,10 +65,9 @@ const withAndroidMainApplicationDependency = (config) => {
       IMPORT_CODE_PUSH,
     );
 
-    if (!action.modResults.contents.includes('CodePush.getJSBundleFile()')) {
-      if (action.modResults.contents.includes(RN_082_MARKER)) {
-        action.modResults.contents = addJsBundleFilePathArgument(action.modResults.contents);
-      } else {
+    if (action.modResults.contents.includes(RN_082_MARKER)) {
+      action.modResults.contents = addJsBundleFilePathArgument(action.modResults.contents);
+    } else if (!action.modResults.contents.includes('CodePush.getJSBundleFile()')) {
         // https://github.com/Soomgo-Mobile/react-native-code-push/issues/97
         const isExpoSDK54 = config.sdkVersion?.startsWith('54.') ?? false;
         const addingCode = isExpoSDK54
@@ -81,7 +81,6 @@ const withAndroidMainApplicationDependency = (config) => {
           'object : DefaultReactNativeHost(this) {',
           addingCode,
         );
-      }
     }
 
     return action;
