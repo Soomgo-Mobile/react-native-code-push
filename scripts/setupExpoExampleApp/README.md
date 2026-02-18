@@ -7,7 +7,6 @@ Automates creation of an Expo example app pre-configured with `@bravemobile/reac
 ```text
 scripts/setupExpoExampleApp/
 ├── runSetupExpoExampleApp.ts  # Main entry point (CLI)
-├── tsconfig.json              # TypeScript config for this script directory
 └── README.md                  # This file
 ```
 
@@ -24,6 +23,8 @@ Run from the repository root:
 ```bash
 npm run setup-expo-example-app -- --sdk <sdk-version>
 ```
+
+This script reuses TypeScript settings from `scripts/setupExampleApp/tsconfig.json`.
 
 ### CLI Options
 

@@ -7,7 +7,6 @@
 ```text
 scripts/setupExpoExampleApp/
 ├── runSetupExpoExampleApp.ts  # 메인 진입점 (CLI)
-├── tsconfig.json              # 이 스크립트 디렉토리용 TypeScript 설정
 └── README.ko.md               # 이 파일
 ```
 
@@ -24,6 +23,8 @@ scripts/setupExpoExampleApp/
 ```bash
 npm run setup-expo-example-app -- --sdk <sdk-version>
 ```
+
+이 스크립트는 `scripts/setupExampleApp/tsconfig.json` TypeScript 설정을 재사용합니다.
 
 ### CLI 옵션
 
