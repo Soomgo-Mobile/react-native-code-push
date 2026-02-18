@@ -1,9 +1,6 @@
-name: Manual E2E
+name: E2E
 
 on:
-  push:
-    branches:
-      - github-e2e-workflow
   workflow_dispatch:
     inputs:
       app:
