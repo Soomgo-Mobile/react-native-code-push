@@ -82,7 +82,7 @@ async function main() {
     console.log("\n=== [prepare-bundle: partial rollback] ===");
     cleanMockData();
     setReleasingBundle(appPath, true);
-    const { entryFile, frameworkArgs } = getCodePushReleaseArgs(options.framework);
+    const { entryFile, frameworkArgs } = getCodePushReleaseArgs(appPath, options.framework);
     try {
       await runCodePushCommand(appPath, options.platform, options.app, [
         "code-push", "create-history",

@@ -68,7 +68,7 @@ function runCodePushRelease(
   appName: string,
   framework?: "expo",
 ): Promise<void> {
-  const { frameworkArgs, entryFile } = getCodePushReleaseArgs(framework);
+  const { frameworkArgs, entryFile } = getCodePushReleaseArgs(appPath, framework);
   return runCodePushCommand(appPath, platform, appName, [
     "code-push", "release",
     "-c", "code-push.config.local.ts",
@@ -82,7 +82,7 @@ function runCodePushRelease(
   ]);
 }
 
-export function getCodePushReleaseArgs(framework?: "expo"): {
+export function getCodePushReleaseArgs(appPath: string, framework?: "expo"): {
   frameworkArgs: string[];
   entryFile: string;
 } {
@@ -97,8 +97,22 @@ export function getCodePushReleaseArgs(framework?: "expo"): {
 
   return {
     frameworkArgs: [],
-    entryFile: "index.ts",
+    entryFile: resolveReactNativeEntryFile(appPath),
   };
+}
+
+function resolveReactNativeEntryFile(appPath: string): string {
+  const indexJsPath = path.join(appPath, "index.js");
+  if (fs.existsSync(indexJsPath)) {
+    return "index.js";
+  }
+
+  const indexTsPath = path.join(appPath, "index.ts");
+  if (fs.existsSync(indexTsPath)) {
+    return "index.ts";
+  }
+
+  throw new Error(`Could not find React Native entry file in ${appPath} (expected index.js or index.ts)`);
 }
 
 export function runCodePushCommand(
