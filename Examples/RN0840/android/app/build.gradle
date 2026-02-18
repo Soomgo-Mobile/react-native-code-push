@@ -77,9 +77,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.rn0840"
+    namespace "com.codepush.rn0840"
     defaultConfig {
-        applicationId "com.rn0840"
+        applicationId "com.codepush.rn0840"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

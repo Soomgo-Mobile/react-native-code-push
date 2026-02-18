@@ -4,13 +4,14 @@ import path from "path";
 import fs from "fs";
 import { getAppPath, MOCK_DATA_DIR } from "./config";
 import { prepareConfig, restoreConfig } from "./helpers/prepare-config";
-import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker } from "./helpers/prepare-bundle";
+import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker, getCodePushReleaseArgs } from "./helpers/prepare-bundle";
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
 
 interface CliOptions {
   app: string;
   platform: "ios" | "android";
+  framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
 }
@@ -20,6 +21,7 @@ const program = new Command()
   .description("Run E2E tests with Maestro for CodePush example apps")
   .requiredOption("--app <name>", "Example app name (e.g. RN0840RC5)")
   .requiredOption("--platform <type>", "Platform: ios or android")
+  .option("--framework <type>", "Framework: expo")
   .option("--simulator <name>", "iOS simulator name (default: booted)")
   .option("--maestro-only", "Skip build, only run Maestro flows", false);
 
@@ -47,7 +49,7 @@ async function main() {
     // 3. Prepare update bundle
     console.log("\n=== [prepare-bundle] ===");
     cleanMockData();
-    await prepareBundle(appPath, options.platform, options.app);
+    await prepareBundle(appPath, options.platform, options.app, options.framework);
 
     // 4. Start mock server
     console.log("\n=== [start-mock-server] ===");
@@ -80,6 +82,7 @@ async function main() {
     console.log("\n=== [prepare-bundle: partial rollback] ===");
     cleanMockData();
     setReleasingBundle(appPath, true);
+    const { entryFile, frameworkArgs } = getCodePushReleaseArgs(appPath, options.framework);
     try {
       await runCodePushCommand(appPath, options.platform, options.app, [
         "code-push", "create-history",
@@ -93,16 +96,18 @@ async function main() {
         "code-push", "release",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.1",
+        ...frameworkArgs,
         "-p", options.platform, "-i", options.app,
-        "-e", "index.js", "-m", "true",
+        "-e", entryFile, "-m", "true",
       ]);
       setReleaseMarker(appPath, "1.0.2");
       await runCodePushCommand(appPath, options.platform, options.app, [
         "code-push", "release",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.2",
+        ...frameworkArgs,
         "-p", options.platform, "-i", options.app,
-        "-e", "index.js", "-m", "true",
+        "-e", entryFile, "-m", "true",
       ]);
     } finally {
       clearReleaseMarker(appPath);
@@ -150,19 +155,59 @@ function cleanMockData(): void {
 }
 
 function getAppId(appPath: string, platform: "ios" | "android"): string {
+  const appJsonPath = path.join(appPath, "app.json");
+  const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8")) as {
+    name?: string;
+    expo?: {
+      ios?: {
+        bundleIdentifier?: string;
+      };
+      android?: {
+        package?: string;
+      };
+    };
+  };
+
   if (platform === "ios") {
-    const appJsonPath = path.join(appPath, "app.json");
-    const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8"));
-    return `org.reactjs.native.example.${appJson.name}`;
+    const expoBundleIdentifier = appJson.expo?.ios?.bundleIdentifier;
+    if (typeof expoBundleIdentifier === "string" && expoBundleIdentifier.length > 0) {
+      return expoBundleIdentifier;
+    }
+
+    if (typeof appJson.name !== "string" || appJson.name.length === 0) {
+      throw new Error("Could not find iOS app identifier in app.json");
+    }
+
+    return buildCodePushBundleIdentifier(appJson.name);
   }
-  // Android: read from build.gradle
+
+  const expoAndroidPackage = appJson.expo?.android?.package;
+  if (typeof expoAndroidPackage === "string" && expoAndroidPackage.length > 0) {
+    return expoAndroidPackage;
+  }
+
+  // Android: fallback to build.gradle
   const buildGradlePath = path.join(appPath, "android", "app", "build.gradle");
   const content = fs.readFileSync(buildGradlePath, "utf8");
-  const match = content.match(/applicationId\s+"([^"]+)"/);
-  if (!match) {
-    throw new Error("Could not find applicationId in build.gradle");
+  const applicationIdMatch = content.match(/applicationId\s+["']([^"']+)["']/);
+  if (applicationIdMatch) {
+    return applicationIdMatch[1];
   }
-  return match[1];
+
+  const namespaceMatch = content.match(/namespace\s+["']([^"']+)["']/);
+  if (namespaceMatch) {
+    return namespaceMatch[1];
+  }
+
+  throw new Error(`Could not find Android app identifier in ${buildGradlePath}`);
+}
+
+function buildCodePushBundleIdentifier(appName: string): string {
+  const normalized = appName.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (normalized.length === 0) {
+    throw new Error(`Invalid app name for bundle identifier: ${appName}`);
+  }
+  return `com.codepush.${normalized}`;
 }
 
 function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string): Promise<void> {

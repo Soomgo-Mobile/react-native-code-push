@@ -44,6 +44,7 @@ export async function prepareBundle(
   appPath: string,
   platform: "ios" | "android",
   appName: string,
+  framework?: "expo",
 ): Promise<void> {
   setReleasingBundle(appPath, true);
 
@@ -55,7 +56,7 @@ export async function prepareBundle(
       "-p", platform,
       "-i", appName,
     ]);
-    await runCodePushRelease(appPath, platform, appName);
+    await runCodePushRelease(appPath, platform, appName, framework);
   } finally {
     setReleasingBundle(appPath, false);
   }
@@ -65,17 +66,53 @@ function runCodePushRelease(
   appPath: string,
   platform: "ios" | "android",
   appName: string,
+  framework?: "expo",
 ): Promise<void> {
+  const { frameworkArgs, entryFile } = getCodePushReleaseArgs(appPath, framework);
   return runCodePushCommand(appPath, platform, appName, [
     "code-push", "release",
     "-c", "code-push.config.local.ts",
     "-b", "1.0.0",
     "-v", "1.0.1",
+    ...frameworkArgs,
     "-p", platform,
     "-i", appName,
-    "-e", "index.js",
+    "-e", entryFile,
     "-m", "true",
   ]);
+}
+
+export function getCodePushReleaseArgs(appPath: string, framework?: "expo"): {
+  frameworkArgs: string[];
+  entryFile: string;
+} {
+  if (framework === "expo") {
+    // Expo example app setup currently assumes an Expo Router template.
+    // In that template, CodePush release should bundle from expo-router entry.
+    return {
+      frameworkArgs: ["-f", "expo"],
+      entryFile: "node_modules/expo-router/entry.js",
+    };
+  }
+
+  return {
+    frameworkArgs: [],
+    entryFile: resolveReactNativeEntryFile(appPath),
+  };
+}
+
+function resolveReactNativeEntryFile(appPath: string): string {
+  const indexJsPath = path.join(appPath, "index.js");
+  if (fs.existsSync(indexJsPath)) {
+    return "index.js";
+  }
+
+  const indexTsPath = path.join(appPath, "index.ts");
+  if (fs.existsSync(indexTsPath)) {
+    return "index.ts";
+  }
+
+  throw new Error(`Could not find React Native entry file in ${appPath} (expected index.js or index.ts)`);
 }
 
 export function runCodePushCommand(
