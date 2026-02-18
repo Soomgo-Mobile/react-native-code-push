@@ -134,6 +134,11 @@ const setupSteps: SetupStep[] = [
     name: "configure-ios-min-deployment-target",
     description: "Raise iOS minimum deployment target",
     run: configureIosMinDeploymentTarget
+  },
+  {
+    name: "configure-android-cleartext-traffic",
+    description: "Allow Android cleartext HTTP traffic for local mock server",
+    run: configureAndroidCleartextTraffic
   }
 ];
 
@@ -541,6 +546,51 @@ async function configureIosMinDeploymentTarget(context: SetupContext): Promise<v
   }
 }
 
+async function configureAndroidCleartextTraffic(context: SetupContext): Promise<void> {
+  const manifestPath = path.join(
+    context.projectPath,
+    "android",
+    "app",
+    "src",
+    "main",
+    "AndroidManifest.xml"
+  );
+
+  if (!fs.existsSync(manifestPath)) {
+    console.log("[skip] AndroidManifest.xml does not exist");
+    return;
+  }
+
+  const originalContent = fs.readFileSync(manifestPath, "utf8");
+  const applicationTagMatch = originalContent.match(/<application\b[^>]*>/);
+  if (!applicationTagMatch) {
+    console.log("[skip] <application> tag not found in AndroidManifest.xml");
+    return;
+  }
+
+  let updatedApplicationTag = applicationTagMatch[0];
+  if (/android:usesCleartextTraffic\s*=/.test(updatedApplicationTag)) {
+    updatedApplicationTag = updatedApplicationTag.replace(
+      /android:usesCleartextTraffic\s*=\s*"[^"]*"/,
+      'android:usesCleartextTraffic="true"'
+    );
+  } else {
+    updatedApplicationTag = updatedApplicationTag.replace(
+      />$/,
+      ' android:usesCleartextTraffic="true">'
+    );
+  }
+
+  const updatedContent = originalContent.replace(
+    applicationTagMatch[0],
+    updatedApplicationTag
+  );
+
+  if (updatedContent !== originalContent) {
+    fs.writeFileSync(manifestPath, updatedContent, "utf8");
+  }
+}
+
 function findFirstXcodeProjProjectPath(iosPath: string): string | null {
   const entries = fs.readdirSync(iosPath);
   const xcodeProj = entries.find((entry) => entry.endsWith(".xcodeproj"));
@@ -578,7 +628,7 @@ function buildExpoBundleIdentifier(projectName: string): string {
   if (normalized.length === 0) {
     throw new Error(`Invalid project name for bundle identifier: ${projectName}`);
   }
-  return `com.codepush.${normalized}`;
+  return `com.${normalized}`;
 }
 
 function ensureDirectory(targetDir: string) {
