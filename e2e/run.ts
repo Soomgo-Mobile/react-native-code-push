@@ -35,6 +35,10 @@ async function main() {
     return;
   }
 
+  await syncLocalLibraryIfAvailable(appPath, options.maestroOnly ?? false);
+
+  const releaseIdentifier = getCodePushReleaseIdentifier(appPath);
+
   try {
     // 1. Prepare config
     console.log("\n=== [prepare] ===");
@@ -49,15 +53,17 @@ async function main() {
     // 3. Prepare update bundle
     console.log("\n=== [prepare-bundle] ===");
     cleanMockData();
-    await prepareBundle(appPath, options.platform, options.app, options.framework);
+    await prepareBundle(appPath, options.platform, releaseIdentifier, options.framework);
 
     // 4. Start mock server
     console.log("\n=== [start-mock-server] ===");
     await startMockServer();
 
+    const appId = getAppId(appPath, options.platform);
+    await resetAppStateBeforeFlows(options.platform, appId);
+
     // 5. Run Maestro — Phase 1: main flows
     console.log("\n=== [run-maestro: phase 1] ===");
-    const appId = getAppId(appPath, options.platform);
     const flowsDir = path.resolve(__dirname, "flows");
     await runMaestro(flowsDir, options.platform, appId);
 
@@ -69,7 +75,7 @@ async function main() {
       "-b", "1.0.0",
       "-v", "1.0.1",
       "-p", options.platform,
-      "-i", options.app,
+      "-i", releaseIdentifier,
       "-e", "false",
     ]);
 
@@ -89,7 +95,7 @@ async function main() {
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0",
         "-p", options.platform,
-        "-i", options.app,
+        "-i", releaseIdentifier,
       ]);
       setReleaseMarker(appPath, "1.0.1");
       await runCodePushCommand(appPath, options.platform, options.app, [
@@ -97,7 +103,7 @@ async function main() {
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.1",
         ...frameworkArgs,
-        "-p", options.platform, "-i", options.app,
+        "-p", options.platform, "-i", releaseIdentifier,
         "-e", entryFile, "-m", "true",
       ]);
       setReleaseMarker(appPath, "1.0.2");
@@ -106,7 +112,7 @@ async function main() {
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.2",
         ...frameworkArgs,
-        "-p", options.platform, "-i", options.app,
+        "-p", options.platform, "-i", releaseIdentifier,
         "-e", entryFile, "-m", "true",
       ]);
     } finally {
@@ -125,7 +131,7 @@ async function main() {
       "code-push", "update-history",
       "-c", "code-push.config.local.ts",
       "-b", "1.0.0", "-v", "1.0.2",
-      "-p", options.platform, "-i", options.app,
+      "-p", options.platform, "-i", releaseIdentifier,
       "-e", "false",
     ]);
 
@@ -152,6 +158,19 @@ function cleanMockData(): void {
     fs.rmSync(MOCK_DATA_DIR, { recursive: true });
   }
   fs.mkdirSync(MOCK_DATA_DIR, { recursive: true });
+}
+
+// npx code-push release/create-history must use the same identifier that the app uses when fetching history.
+function getCodePushReleaseIdentifier(appPath: string): string {
+  const appTsxPath = path.join(appPath, "App.tsx");
+  const content = fs.readFileSync(appTsxPath, "utf8");
+  const match = content.match(/const IDENTIFIER = ['"]([^'"]+)['"]/);
+
+  if (!match) {
+    throw new Error(`Could not find CodePush IDENTIFIER in ${appTsxPath}`);
+  }
+
+  return match[1];
 }
 
 function getAppId(appPath: string, platform: "ios" | "android"): string {
@@ -207,7 +226,7 @@ function buildCodePushBundleIdentifier(appName: string): string {
   if (normalized.length === 0) {
     throw new Error(`Invalid app name for bundle identifier: ${appName}`);
   }
-  return `com.codepush.${normalized}`;
+  return `com.${normalized}`;
 }
 
 function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string): Promise<void> {
@@ -232,3 +251,102 @@ function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string
 }
 
 void main();
+
+function resetAppStateBeforeFlows(
+  platform: "ios" | "android",
+  appId: string,
+): Promise<void> {
+  if (platform !== "android") {
+    return Promise.resolve();
+  }
+
+  const args = ["shell", "pm", "clear", appId];
+  console.log(`[command] adb ${args.join(" ")}`);
+  return new Promise((resolve, reject) => {
+    const child = spawn("adb", args, { stdio: "inherit" });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`adb pm clear failed (exit code: ${code})`));
+      }
+    });
+  });
+}
+
+function syncLocalLibraryIfAvailable(appPath: string, maestroOnly: boolean): Promise<void> {
+  const packageJsonPath = path.join(appPath, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    return Promise.resolve();
+  }
+
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  const hasSyncScript = Boolean(packageJson.scripts?.["sync-local-library"]);
+
+  if (!hasSyncScript) {
+    return Promise.resolve();
+  }
+
+  if (maestroOnly) {
+    console.log(
+      "[warn] --maestro-only mode: native library changes require rebuilding the app binary.",
+    );
+  }
+
+  const args = ["run", "sync-local-library"];
+  console.log(`[command] npm ${args.join(" ")} (cwd: ${appPath})`);
+
+  const verbose = process.env.E2E_VERBOSE_SYNC === "1";
+  if (verbose) {
+    return new Promise((resolve, reject) => {
+      const child = spawn("npm", args, { cwd: appPath, stdio: "inherit" });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`npm run sync-local-library failed (exit code: ${code})`));
+        }
+      });
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("npm", args, {
+      cwd: appPath,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        npm_config_loglevel: "error",
+      },
+    });
+    let output = "";
+    child.stdout?.on("data", (chunk) => {
+      output += chunk.toString();
+      if (output.length > 12000) {
+        output = output.slice(output.length - 12000);
+      }
+    });
+    child.stderr?.on("data", (chunk) => {
+      output += chunk.toString();
+      if (output.length > 12000) {
+        output = output.slice(output.length - 12000);
+      }
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        console.log("[sync-local-library] done");
+        resolve();
+      } else {
+        if (output.trim().length > 0) {
+          console.error("[sync-local-library] output:\n" + output.trim());
+        }
+        reject(new Error(`npm run sync-local-library failed (exit code: ${code})`));
+      }
+    });
+  });
+}

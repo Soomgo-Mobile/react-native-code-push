@@ -153,7 +153,7 @@ function buildCodePushBundleIdentifier(projectName: string): string {
   if (normalized.length === 0) {
     throw new Error(`Invalid project name for bundle identifier: ${projectName}`);
   }
-  return `com.codepush.${normalized}`;
+  return `com.${normalized}`;
 }
 
 async function createReactNativeTemplateApp(context: SetupContext): Promise<void> {
@@ -242,7 +242,6 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
 }
 
 async function configureAndroidVersioning(context: SetupContext): Promise<void> {
-  const bundleIdentifier = buildCodePushBundleIdentifier(context.projectName);
   const buildGradlePath = path.join(
     context.projectPath,
     "android",
@@ -253,7 +252,7 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
   updateTextFile(buildGradlePath, (content) => {
     let next = replaceAllOrThrow(
       content,
-      /versionName\s+"[^"]+"/g,
+      /versionName\s*=?\s*["'][^"']+["']/g,
       "versionName \"1.0.0\"",
       "versionName"
     );
@@ -262,18 +261,6 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
       /def\s+enableProguardInReleaseBuilds\s*=\s*false/g,
       "def enableProguardInReleaseBuilds = true",
       "enableProguardInReleaseBuilds flag"
-    );
-    next = replaceAllOrThrow(
-      next,
-      /namespace\s+"[^"]+"/g,
-      `namespace "${bundleIdentifier}"`,
-      "namespace"
-    );
-    next = replaceAllOrThrow(
-      next,
-      /applicationId\s+"[^"]+"/g,
-      `applicationId "${bundleIdentifier}"`,
-      "applicationId"
     );
     return next;
   });
@@ -286,14 +273,24 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
     "main",
     "AndroidManifest.xml"
   );
-  updateTextFile(manifestPath, (content) =>
-    replaceAllOrThrow(
-      content,
-      /android:usesCleartextTraffic="\$\{usesCleartextTraffic\}"/,
-      'android:usesCleartextTraffic="true"',
-      "usesCleartextTraffic"
-    )
-  );
+  updateTextFile(manifestPath, (content) => {
+    const replaced = content.replace(
+      /android:usesCleartextTraffic="(?:\$\{usesCleartextTraffic\}|[^"]*)"/,
+      'android:usesCleartextTraffic="true"'
+    );
+    if (replaced !== content) {
+      return replaced;
+    }
+
+    const applicationTagMatch = content.match(/<application\b[^>]*>/);
+    if (!applicationTagMatch) {
+      throw new Error("No <application> tag found in AndroidManifest.xml");
+    }
+    return content.replace(
+      applicationTagMatch[0],
+      applicationTagMatch[0].replace(/>$/, ' android:usesCleartextTraffic="true">')
+    );
+  });
 }
 
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {

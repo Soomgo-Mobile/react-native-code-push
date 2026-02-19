@@ -162,7 +162,15 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         reactHostDelegateField.setAccessible(true);
         ReactHostDelegate reactHostDelegate = (ReactHostDelegate) reactHostDelegateField.get(reactHost);
         assert reactHostDelegate != null;
-        Field jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("jsBundleLoader");
+        Field jsBundleLoaderField;
+        try {
+            // Expo ReactHost delegate keeps this mutable backing field specifically
+            // so integrations can override the bundle loader at runtime.
+            jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("_jsBundleLoader");
+        } catch (NoSuchFieldException ignored) {
+            // Fallback for non-Expo delegates.
+            jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("jsBundleLoader");
+        }
         jsBundleLoaderField.setAccessible(true);
         jsBundleLoaderField.set(reactHostDelegate, latestJSBundleLoader);
     }
