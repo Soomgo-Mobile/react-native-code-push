@@ -24,6 +24,7 @@ FAILED_E2E=()
 PASSED_E2E=()
 RUN_ANDROID=1
 RUN_IOS=1
+LEGACY_ARCH_MAX_MINOR=76
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,6 +57,18 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --legacy-arch-max-version)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for --legacy-arch-max-version (e.g. 76 for 0.76.x)" >&2
+        exit 1
+      fi
+      if ! [[ "$2" =~ ^[0-9]{2}$ ]]; then
+        echo "Invalid value for --legacy-arch-max-version: $2 (expected exactly two digits, e.g. 76 or 81)" >&2
+        exit 1
+      fi
+      LEGACY_ARCH_MAX_MINOR=$((10#$2))
+      shift 2
+      ;;
     --skip-platform)
       echo "Unknown option: $1" >&2
       echo "Use --only android|ios instead." >&2
@@ -63,7 +76,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1" >&2
-      echo "Usage: $0 [--force-recreate] [--skip-setup] [--only android|ios]" >&2
+      echo "Usage: $0 [--force-recreate] [--skip-setup] [--only android|ios] [--legacy-arch-max-version <minor(2 digits)>]" >&2
       exit 1
       ;;
   esac
@@ -79,6 +92,17 @@ app_name_from_rn_version() {
   local version="$1"
   local compact="${version//./}"
   echo "RN${compact}"
+}
+
+should_use_legacy_architecture() {
+  local rn_version="$1"
+  local rn_minor
+  if ! [[ "$rn_version" =~ ^[0-9]+\.([0-9]+)\.[0-9]+$ ]]; then
+    echo "Invalid RN version format: $rn_version (expected: <major>.<minor>.<patch>)" >&2
+    exit 1
+  fi
+  rn_minor=$((10#${BASH_REMATCH[1]}))
+  [[ "$rn_minor" -le "$LEGACY_ARCH_MAX_MINOR" ]]
 }
 
 setup_app_if_needed() {
@@ -101,7 +125,12 @@ setup_app_if_needed() {
     fi
   fi
 
-  run_cmd npm run setup-example-app -- -v "$rn_version"
+  local setup_args=(npm run setup-example-app -- -v "$rn_version")
+  if should_use_legacy_architecture "$rn_version"; then
+    setup_args+=(--disable-new-architecture)
+  fi
+
+  run_cmd "${setup_args[@]}"
 }
 
 run_e2e_for_app_platform() {
