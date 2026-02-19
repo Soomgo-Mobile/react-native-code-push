@@ -28,6 +28,7 @@ const program = new Command()
 async function main() {
   const options = program.parse(process.argv).opts<CliOptions>();
   const appPath = getAppPath(options.app);
+  const repoRoot = path.resolve(__dirname, "..");
 
   if (!fs.existsSync(appPath)) {
     console.error(`Example app not found: ${appPath}`);
@@ -35,6 +36,7 @@ async function main() {
     return;
   }
 
+  await resetWatchmanProject(repoRoot);
   await syncLocalLibraryIfAvailable(appPath, options.maestroOnly ?? false);
 
   const releaseIdentifier = getCodePushReleaseIdentifier(appPath);
@@ -251,6 +253,50 @@ function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string
 }
 
 void main();
+
+async function resetWatchmanProject(repoRoot: string): Promise<void> {
+  console.log("\n=== [watchman] ===");
+
+  const watchDel = await runWatchmanCommand(["watch-del", repoRoot]);
+  if (!watchDel.ok && !watchDel.message.includes("not watched")) {
+    console.warn(`[warn] watchman watch-del failed: ${watchDel.message}`);
+  }
+
+  const watchProject = await runWatchmanCommand(["watch-project", repoRoot]);
+  if (!watchProject.ok) {
+    console.warn(`[warn] watchman watch-project failed: ${watchProject.message}`);
+    return;
+  }
+
+  console.log("[watchman] watch reset done");
+}
+
+function runWatchmanCommand(args: string[]): Promise<{ ok: boolean; message: string }> {
+  console.log(`[command] watchman ${args.join(" ")}`);
+
+  return new Promise((resolve) => {
+    const child = spawn("watchman", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout?.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.on("error", (error) => {
+      resolve({ ok: false, message: error.message });
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ ok: true, message: output.trim() });
+      } else {
+        resolve({ ok: false, message: output.trim() });
+      }
+    });
+  });
+}
 
 function resetAppStateBeforeFlows(
   platform: "ios" | "android",
