@@ -71,8 +71,8 @@ async function main() {
 
     // 6. Disable release for rollback test
     console.log("\n=== [disable-release] ===");
-    await runCodePushCommand(appPath, options.platform, options.app, [
-      "code-push", "update-history",
+    await runCodePushCommand(appPath, options.platform, [
+      "update-history",
       "-c", "code-push.config.local.ts",
       "-b", "1.0.0",
       "-v", "1.0.1",
@@ -92,16 +92,16 @@ async function main() {
     setReleasingBundle(appPath, true);
     const { entryFile, frameworkArgs } = getCodePushReleaseArgs(appPath, options.framework);
     try {
-      await runCodePushCommand(appPath, options.platform, options.app, [
-        "code-push", "create-history",
+      await runCodePushCommand(appPath, options.platform, [
+        "create-history",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0",
         "-p", options.platform,
         "-i", releaseIdentifier,
       ]);
       setReleaseMarker(appPath, "1.0.1");
-      await runCodePushCommand(appPath, options.platform, options.app, [
-        "code-push", "release",
+      await runCodePushCommand(appPath, options.platform, [
+        "release",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.1",
         ...frameworkArgs,
@@ -109,8 +109,8 @@ async function main() {
         "-e", entryFile, "-m", "true",
       ]);
       setReleaseMarker(appPath, "1.0.2");
-      await runCodePushCommand(appPath, options.platform, options.app, [
-        "code-push", "release",
+      await runCodePushCommand(appPath, options.platform, [
+        "release",
         "-c", "code-push.config.local.ts",
         "-b", "1.0.0", "-v", "1.0.2",
         ...frameworkArgs,
@@ -129,8 +129,8 @@ async function main() {
 
     // 10. Disable only 1.0.2 → rollback target is 1.0.1 (not binary)
     console.log("\n=== [disable-release: 1.0.2 only] ===");
-    await runCodePushCommand(appPath, options.platform, options.app, [
-      "code-push", "update-history",
+    await runCodePushCommand(appPath, options.platform, [
+      "update-history",
       "-c", "code-push.config.local.ts",
       "-b", "1.0.0", "-v", "1.0.2",
       "-p", options.platform, "-i", releaseIdentifier,

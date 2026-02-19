@@ -49,8 +49,8 @@ export async function prepareBundle(
   setReleasingBundle(appPath, true);
 
   try {
-    await runCodePushCommand(appPath, platform, appName, [
-      "code-push", "create-history",
+    await runCodePushCommand(appPath, platform, [
+      "create-history",
       "-c", "code-push.config.local.ts",
       "-b", "1.0.0",
       "-p", platform,
@@ -69,8 +69,8 @@ function runCodePushRelease(
   framework?: "expo",
 ): Promise<void> {
   const { frameworkArgs, entryFile } = getCodePushReleaseArgs(appPath, framework);
-  return runCodePushCommand(appPath, platform, appName, [
-    "code-push", "release",
+  return runCodePushCommand(appPath, platform, [
+    "release",
     "-c", "code-push.config.local.ts",
     "-b", "1.0.0",
     "-v", "1.0.1",
@@ -118,13 +118,16 @@ function resolveReactNativeEntryFile(appPath: string): string {
 export function runCodePushCommand(
   appPath: string,
   platform: "ios" | "android",
-  appName: string,
   args: string[],
 ): Promise<void> {
-  console.log(`[command] npx ${args.join(" ")} (cwd: ${appPath})`);
+  const command = "npx";
+  const commandArgs = ["code-push", ...args];
+  const commandLabel = `npx ${commandArgs.join(" ")}`;
+
+  console.log(`[command] ${commandLabel} (cwd: ${appPath})`);
 
   return new Promise((resolve, reject) => {
-    const child = spawn("npx", args, {
+    const child = spawn(command, commandArgs, {
       cwd: appPath,
       stdio: "inherit",
       env: {
@@ -136,7 +139,7 @@ export function runCodePushCommand(
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`npx ${args[0]} ${args[1]} failed (exit code: ${code})`));
+      else reject(new Error(`${commandLabel} failed (exit code: ${code})`));
     });
   });
 }
