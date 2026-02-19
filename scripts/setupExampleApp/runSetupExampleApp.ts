@@ -60,6 +60,11 @@ const setupSteps: SetupStep[] = [
     run: configureAndroidVersioning
   },
   {
+    name: "configure-new-architecture",
+    description: "Disable new architecture for RN <= 0.76",
+    run: configureNewArchitecture
+  },
+  {
     name: "configure-local-code-link",
     description: "Configure local library link",
     run: configureLocalCodeLink
@@ -289,6 +294,49 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
       applicationTagMatch[0].replace(/>$/, ' android:usesCleartextTraffic="true">')
     );
   });
+}
+
+async function configureNewArchitecture(context: SetupContext): Promise<void> {
+  if (!shouldDisableNewArchitecture(context.rnVersion)) {
+    console.log("[skip] RN >= 0.77, keeping template new architecture setting");
+    return;
+  }
+
+  const androidGradlePropertiesPath = path.join(
+    context.projectPath,
+    "android",
+    "gradle.properties"
+  );
+
+  updateTextFile(androidGradlePropertiesPath, (content) => {
+    if (/^newArchEnabled\s*=.*$/m.test(content)) {
+      return content.replace(/^newArchEnabled\s*=.*$/m, "newArchEnabled=false");
+    }
+
+    const suffix = content.endsWith("\n") ? "" : "\n";
+    return `${content}${suffix}newArchEnabled=false\n`;
+  });
+
+  const iosPodfilePath = path.join(context.projectPath, "ios", "Podfile");
+  updateTextFile(iosPodfilePath, (content) => {
+    const envLine = "ENV['RCT_NEW_ARCH_ENABLED'] = '0'";
+    if (content.includes(envLine)) {
+      return content;
+    }
+
+    if (/ENV\['RCT_NEW_ARCH_ENABLED'\]\s*=\s*'1'/.test(content)) {
+      return content.replace(
+        /ENV\['RCT_NEW_ARCH_ENABLED'\]\s*=\s*'1'/,
+        envLine
+      );
+    }
+
+    return `${envLine}\n${content}`;
+  });
+}
+
+function shouldDisableNewArchitecture(rnVersion: string): boolean {
+  return semver.lt(rnVersion, "0.77.0");
 }
 
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {
