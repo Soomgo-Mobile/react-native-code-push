@@ -34,6 +34,7 @@ ONLY_SETUP=0
 # --maestro-only: skip build and run Maestro flows only
 # --only-setup: run setup only and skip E2E execution
 # --only android|ios: run E2E for the selected platform only
+# --legacy-arch-max-version <minor(2 digits)>: use legacy architecture setup for RN x.y.z when y <= given minor
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --force-recreate)
@@ -84,11 +85,6 @@ while [[ $# -gt 0 ]]; do
       fi
       LEGACY_ARCH_MAX_MINOR=$((10#$2))
       shift 2
-      ;;
-    --skip-platform)
-      echo "Unknown option: $1" >&2
-      echo "Use --only android|ios instead." >&2
-      exit 1
       ;;
     *)
       echo "Unknown option: $1" >&2
