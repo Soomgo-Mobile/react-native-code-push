@@ -6,16 +6,6 @@ EXAMPLES_DIR="$ROOT_DIR/Examples"
 
 RN_VERSIONS=(
   "0.74.7"
-  "0.75.5"
-  "0.76.9"
-  "0.77.3"
-  "0.78.3"
-  "0.79.7"
-  "0.80.3"
-  "0.81.6"
-  "0.82.1"
-  "0.83.2"
-  "0.84.0"
 )
 
 FORCE_RECREATE=0
@@ -25,7 +15,15 @@ PASSED_E2E=()
 RUN_ANDROID=1
 RUN_IOS=1
 LEGACY_ARCH_MAX_MINOR=76
+MAESTRO_ONLY=0
+ONLY_SETUP=0
 
+# CLI options:
+# --force-recreate: remove and recreate existing Examples/RNxxxx app directories
+# --skip-setup: skip app setup and run with the current workspace state
+# --maestro-only: skip build and run Maestro flows only
+# --only-setup: run setup only and skip E2E execution
+# --only android|ios: run E2E for the selected platform only
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --force-recreate)
@@ -34,6 +32,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-setup)
       SKIP_SETUP=1
+      shift
+      ;;
+    --maestro-only)
+      MAESTRO_ONLY=1
+      shift
+      ;;
+    --only-setup)
+      ONLY_SETUP=1
       shift
       ;;
     --only)
@@ -76,7 +82,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1" >&2
-      echo "Usage: $0 [--force-recreate] [--skip-setup] [--only android|ios] [--legacy-arch-max-version <minor(2 digits)>]" >&2
+      echo "Usage: $0 [--force-recreate] [--skip-setup] [--maestro-only] [--only-setup] [--only android|ios] [--legacy-arch-max-version <minor(2 digits)>]" >&2
       exit 1
       ;;
   esac
@@ -136,8 +142,13 @@ setup_app_if_needed() {
 run_e2e_for_app_platform() {
   local app_name="$1"
   local platform="$2"
+  local e2e_args=(--app "$app_name" --platform "$platform")
 
-  if run_cmd npm run e2e -- --app "$app_name" --platform "$platform"; then
+  if [[ "$MAESTRO_ONLY" -eq 1 ]]; then
+    e2e_args+=(--maestro-only)
+  fi
+
+  if run_cmd npm run e2e -- "${e2e_args[@]}"; then
     PASSED_E2E+=("${app_name}:${platform}")
   else
     FAILED_E2E+=("${app_name}:${platform}")
@@ -174,6 +185,11 @@ main() {
     local_app_name="$(app_name_from_rn_version "$rn_version")"
     setup_app_if_needed "$rn_version" "$local_app_name"
   done
+
+  if [[ "$ONLY_SETUP" -eq 1 ]]; then
+    echo "[done] setup completed (--only-setup)"
+    return 0
+  fi
 
   if [[ "$RUN_ANDROID" -eq 1 ]]; then
     echo
