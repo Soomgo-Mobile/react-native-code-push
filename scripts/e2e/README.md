@@ -11,14 +11,18 @@ This directory contains wrapper scripts to run E2E tests across multiple app var
 
 ## 1) `run-rn-cli-matrix.sh`
 
-Runs E2E tests for React Native CLI example apps (`RN0747` ~ `RN0840`) as a version matrix.
+Runs E2E tests for React Native CLI example apps as a version matrix.
 
 ### What it does
 
 1. Creates apps with `npm run setup-example-app` (unless `--skip-setup` is used).
-2. Runs E2E for each configured RN version.
+2. Runs E2E for each configured RN version (`RN_VERSIONS` in script).
 3. Continues even if some targets fail.
 4. Prints a final summary with passed/failed counts and failed targets.
+
+Current matrix targets in script:
+
+- `0.74.7` (`RN0747`) through `0.84.0` (`RN0840`)
 
 ### Usage
 
@@ -32,6 +36,8 @@ bash scripts/e2e/run-rn-cli-matrix.sh [options]
 |---|---|---|
 | `--force-recreate` | Recreate app directories even if they already exist | `false` |
 | `--skip-setup` | Skip app setup and run E2E only | `false` |
+| `--maestro-only` | Skip build and run Maestro flows only | `false` |
+| `--only-setup` | Run setup only and skip E2E execution | `false` |
 | `--only android\|ios` | Run only one platform | both |
 | `--legacy-arch-max-version <minor(2 digits)>` | Use legacy architecture setup for RN versions whose **minor** is less than or equal to this value | `76` |
 
@@ -50,6 +56,12 @@ bash scripts/e2e/run-rn-cli-matrix.sh
 
 # Run android only
 bash scripts/e2e/run-rn-cli-matrix.sh --only android
+
+# Setup only
+bash scripts/e2e/run-rn-cli-matrix.sh --only-setup
+
+# Run Maestro flows only
+bash scripts/e2e/run-rn-cli-matrix.sh --maestro-only
 
 # Use legacy setup up to 0.81.x
 bash scripts/e2e/run-rn-cli-matrix.sh --legacy-arch-max-version 81
@@ -72,7 +84,7 @@ Runs E2E tests for Expo example apps (`Expo54`, `Expo55Beta`) as a matrix.
 ### What it does
 
 1. Creates Expo apps with `npm run setup-expo-example-app` (unless `--skip-setup` is used).
-2. Runs E2E for each Expo app and platform.
+2. Runs E2E for each Expo app and platform (`npm run e2e -- --framework expo ...`).
 3. Continues even if some targets fail.
 4. Prints a final summary with passed/failed counts and failed targets.
 
