@@ -7,6 +7,7 @@ import { prepareConfig, restoreConfig } from "./helpers/prepare-config";
 import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker, getCodePushReleaseArgs } from "./helpers/prepare-bundle";
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
+import { resolveIosTeamIdForMaestro } from "./helpers/resolve-ios-team-id";
 
 interface CliOptions {
   app: string;
@@ -14,16 +15,18 @@ interface CliOptions {
   framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
+  teamId?: string;
 }
 
 const program = new Command()
   .name("e2e")
-  .description("Run E2E tests with Maestro for CodePush example apps")
+  .description("Run E2E tests with maestro-runner for CodePush example apps")
   .requiredOption("--app <name>", "Example app name (e.g. RN0840RC5)")
   .requiredOption("--platform <type>", "Platform: ios or android")
   .option("--framework <type>", "Framework: expo")
   .option("--simulator <name>", "iOS simulator name (default: booted)")
-  .option("--maestro-only", "Skip build, only run Maestro flows", false);
+  .option("--maestro-only", "Skip build, only run test flows", false)
+  .option("--team-id <id>", "Apple Team ID for iOS WDA signing");
 
 async function main() {
   const options = program.parse(process.argv).opts<CliOptions>();
@@ -40,8 +43,17 @@ async function main() {
   await syncLocalLibraryIfAvailable(appPath, options.maestroOnly ?? false);
 
   const releaseIdentifier = getCodePushReleaseIdentifier(appPath);
+  let iosTeamId: string | undefined;
 
   try {
+    iosTeamId = resolveIosTeamIdForMaestro({
+      platform: options.platform,
+      cliTeamId: options.teamId,
+    });
+    if (options.platform === "ios" && iosTeamId) {
+      console.log(`[ios] using team id: ${iosTeamId}`);
+    }
+
     // 1. Prepare config
     console.log("\n=== [prepare] ===");
     prepareConfig(appPath, options.platform);
@@ -67,7 +79,7 @@ async function main() {
     // 5. Run Maestro — Phase 1: main flows
     console.log("\n=== [run-maestro: phase 1] ===");
     const flowsDir = path.resolve(__dirname, "flows");
-    await runMaestro(flowsDir, options.platform, appId);
+    await runMaestro(flowsDir, options.platform, appId, iosTeamId);
 
     // 6. Disable release for rollback test
     console.log("\n=== [disable-release] ===");
@@ -84,7 +96,7 @@ async function main() {
     // 7. Run Maestro — Phase 2: rollback to binary
     console.log("\n=== [run-maestro: phase 2 (rollback to binary)] ===");
     const rollbackDir = path.resolve(__dirname, "flows-rollback");
-    await runMaestro(rollbackDir, options.platform, appId);
+    await runMaestro(rollbackDir, options.platform, appId, iosTeamId);
 
     // 8. Prepare partial rollback: release 1.0.1 + 1.0.2 with different hashes
     console.log("\n=== [prepare-bundle: partial rollback] ===");
@@ -125,7 +137,7 @@ async function main() {
     // 9. Run Maestro — update to 1.0.2
     console.log("\n=== [run-maestro: partial rollback — update to 1.0.2] ===");
     const updateFlow = path.resolve(__dirname, "flows-partial-rollback/01-update-to-latest.yaml");
-    await runMaestro(updateFlow, options.platform, appId);
+    await runMaestro(updateFlow, options.platform, appId, iosTeamId);
 
     // 10. Disable only 1.0.2 → rollback target is 1.0.1 (not binary)
     console.log("\n=== [disable-release: 1.0.2 only] ===");
@@ -140,7 +152,7 @@ async function main() {
     // 11. Run Maestro — rollback from 1.0.2 to 1.0.1
     console.log("\n=== [run-maestro: partial rollback — rollback to 1.0.1] ===");
     const rollbackFlow = path.resolve(__dirname, "flows-partial-rollback/02-rollback-to-previous.yaml");
-    await runMaestro(rollbackFlow, options.platform, appId);
+    await runMaestro(rollbackFlow, options.platform, appId, iosTeamId);
 
     console.log("\n=== E2E tests passed ===");
   } catch (error) {
@@ -152,6 +164,7 @@ async function main() {
     console.log("\n=== [cleanup] ===");
     await stopMockServer();
     restoreConfig(appPath);
+    await stopGradleDaemonIfNeeded(appPath, options.platform);
   }
 }
 
@@ -231,23 +244,32 @@ function buildCodePushBundleIdentifier(appName: string): string {
   return `com.${normalized}`;
 }
 
-function runMaestro(flowsDir: string, platform: "ios" | "android", appId: string): Promise<void> {
-  const args = ["test", flowsDir, "--env", `APP_ID=${appId}`];
-
-  if (platform === "android") {
-    args.push("--platform", "android");
-  } else {
-    args.push("--platform", "ios");
+function runMaestro(
+  flowsDir: string,
+  platform: "ios" | "android",
+  appId: string,
+  teamId?: string,
+): Promise<void> {
+  // Root directory for maestro-runner report outputs.
+  const reportRootDir = path.resolve(__dirname, "reports");
+  fs.mkdirSync(reportRootDir, { recursive: true });
+  const args = ["--platform", platform];
+  if (platform === "ios") {
+    if (!teamId) {
+      throw new Error("iOS Team ID is required for maestro-runner. Pass --team-id <APPLE_TEAM_ID>.");
+    }
+    args.push("--team-id", teamId);
   }
+  args.push("test", "--output", reportRootDir, "--env", `APP_ID=${appId}`, flowsDir);
 
-  console.log(`[command] maestro ${args.join(" ")}`);
+  console.log(`[command] maestro-runner ${args.join(" ")}`);
 
   return new Promise((resolve, reject) => {
-    const child = spawn("maestro", args, { stdio: "inherit" });
+    const child = spawn("maestro-runner", args, { stdio: "inherit" });
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`Maestro tests failed (exit code: ${code})`));
+      else reject(new Error(`maestro-runner tests failed (exit code: ${code})`));
     });
   });
 }
@@ -317,6 +339,30 @@ function resetAppStateBeforeFlows(
       } else {
         reject(new Error(`adb pm clear failed (exit code: ${code})`));
       }
+    });
+  });
+}
+
+// Android builds can leave Gradle daemon (java) processes running; stop them best-effort between E2E runs.
+function stopGradleDaemonIfNeeded(
+  appPath: string,
+  platform: "ios" | "android",
+): Promise<void> {
+  if (platform !== "android") {
+    return Promise.resolve();
+  }
+
+  const androidPath = path.join(appPath, "android");
+  console.log(`[command] ./gradlew --stop (cwd: ${androidPath})`);
+
+  return new Promise((resolve) => {
+    const child = spawn("./gradlew", ["--stop"], { cwd: androidPath, stdio: "inherit" });
+    child.once("error", (error) => {
+      console.warn(`[warn] gradle daemon stop failed: ${error.message}`);
+      resolve();
+    });
+    child.once("close", () => {
+      resolve();
     });
   });
 }
