@@ -1,11 +1,11 @@
 # E2E Testing Guide
 
-End-to-end tests for `react-native-code-push` using [Maestro](https://maestro.mobile.dev/).
+End-to-end tests for `react-native-code-push` using [maestro-runner](https://github.com/devicelab-dev/maestro-runner).
 
 ## Prerequisites
 
 - **Node.js** (v18+)
-- **Maestro CLI** — [Install guide](https://maestro.mobile.dev/getting-started/installing-maestro)
+- **maestro-runner** — `curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash`
 - **iOS**: Xcode with a booted iOS Simulator
 - **Android**: Android SDK with a running emulator
 - An example app set up under `Examples/` (e.g. `RN0840`)
@@ -16,7 +16,7 @@ End-to-end tests for `react-native-code-push` using [Maestro](https://maestro.mo
 # Full run (build + test)
 npm run e2e -- --app RN0840 --platform ios
 
-# Skip build, run Maestro flows only
+# Skip build, run test flows only
 npm run e2e -- --app RN0840 --platform ios --maestro-only
 ```
 
@@ -26,7 +26,7 @@ npm run e2e -- --app RN0840 --platform ios --maestro-only
 # Full run for Expo example app
 npm run e2e -- --app Expo55 --framework expo --platform ios
 
-# Maestro-only run for Expo example app
+# Flow-only run for Expo example app
 npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 ```
 
@@ -38,7 +38,8 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--platform <type>` | Yes | `ios` or `android` |
 | `--framework <type>` | No | Use `expo` for Expo example apps |
 | `--simulator <name>` | No | iOS simulator name (auto-detects booted simulator, defaults to "iPhone 16") |
-| `--maestro-only` | No | Skip build step, only run Maestro flows |
+| `--maestro-only` | No | Skip build step, only run test flows |
+| `--team-id <id>` | No | Apple Team ID for iOS WDA signing (`maestro-runner`). If omitted on iOS, the runner auto-detects from env/keychain/profiles |
 
 ## What It Does
 
@@ -50,7 +51,7 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 2. **Build app** — Builds the example app in Release mode and installs it on the simulator/emulator.
 3. **Prepare bundle** — Creates release history and bundles v1.0.1 using `npx code-push release`.
 4. **Start mock server** — Starts a local HTTP server (port 18081) that serves bundles and release history JSON.
-5. **Run Maestro flows** — Executes:
+5. **Run test flows (via maestro-runner)** — Executes:
    - `01-app-launch` — Verifies the app launches and UI elements are present.
    - `02-restart-no-crash` — Taps Restart, confirms app doesn't crash.
    - `03-update-flow` — Clears any previous update, triggers sync, verifies update installs (shows "UPDATED!") and metadata shows `METADATA_V1.0.1`.
@@ -102,6 +103,6 @@ When creating multiple releases with identical source code (e.g. v1.0.1 and v1.0
 ## Troubleshooting
 
 - **Build fails with signing error (iOS)**: The setup script sets `SUPPORTED_PLATFORMS = iphonesimulator` and disables code signing. Make sure the example app was set up with `scripts/setupExampleApp`.
-- **Maestro can't find the app**: Ensure the simulator/emulator is booted before running. For iOS, the script auto-detects the booted simulator.
+- **maestro-runner can't find the app**: Ensure the simulator/emulator is booted before running. For iOS, the script auto-detects the booted simulator.
 - **Android network error**: Android emulators use `10.0.2.2` to reach the host machine's localhost. This is handled automatically by the config.
 - **Update not applying**: Check that the mock server is running (port 18081) and that `mock-server/data/` contains the expected bundle and history files.

@@ -1,11 +1,11 @@
 # E2E 테스트 실행 가이드
 
-[Maestro](https://maestro.mobile.dev/)를 사용한 `react-native-code-push` E2E 테스트입니다.
+[maestro-runner](https://github.com/devicelab-dev/maestro-runner)를 사용한 `react-native-code-push` E2E 테스트입니다.
 
 ## 사전 요구사항
 
 - **Node.js** (v18 이상)
-- **Maestro CLI** — [설치 가이드](https://maestro.mobile.dev/getting-started/installing-maestro)
+- **maestro-runner** — `curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash`
 - **iOS**: Xcode 및 부팅된 iOS 시뮬레이터
 - **Android**: Android SDK 및 실행 중인 에뮬레이터
 - `Examples/` 디렉토리에 설정된 예제 앱 (예: `RN0840`)
@@ -16,7 +16,7 @@
 # 전체 실행 (빌드 + 테스트)
 npm run e2e -- --app RN0840 --platform ios
 
-# 빌드 생략, Maestro 플로우만 실행
+# 빌드 생략, 테스트 플로우만 실행
 npm run e2e -- --app RN0840 --platform ios --maestro-only
 ```
 
@@ -26,7 +26,7 @@ npm run e2e -- --app RN0840 --platform ios --maestro-only
 # Expo 예제 앱 전체 실행
 npm run e2e -- --app Expo55 --framework expo --platform ios
 
-# Expo 예제 앱 Maestro만 실행
+# Expo 예제 앱 플로우만 실행
 npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 ```
 
@@ -38,7 +38,8 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--platform <type>` | 예 | `ios` 또는 `android` |
 | `--framework <type>` | 아니오 | Expo 예제 앱인 경우 `expo` 지정 |
 | `--simulator <name>` | 아니오 | iOS 시뮬레이터 이름 (부팅된 시뮬레이터 자동 감지, 기본값 "iPhone 16") |
-| `--maestro-only` | 아니오 | 빌드 단계 생략, Maestro 플로우만 실행 |
+| `--maestro-only` | 아니오 | 빌드 단계 생략, 테스트 플로우만 실행 |
+| `--team-id <id>` | 아니오 | iOS WDA 서명용 Apple Team ID (`maestro-runner`). iOS에서 생략하면 env/keychain/profile에서 자동 탐지 |
 
 ## 실행 과정
 
@@ -50,7 +51,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 2. **앱 빌드** — 예제 앱을 Release 모드로 빌드하여 시뮬레이터/에뮬레이터에 설치합니다.
 3. **번들 준비** — `npx code-push release`로 릴리스 히스토리를 생성하고 v1.0.1을 번들링합니다.
 4. **Mock 서버 시작** — 번들과 릴리스 히스토리 JSON을 서빙하는 로컬 HTTP 서버(포트 18081)를 시작합니다.
-5. **Maestro 플로우 실행**:
+5. **테스트 플로우 실행 (maestro-runner 사용)**:
    - `01-app-launch` — 앱 실행 및 UI 요소 존재 확인
    - `02-restart-no-crash` — 재시작 탭 후 크래시 없음 확인
    - `03-update-flow` — 이전 업데이트 초기화, sync 트리거, 업데이트 설치 확인("UPDATED!" 표시) 및 메타데이터 `METADATA_V1.0.1` 확인
@@ -102,6 +103,6 @@ e2e/
 ## 문제 해결
 
 - **iOS 빌드 시 서명 오류**: setup 스크립트가 `SUPPORTED_PLATFORMS = iphonesimulator`를 설정하고 코드 서명을 비활성화합니다. `scripts/setupExampleApp`으로 예제 앱이 설정되었는지 확인하세요.
-- **Maestro가 앱을 찾지 못함**: 실행 전에 시뮬레이터/에뮬레이터가 부팅되어 있는지 확인하세요. iOS의 경우 스크립트가 부팅된 시뮬레이터를 자동 감지합니다.
+- **maestro-runner가 앱을 찾지 못함**: 실행 전에 시뮬레이터/에뮬레이터가 부팅되어 있는지 확인하세요. iOS의 경우 스크립트가 부팅된 시뮬레이터를 자동 감지합니다.
 - **Android 네트워크 오류**: Android 에뮬레이터는 호스트 머신의 localhost에 접근하기 위해 `10.0.2.2`를 사용합니다. 설정에서 자동으로 처리됩니다.
 - **업데이트가 적용되지 않음**: Mock 서버가 실행 중인지(포트 18081), `mock-server/data/`에 예상되는 번들과 히스토리 파일이 있는지 확인하세요.

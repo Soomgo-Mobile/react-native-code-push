@@ -64,9 +64,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-${{ inputs.app }}-
 
-      - name: Install Maestro CLI
+      - name: Install maestro-runner
         run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
+          curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Select iOS simulator
@@ -125,9 +125,9 @@ jobs:
         run: npm i
         working-directory: Examples/${{ inputs.app }}
 
-      - name: Install Maestro CLI
+      - name: Install maestro-runner
         run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
+          curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Run Android E2E

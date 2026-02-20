@@ -9,6 +9,7 @@ interface SetupCliOptions {
   rnVersion: string;
   workingDir: string;
   skipPodInstall?: boolean;
+  disableNewArchitecture?: boolean;
 }
 
 interface SetupContext {
@@ -17,6 +18,7 @@ interface SetupContext {
   workingDirectory: string;
   projectPath: string;
   skipPodInstall: boolean;
+  disableNewArchitecture: boolean;
 }
 
 type SetupStep = {
@@ -41,6 +43,11 @@ const program = new Command()
     "--skip-pod-install",
     "Skip bundle install and bundle exec pod install during template postinstall",
     false
+  )
+  .option(
+    "--disable-new-architecture",
+    "Disable new architecture (legacy architecture setup)",
+    false
   );
 
 const setupSteps: SetupStep[] = [
@@ -61,7 +68,7 @@ const setupSteps: SetupStep[] = [
   },
   {
     name: "configure-new-architecture",
-    description: "Disable new architecture for RN <= 0.76",
+    description: "Configure new architecture (legacy for RN <= 0.76 by default)",
     run: configureNewArchitecture
   },
   {
@@ -115,7 +122,10 @@ async function main() {
       projectName,
       workingDirectory: workingDir,
       projectPath,
-      skipPodInstall: options.skipPodInstall ?? false
+      skipPodInstall: options.skipPodInstall ?? false,
+      disableNewArchitecture:
+        (options.disableNewArchitecture ?? false) ||
+        shouldDisableNewArchitectureByDefault(normalizedVersion)
     };
 
     await runSetupExampleApp(context);
@@ -297,8 +307,8 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
 }
 
 async function configureNewArchitecture(context: SetupContext): Promise<void> {
-  if (!shouldDisableNewArchitecture(context.rnVersion)) {
-    console.log("[skip] RN >= 0.77, keeping template new architecture setting");
+  if (!context.disableNewArchitecture) {
+    console.log("[skip] keeping template new architecture setting");
     return;
   }
 
@@ -335,7 +345,7 @@ async function configureNewArchitecture(context: SetupContext): Promise<void> {
   });
 }
 
-function shouldDisableNewArchitecture(rnVersion: string): boolean {
+function shouldDisableNewArchitectureByDefault(rnVersion: string): boolean {
   return semver.lt(rnVersion, "0.77.0");
 }
 

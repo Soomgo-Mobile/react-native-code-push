@@ -169,3 +169,9 @@ bin/*
 
 # E2E mock server data
 e2e/mock-server/data/
+
+# maestro-runner report directory
+e2e/reports/
+
+# maestro-runner iOS driver artifacts
+drivers
