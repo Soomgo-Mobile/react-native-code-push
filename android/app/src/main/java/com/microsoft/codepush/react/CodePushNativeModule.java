@@ -35,6 +35,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -151,26 +152,31 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
 
     @OptIn(markerClass = UnstableReactNativeAPI.class)
     private void setJSBundleLoaderBridgeless(ReactHost reactHost, JSBundleLoader latestJSBundleLoader) throws NoSuchFieldException, IllegalAccessException {
-        Field reactHostDelegateField;
-        try {
-            // RN < 0.81
-            reactHostDelegateField = reactHost.getClass().getDeclaredField("mReactHostDelegate");
-        } catch (NoSuchFieldException e) {
+        // RN < 0.81
+        Field reactHostDelegateField = resolveDeclaredField(reactHost.getClass(), "mReactHostDelegate");
+        if (reactHostDelegateField == null) {
             // RN >= 0.81
-            reactHostDelegateField = reactHost.getClass().getDeclaredField("reactHostDelegate");
+            reactHostDelegateField = resolveDeclaredField(reactHost.getClass(), "reactHostDelegate");
         }
+        if (reactHostDelegateField == null) {
+            throw new NoSuchFieldException("Unable to resolve ReactHostDelegate field.");
+        }
+
         reactHostDelegateField.setAccessible(true);
         ReactHostDelegate reactHostDelegate = (ReactHostDelegate) reactHostDelegateField.get(reactHost);
         assert reactHostDelegate != null;
-        Field jsBundleLoaderField;
-        try {
-            // Expo ReactHost delegate keeps this mutable backing field specifically
-            // so integrations can override the bundle loader at runtime.
-            jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("_jsBundleLoader");
-        } catch (NoSuchFieldException ignored) {
+
+        // Expo ReactHost delegate keeps this mutable backing field specifically
+        // so integrations can override the bundle loader at runtime.
+        Field jsBundleLoaderField = resolveDeclaredField(reactHostDelegate.getClass(), "_jsBundleLoader");
+        if (jsBundleLoaderField == null) {
             // Fallback for non-Expo delegates.
-            jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("jsBundleLoader");
+            jsBundleLoaderField = resolveDeclaredField(reactHostDelegate.getClass(), "jsBundleLoader");
         }
+        if (jsBundleLoaderField == null) {
+            throw new NoSuchFieldException("Unable to resolve JSBundleLoader field.");
+        }
+
         jsBundleLoaderField.setAccessible(true);
         jsBundleLoaderField.set(reactHostDelegate, latestJSBundleLoader);
     }
@@ -239,14 +245,51 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         return currentActivity.getReactDelegate();
     }
 
+    // TODO: deprecate legacy versions and use `reactDelegate.getReactHost()`
     private ReactHost resolveReactHost() {
-        ReactDelegate reactDelegate = resolveReactDelegate();
-        if (reactDelegate == null) {
-            CodePushUtils.log("Unable to resolve ReactDelegate");
+        ReactActivity currentActivity = (ReactActivity) getReactApplicationContext().getCurrentActivity();
+        if (currentActivity == null) {
             return null;
         }
 
-        return reactDelegate.getReactHost();
+        Method activityGetReactHostMethod = resolveDeclaredMethod(currentActivity.getClass(), "getReactHost");
+        if (activityGetReactHostMethod != null) {
+            try {
+                activityGetReactHostMethod.setAccessible(true);
+                Object reactHost = activityGetReactHostMethod.invoke(currentActivity);
+                if (reactHost instanceof ReactHost) {
+                    return (ReactHost) reactHost;
+                }
+            } catch (Exception e) {
+                CodePushUtils.log("Unable to resolve ReactHost from Activity.getReactHost(): " + e.getMessage());
+            }
+        }
+
+        return null;
+    }
+
+    private Method resolveDeclaredMethod(Class<?> targetClass, String methodName) {
+        Class<?> cursor = targetClass;
+        while (cursor != null) {
+            try {
+                return cursor.getDeclaredMethod(methodName);
+            } catch (NoSuchMethodException ignored) {
+                cursor = cursor.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    private Field resolveDeclaredField(Class<?> targetClass, String fieldName) {
+        Class<?> cursor = targetClass;
+        while (cursor != null) {
+            try {
+                return cursor.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                cursor = cursor.getSuperclass();
+            }
+        }
+        return null;
     }
 
     private void restartAppInternal(boolean onlyIfUpdateIsPending) {

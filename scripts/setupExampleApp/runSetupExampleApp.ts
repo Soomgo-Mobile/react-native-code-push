@@ -60,6 +60,11 @@ const setupSteps: SetupStep[] = [
     run: configureAndroidVersioning
   },
   {
+    name: "configure-new-architecture",
+    description: "Disable new architecture for RN <= 0.76",
+    run: configureNewArchitecture
+  },
+  {
     name: "configure-local-code-link",
     description: "Configure local library link",
     run: configureLocalCodeLink
@@ -210,17 +215,15 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       "IPHONEOS_DEPLOYMENT_TARGET = 16.0;",
       "IPHONEOS_DEPLOYMENT_TARGET"
     );
-    nextContent = replaceAllOrThrow(
+    nextContent = replaceAllIfFound(
       nextContent,
       /"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer";/g,
       '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;',
-      "CODE_SIGN_IDENTITY"
     );
-    nextContent = replaceAllOrThrow(
+    nextContent = replaceAllIfFound(
       nextContent,
       /SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";/g,
       'SUPPORTED_PLATFORMS = iphonesimulator;',
-      "SUPPORTED_PLATFORMS"
     );
     nextContent = replaceAllOrThrow(
       nextContent,
@@ -293,6 +296,49 @@ async function configureAndroidVersioning(context: SetupContext): Promise<void> 
   });
 }
 
+async function configureNewArchitecture(context: SetupContext): Promise<void> {
+  if (!shouldDisableNewArchitecture(context.rnVersion)) {
+    console.log("[skip] RN >= 0.77, keeping template new architecture setting");
+    return;
+  }
+
+  const androidGradlePropertiesPath = path.join(
+    context.projectPath,
+    "android",
+    "gradle.properties"
+  );
+
+  updateTextFile(androidGradlePropertiesPath, (content) => {
+    if (/^newArchEnabled\s*=.*$/m.test(content)) {
+      return content.replace(/^newArchEnabled\s*=.*$/m, "newArchEnabled=false");
+    }
+
+    const suffix = content.endsWith("\n") ? "" : "\n";
+    return `${content}${suffix}newArchEnabled=false\n`;
+  });
+
+  const iosPodfilePath = path.join(context.projectPath, "ios", "Podfile");
+  updateTextFile(iosPodfilePath, (content) => {
+    const envLine = "ENV['RCT_NEW_ARCH_ENABLED'] = '0'";
+    if (content.includes(envLine)) {
+      return content;
+    }
+
+    if (/ENV\['RCT_NEW_ARCH_ENABLED'\]\s*=\s*'1'/.test(content)) {
+      return content.replace(
+        /ENV\['RCT_NEW_ARCH_ENABLED'\]\s*=\s*'1'/,
+        envLine
+      );
+    }
+
+    return `${envLine}\n${content}`;
+  });
+}
+
+function shouldDisableNewArchitecture(rnVersion: string): boolean {
+  return semver.lt(rnVersion, "0.77.0");
+}
+
 async function configureLocalCodeLink(context: SetupContext): Promise<void> {
   applyLocalPackageDependency(context);
   await ensureRequiredDevDependencies(context);
@@ -327,6 +373,8 @@ function applyLocalPackageDependency(context: SetupContext) {
 
   packageJson.dependencies = packageJson.dependencies ?? {};
   packageJson.dependencies["@bravemobile/react-native-code-push"] = "latest";
+  packageJson.dependencies["react-native-safe-area-context"] =
+    packageJson.dependencies["react-native-safe-area-context"] ?? "^5.0.0";
   ensureLocalCodePushSyncScript(packageJson, context);
 
   const serialized = `${JSON.stringify(packageJson, null, 2)}\n`;
@@ -529,6 +577,14 @@ function replaceAllOrThrow(
   }
 
   return replaced;
+}
+
+function replaceAllIfFound(
+  input: string,
+  matcher: RegExp,
+  replacement: string,
+): string {
+  return input.replace(matcher, () => replacement);
 }
 
 function executeCommand(command: string, args: string[], cwd: string): Promise<void> {
