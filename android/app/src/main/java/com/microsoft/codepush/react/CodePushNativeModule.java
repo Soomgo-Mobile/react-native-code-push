@@ -35,7 +35,6 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -245,39 +244,13 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         return currentActivity.getReactDelegate();
     }
 
-    // TODO: deprecate legacy versions and use `reactDelegate.getReactHost()`
     private ReactHost resolveReactHost() {
-        ReactActivity currentActivity = (ReactActivity) getReactApplicationContext().getCurrentActivity();
-        if (currentActivity == null) {
+        ReactDelegate reactDelegate = resolveReactDelegate();
+        if (reactDelegate == null) {
             return null;
         }
 
-        Method activityGetReactHostMethod = resolveDeclaredMethod(currentActivity.getClass(), "getReactHost");
-        if (activityGetReactHostMethod != null) {
-            try {
-                activityGetReactHostMethod.setAccessible(true);
-                Object reactHost = activityGetReactHostMethod.invoke(currentActivity);
-                if (reactHost instanceof ReactHost) {
-                    return (ReactHost) reactHost;
-                }
-            } catch (Exception e) {
-                CodePushUtils.log("Unable to resolve ReactHost from Activity.getReactHost(): " + e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    private Method resolveDeclaredMethod(Class<?> targetClass, String methodName) {
-        Class<?> cursor = targetClass;
-        while (cursor != null) {
-            try {
-                return cursor.getDeclaredMethod(methodName);
-            } catch (NoSuchMethodException ignored) {
-                cursor = cursor.getSuperclass();
-            }
-        }
-        return null;
+        return reactDelegate.getReactHost();
     }
 
     private Field resolveDeclaredField(Class<?> targetClass, String fieldName) {
