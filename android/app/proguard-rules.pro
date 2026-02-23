@@ -20,10 +20,6 @@
 -keepclassmembers class com.facebook.react.ReactInstanceManager {
     private final ** mBundleLoader;
 }
-# Activity.getReactHost()
--keepclassmembers class com.facebook.react.ReactActivity {
-    protected ** getReactHost(...);
-}
 # bridgeless
 -keepclassmembers class com.facebook.react.defaults.DefaultReactHostDelegate {
     private ** jsBundleLoader;
