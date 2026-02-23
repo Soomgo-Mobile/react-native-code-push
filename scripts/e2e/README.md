@@ -22,7 +22,7 @@ Runs E2E tests for React Native CLI example apps as a version matrix.
 
 Current matrix targets in script:
 
-- `0.74.7` (`RN0747`) through `0.84.0` (`RN0840`)
+- `0.77.3` (`RN0773`) through `0.84.0` (`RN0840`)
 
 ### Usage
 

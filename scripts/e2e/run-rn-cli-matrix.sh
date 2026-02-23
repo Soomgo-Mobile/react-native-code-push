@@ -5,9 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXAMPLES_DIR="$ROOT_DIR/Examples"
 
 RN_VERSIONS=(
-  "0.74.7"
-  "0.75.5"
-  "0.76.9"
   "0.77.3"
   "0.78.3"
   "0.79.7"
