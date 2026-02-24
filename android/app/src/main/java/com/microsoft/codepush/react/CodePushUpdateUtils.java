@@ -149,11 +149,6 @@ public class CodePushUpdateUtils {
             try {
                 return CodePushUtils.getStringFromInputStream(context.getAssets().open(CodePushConstants.CODE_PUSH_OLD_HASH_FILE_NAME));
             } catch (IOException ex) {
-                if (!isDebugMode) {
-                    // Only print this message in "Release" mode. In "Debug", we may not have the
-                    // hash if the build skips bundling the files.
-                    CodePushUtils.log("Unable to get the hash of the binary's bundled resources - \"codepush.gradle\" may have not been added to the build definition.");
-                }
             }
             return null;
         }
