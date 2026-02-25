@@ -22,11 +22,6 @@ on:
         required: true
         default: false
         type: boolean
-      ios_team_id:
-        description: Apple Team ID for iOS maestro-runner signing (optional)
-        required: false
-        default: ""
-        type: string
 
 jobs:
   e2e-ios:
@@ -69,10 +64,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-${{ inputs.app }}-
 
-      - name: Install maestro-runner
+      - name: Install Maestro CLI
         run: |
-          curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
-          echo "$HOME/.maestro-runner/bin" >> "$GITHUB_PATH"
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Select iOS simulator
         id: boot-simulator
@@ -86,8 +81,6 @@ jobs:
           echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run iOS E2E
-        env:
-          MAESTRO_IOS_TEAM_ID: ${{ inputs.ios_team_id }}
         run: |
           if [ "${{ inputs.expo }}" = "true" ]; then
             npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
