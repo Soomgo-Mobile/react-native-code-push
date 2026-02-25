@@ -137,9 +137,4 @@ jobs:
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: |
-            if [ "${{ inputs.expo }}" = "true" ]; then
-              npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo
-            else
-              npm run e2e -- --app "${{ inputs.app }}" --platform android
-            fi
+          script: if [ "${{ inputs.expo }}" = "true" ]; then npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo; else npm run e2e -- --app "${{ inputs.app }}" --platform android; fi
