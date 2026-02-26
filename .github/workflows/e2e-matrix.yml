@@ -93,7 +93,12 @@ jobs:
           xcrun simctl boot "$SIMULATOR_NAME" || true
           echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Reset Xcode module cache
+        run: rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
+
       - name: Run iOS E2E
+        env:
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
         run: |
           if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
             npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
@@ -105,7 +110,7 @@ jobs:
     needs: resolve-app-matrix
     name: e2e-android (${{ matrix.app }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
