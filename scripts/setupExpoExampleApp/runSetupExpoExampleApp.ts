@@ -126,6 +126,11 @@ const setupSteps: SetupStep[] = [
     run: installDependencies
   },
   {
+    name: "install-expo-build-properties",
+    description: "Install Expo build properties plugin with SDK-compatible version",
+    run: installExpoBuildPropertiesPlugin
+  },
+  {
     name: "prebuild-expo-native-projects",
     description: "Generate native iOS/Android projects for local dev build",
     run: prebuildExpoNativeProjects
@@ -239,11 +244,11 @@ async function configureExpoAppConfig(context: SetupContext): Promise<void> {
     ? [...(expoConfig.plugins as ExpoPluginConfigEntry[])]
     : [];
   ensureExpoPlugin(plugins, "@bravemobile/react-native-code-push");
+  ensureExpoBuildPropertiesPlugin(plugins, context.iosMinVersion);
 
   const bundleIdentifier = buildExpoBundleIdentifier(context.projectName);
   const iosConfig = toRecord(expoConfig.ios);
   iosConfig.bundleIdentifier = bundleIdentifier;
-  iosConfig.deploymentTarget = context.iosMinVersion;
   expoConfig.ios = iosConfig;
 
   const androidConfig = toRecord(expoConfig.android);
@@ -456,6 +461,12 @@ async function installDependencies(context: SetupContext): Promise<void> {
   await executeCommand(NPM_BINARY, args, context.projectPath);
 }
 
+async function installExpoBuildPropertiesPlugin(context: SetupContext): Promise<void> {
+  const args = ["expo", "install", "expo-build-properties"];
+  console.log(`[command] npx ${args.join(" ")} (cwd: ${context.projectPath})`);
+  await executeCommand(NPX_BINARY, args, context.projectPath);
+}
+
 function getPeerResolutionInstallArgs(context: SetupContext): string[] {
   if (isExpoPrereleaseVersion(context)) {
     return ["--legacy-peer-deps"];
@@ -621,6 +632,50 @@ function ensureExpoPlugin(
   if (!alreadyExists) {
     plugins.push(pluginName);
   }
+}
+
+function ensureExpoBuildPropertiesPlugin(
+  plugins: ExpoPluginConfigEntry[],
+  iosDeploymentTarget: string
+) {
+  const pluginName = "expo-build-properties";
+  const pluginIndex = plugins.findIndex((plugin) => {
+    if (typeof plugin === "string") {
+      return plugin === pluginName;
+    }
+    return Array.isArray(plugin) && plugin[0] === pluginName;
+  });
+
+  if (pluginIndex === -1) {
+    plugins.push([
+      pluginName,
+      {
+        ios: {
+          deploymentTarget: iosDeploymentTarget
+        }
+      }
+    ]);
+    return;
+  }
+
+  const existingPlugin = plugins[pluginIndex];
+  if (typeof existingPlugin === "string") {
+    plugins[pluginIndex] = [
+      pluginName,
+      {
+        ios: {
+          deploymentTarget: iosDeploymentTarget
+        }
+      }
+    ];
+    return;
+  }
+
+  const pluginConfig = toRecord(existingPlugin[1]);
+  const iosConfig = toRecord(pluginConfig.ios);
+  iosConfig.deploymentTarget = iosDeploymentTarget;
+  pluginConfig.ios = iosConfig;
+  plugins[pluginIndex] = [pluginName, pluginConfig];
 }
 
 function buildExpoBundleIdentifier(projectName: string): string {
