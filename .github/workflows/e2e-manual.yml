@@ -27,7 +27,7 @@ jobs:
   e2e-ios:
     if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -44,7 +44,7 @@ jobs:
         env:
           BUNDLE_GEMFILE: Examples/${{ inputs.app }}/Gemfile
         with:
-          ruby-version: "3.2"
+          ruby-version: "3.1"
           bundler-cache: true
 
       - name: Install root dependencies
@@ -64,9 +64,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-${{ inputs.app }}-
 
-      - name: Install maestro-runner
+      - name: Install Maestro CLI
         run: |
-          curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
+          curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Select iOS simulator
@@ -91,7 +91,7 @@ jobs:
   e2e-android:
     if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -128,7 +128,7 @@ jobs:
       - name: Install maestro-runner
         run: |
           curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.maestro-runner/bin" >> "$GITHUB_PATH"
 
       - name: Run Android E2E
         uses: reactivecircus/android-emulator-runner@v2
@@ -137,9 +137,4 @@ jobs:
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: |
-            if [ "${{ inputs.expo }}" = "true" ]; then
-              npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo
-            else
-              npm run e2e -- --app "${{ inputs.app }}" --platform android
-            fi
+          script: if [ "${{ inputs.expo }}" = "true" ]; then npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo; else npm run e2e -- --app "${{ inputs.app }}" --platform android; fi
