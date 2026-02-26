@@ -91,7 +91,7 @@ jobs:
   e2e-android:
     if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
