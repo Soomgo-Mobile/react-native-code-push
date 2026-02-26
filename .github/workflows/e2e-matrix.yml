@@ -1,0 +1,157 @@
+name: E2E Matrix
+
+on:
+  workflow_dispatch:
+
+jobs:
+  resolve-app-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.resolve.outputs.apps }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve app matrix
+        id: resolve
+        shell: bash
+        run: |
+          mapfile -t apps < <(
+            find Examples -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+              | grep -v '^CodePushDemoApp$' \
+              | sort
+          )
+
+          if [ "${#apps[@]}" -eq 0 ]; then
+            echo "No app found to run E2E."
+            exit 1
+          fi
+
+          apps_json="$(printf '%s\n' "${apps[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          echo "Resolved apps: $apps_json"
+          echo "apps=$apps_json" >> "$GITHUB_OUTPUT"
+
+  e2e-ios:
+    needs: resolve-app-matrix
+    name: e2e-ios (${{ matrix.app }})
+    runs-on: macos-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.resolve-app-matrix.outputs.apps) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Ruby (cache gems)
+        uses: ruby/setup-ruby@v1
+        env:
+          BUNDLE_GEMFILE: Examples/${{ matrix.app }}/Gemfile
+        with:
+          ruby-version: "3.1"
+          bundler-cache: true
+
+      - name: Install root dependencies
+        run: npm i
+
+      - name: Install example app dependencies
+        run: npm i
+        working-directory: Examples/${{ matrix.app }}
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            Examples/${{ matrix.app }}/ios/Pods
+          key: ${{ runner.os }}-pods-${{ matrix.app }}-${{ hashFiles(format('Examples/{0}/ios/Podfile', matrix.app), format('Examples/{0}/ios/Podfile.lock', matrix.app), format('Examples/{0}/Gemfile.lock', matrix.app)) }}
+          restore-keys: |
+            ${{ runner.os }}-pods-${{ matrix.app }}-
+
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Select iOS simulator
+        id: boot-simulator
+        run: |
+          SIMULATOR_NAME="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $1; exit}' | xargs)"
+          if [ -z "$SIMULATOR_NAME" ]; then
+            echo "No available iPhone simulator found."
+            exit 1
+          fi
+          xcrun simctl boot "$SIMULATOR_NAME" || true
+          echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS E2E
+        run: |
+          if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
+          else
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}"
+          fi
+
+  e2e-android:
+    needs: resolve-app-matrix
+    name: e2e-android (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.resolve-app-matrix.outputs.apps) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install root dependencies
+        run: npm i
+
+      - name: Install example app dependencies
+        run: npm i
+        working-directory: Examples/${{ matrix.app }}
+
+      - name: Install maestro-runner
+        run: |
+          curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
+          echo "$HOME/.maestro-runner/bin" >> "$GITHUB_PATH"
+
+      - name: Run Android E2E
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          emulator-boot-timeout: 900
+          script: if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo; else npm run e2e -- --app "${{ matrix.app }}" --platform android; fi
