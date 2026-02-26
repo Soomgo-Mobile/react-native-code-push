@@ -52,6 +52,7 @@ jobs:
           cache: npm
 
       - name: Setup Ruby (cache gems)
+        if: ${{ hashFiles(format('Examples/{0}/Gemfile', matrix.app)) != '' }}
         uses: ruby/setup-ruby@v1
         env:
           BUNDLE_GEMFILE: Examples/${{ matrix.app }}/Gemfile
