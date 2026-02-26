@@ -9,8 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.expo55beta",
-      "deploymentTarget": "16.0"
+      "bundleIdentifier": "com.expo55beta"
     },
     "android": {
       "adaptiveIcon": {
@@ -39,7 +38,15 @@
           }
         }
       ],
-      "@bravemobile/react-native-code-push"
+      "@bravemobile/react-native-code-push",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
