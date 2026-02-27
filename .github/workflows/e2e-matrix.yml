@@ -82,6 +82,19 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      - name: Select Xcode for Expo apps
+        if: ${{ startsWith(matrix.app, 'Expo') }}
+        run: |
+          EXPO_XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
+          if [ -z "$EXPO_XCODE_APP" ]; then
+            echo "No Xcode 26.x installation found on this runner."
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          fi
+
+          sudo xcode-select -s "$EXPO_XCODE_APP/Contents/Developer"
+          xcodebuild -version
+
       - name: Select iOS simulator
         id: boot-simulator
         run: |
