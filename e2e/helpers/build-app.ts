@@ -100,7 +100,7 @@ async function buildExpoIosWithoutLaunch(appPath: string, simulator?: string): P
 async function ensureExpoIosNativeProjectReady(appPath: string): Promise<void> {
   const iosDirPath = path.join(appPath, "ios");
 
-  if (!fs.existsSync(iosDirPath)) {
+  if (!hasValidExpoIosProject(iosDirPath)) {
     const prebuildArgs = ["--yes", "expo", "prebuild", "--platform", "ios", "--no-install"];
     console.log(`[command] npx ${prebuildArgs.join(" ")} (cwd: ${appPath})`);
     await executeCommand("npx", prebuildArgs, appPath);
@@ -111,6 +111,20 @@ async function ensureExpoIosNativeProjectReady(appPath: string): Promise<void> {
     console.log(`[command] npx ${podInstallArgs.join(" ")} (cwd: ${appPath})`);
     await executeCommand("npx", podInstallArgs, appPath);
   }
+}
+
+function hasValidExpoIosProject(iosDirPath: string): boolean {
+  if (!fs.existsSync(iosDirPath)) {
+    return false;
+  }
+
+  const podfilePath = path.join(iosDirPath, "Podfile");
+  if (!fs.existsSync(podfilePath)) {
+    return false;
+  }
+
+  const entries = fs.readdirSync(iosDirPath);
+  return entries.some((name) => name.endsWith(".xcodeproj"));
 }
 
 function getExpoAppName(appPath: string): string {
