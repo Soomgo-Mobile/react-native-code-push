@@ -116,7 +116,7 @@ function MetadataBlock({
 }
 
 const CODEPUSH_HOST = 'PLACEHOLDER';
-const IDENTIFIER = 'Expo55Beta';
+const IDENTIFIER = 'Expo55';
 
 async function releaseHistoryFetcher(
   updateRequest: UpdateCheckRequest,

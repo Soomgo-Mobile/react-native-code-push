@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Expo55Beta",
-    "slug": "Expo55Beta",
+    "name": "Expo55",
+    "slug": "Expo55",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expo55beta",
+    "scheme": "expo55",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.expo55beta"
+      "bundleIdentifier": "com.expo55"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.expo55beta",
+      "package": "com.expo55",
       "usesCleartextTraffic": true
     },
     "web": {
