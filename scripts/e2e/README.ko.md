@@ -5,6 +5,7 @@
 ## 스크립트
 
 - `scripts/e2e/run-rn-cli-matrix.sh`
+- `scripts/e2e/run-rn-cli-legacy-arch-matrix.sh`
 - `scripts/e2e/run-expo-matrix.sh`
 
 ---
@@ -36,7 +37,7 @@ bash scripts/e2e/run-rn-cli-matrix.sh [옵션]
 | `--skip-setup` | 앱 생성 단계를 건너뛰고 E2E만 실행 | `false` |
 | `--maestro-only` | 빌드를 건너뛰고 Maestro 플로우만 실행 | `false` |
 | `--only-setup` | setup만 수행하고 E2E 실행은 생략 | `false` |
-| `--only android\|ios` | 한 플랫폼만 실행 | 둘 다 |
+| `--only android\|ios` | 한 플랫폼만 실행 | both |
 | `--legacy-arch-max-version <minor(두 자리)>` | RN **minor**가 이 값 이하인 버전을 legacy architecture로 셋업 | `76` |
 
 ### `--legacy-arch-max-version` 입력 형식
@@ -99,7 +100,7 @@ bash scripts/e2e/run-expo-matrix.sh [옵션]
 |---|---|---|
 | `--force-recreate` | 앱 디렉토리가 있어도 삭제 후 재생성 | `false` |
 | `--skip-setup` | 앱 생성 단계를 건너뛰고 E2E만 실행 | `false` |
-| `--only android\|ios` | 한 플랫폼만 실행 | 둘 다 |
+| `--only android\|ios` | 한 플랫폼만 실행 | both |
 
 예시:
 
@@ -112,6 +113,55 @@ bash scripts/e2e/run-expo-matrix.sh --only android
 
 # 앱 재생성 후 iOS만 실행
 bash scripts/e2e/run-expo-matrix.sh --force-recreate --only ios
+```
+
+### 종료 코드
+
+- `0`: 모든 타겟 성공
+- `1`: 하나 이상 실패
+
+---
+
+## 3) `run-rn-cli-legacy-arch-matrix.sh` (로컬 헬퍼)
+
+React Native CLI 예제 앱을 legacy architecture 임시 설정으로 E2E 실행합니다.
+
+### 동작
+
+1. React Native 버전이 `< 0.82`인 `RN*` 앱만 조회해서 실행 대상에 포함합니다. (Expo 제외)
+2. 필요 시 `npm run setup-example-app`으로 앱 생성 (`--skip-setup`이면 생략)
+3. Android 빌드 전 `android/gradle.properties`의 `newArchEnabled=false`를 임시 적용
+4. iOS 빌드 전 `RCT_NEW_ARCH_ENABLED=0 bundle exec pod install` 실행 후, `RCT_NEW_ARCH_ENABLED=0` 환경으로 E2E 실행
+5. Android 실행 후 `gradle.properties` 원복
+6. 일부 타겟이 실패해도 다음 타겟 계속 실행하고 마지막에 요약 출력
+
+### 사용법
+
+```bash
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh [옵션]
+```
+
+### 옵션
+
+| 옵션 | 설명 | 기본값 |
+|---|---|---|
+| `--force-recreate` | 앱 디렉토리가 있어도 삭제 후 재생성 | `false` |
+| `--skip-setup` | 앱 생성 단계를 건너뛰고 E2E만 실행 | `false` |
+| `--maestro-only` | 빌드를 건너뛰고 Maestro 플로우만 실행 | `false` |
+| `--only-setup` | setup만 수행하고 E2E 실행은 생략 | `false` |
+| `--only android\|ios` | 한 플랫폼만 실행 | both |
+
+예시:
+
+```bash
+# RN < 0.82 전체 실행
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh
+
+# iOS만 실행
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh --only ios
+
+# setup 생략 + android만 실행
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh --skip-setup --only android
 ```
 
 ### 종료 코드
