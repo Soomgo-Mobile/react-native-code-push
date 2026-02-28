@@ -5,6 +5,7 @@ This directory contains wrapper scripts to run E2E tests across multiple app var
 ## Scripts
 
 - `scripts/e2e/run-rn-cli-matrix.sh`
+- `scripts/e2e/run-rn-cli-legacy-arch-matrix.sh`
 - `scripts/e2e/run-expo-matrix.sh`
 
 ---
@@ -112,6 +113,55 @@ bash scripts/e2e/run-expo-matrix.sh --only android
 
 # Recreate apps and run iOS only
 bash scripts/e2e/run-expo-matrix.sh --force-recreate --only ios
+```
+
+### Exit code
+
+- `0`: all targets passed
+- `1`: one or more targets failed
+
+---
+
+## 3) `run-rn-cli-legacy-arch-matrix.sh` (local helper)
+
+Runs E2E tests for React Native CLI apps with temporary legacy architecture setup.
+
+### What it does
+
+1. Discovers only `RN*` apps whose React Native version is `< 0.82` (Expo is not included).
+2. Optionally creates apps with `npm run setup-example-app` (unless `--skip-setup` is used).
+3. Before Android build: temporarily sets `newArchEnabled=false` in `android/gradle.properties`.
+4. Before iOS build: runs `RCT_NEW_ARCH_ENABLED=0 bundle exec pod install`, then runs E2E with `RCT_NEW_ARCH_ENABLED=0`.
+5. Restores Android `gradle.properties` after each run.
+6. Continues even if some targets fail and prints the final summary.
+
+### Usage
+
+```bash
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh [options]
+```
+
+### Options
+
+| Option | Description | Default |
+|---|---|---|
+| `--force-recreate` | Recreate app directories even if they already exist | `false` |
+| `--skip-setup` | Skip app setup and run E2E only | `false` |
+| `--maestro-only` | Skip build and run Maestro flows only | `false` |
+| `--only-setup` | Run setup only and skip E2E execution | `false` |
+| `--only android\|ios` | Run only one platform | both |
+
+Examples:
+
+```bash
+# Full run for RN < 0.82
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh
+
+# iOS only
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh --only ios
+
+# Keep existing apps, run Android only
+bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh --skip-setup --only android
 ```
 
 ### Exit code
