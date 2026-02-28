@@ -3,17 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXAMPLES_DIR="$ROOT_DIR/Examples"
-
-RN_VERSIONS=(
-  "0.77.3"
-  "0.78.3"
-  "0.79.7"
-  "0.80.3"
-  "0.81.6"
-  "0.82.1"
-  "0.83.2"
-  "0.84.0"
-)
+RN_TARGETS=()
 
 FORCE_RECREATE=0
 SKIP_SETUP=0
@@ -97,20 +87,65 @@ run_cmd() {
   "$@"
 }
 
-app_name_from_rn_version() {
-  local version="$1"
-  local compact="${version//./}"
-  echo "RN${compact}"
+read_rn_version_from_app() {
+  local app_name="$1"
+  local app_package_json="$EXAMPLES_DIR/$app_name/package.json"
+
+  if [[ ! -f "$app_package_json" ]]; then
+    echo "Cannot find package.json for $app_name: $app_package_json" >&2
+    return 1
+  fi
+
+  local rn_version
+  if ! rn_version="$(
+    node -e '
+const fs = require("fs");
+const pkgPath = process.argv[1];
+const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+const rnVersion = (pkg.dependencies && pkg.dependencies["react-native"])
+  || (pkg.devDependencies && pkg.devDependencies["react-native"]);
+if (!rnVersion) {
+  process.exit(1);
+}
+process.stdout.write(String(rnVersion));
+' "$app_package_json"
+  )"; then
+    echo "Cannot resolve react-native version for $app_name from $app_package_json" >&2
+    return 1
+  fi
+
+  echo "$rn_version"
+}
+
+resolve_rn_targets() {
+  local app_name
+  local rn_version
+
+  while IFS= read -r app_name; do
+    [[ "$app_name" == "CodePushDemoApp" ]] && continue
+    [[ "$app_name" == RN* ]] || continue
+
+    rn_version="$(read_rn_version_from_app "$app_name")" || exit 1
+    RN_TARGETS+=("${app_name}|${rn_version}")
+  done < <(
+    find "$EXAMPLES_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+      | sort
+  )
+
+  if [[ ${#RN_TARGETS[@]} -eq 0 ]]; then
+    echo "No RN app found to run E2E under $EXAMPLES_DIR." >&2
+    exit 1
+  fi
 }
 
 should_use_legacy_architecture() {
   local rn_version="$1"
   local rn_minor
-  if ! [[ "$rn_version" =~ ^[0-9]+\.([0-9]+)\.[0-9]+$ ]]; then
-    echo "Invalid RN version format: $rn_version (expected: <major>.<minor>.<patch>)" >&2
+  if ! [[ "$rn_version" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    echo "Invalid RN version format: $rn_version (expected to include <major>.<minor>.<patch>)" >&2
     exit 1
   fi
-  rn_minor=$((10#${BASH_REMATCH[1]}))
+  rn_minor=$((10#${BASH_REMATCH[2]}))
   [[ "$rn_minor" -le "$LEGACY_ARCH_MAX_MINOR" ]]
 }
 
@@ -178,14 +213,18 @@ print_e2e_summary() {
 
 main() {
   cd "$ROOT_DIR"
+  resolve_rn_targets
 
   if [[ "$RUN_ANDROID" -eq 0 && "$RUN_IOS" -eq 0 ]]; then
     echo "Both platforms are skipped. Nothing to run."
     return 0
   fi
 
-  for rn_version in "${RN_VERSIONS[@]}"; do
-    local_app_name="$(app_name_from_rn_version "$rn_version")"
+  local target
+  local local_app_name
+  local rn_version
+  for target in "${RN_TARGETS[@]}"; do
+    IFS='|' read -r local_app_name rn_version <<< "$target"
     setup_app_if_needed "$rn_version" "$local_app_name"
   done
 
@@ -199,8 +238,8 @@ main() {
     echo "############################################################"
     echo "[E2E] platform=android (all versions)"
     echo "############################################################"
-    for rn_version in "${RN_VERSIONS[@]}"; do
-      local_app_name="$(app_name_from_rn_version "$rn_version")"
+    for target in "${RN_TARGETS[@]}"; do
+      IFS='|' read -r local_app_name rn_version <<< "$target"
       echo
       echo "[ANDROID] version=$rn_version app=$local_app_name"
       run_e2e_for_app_platform "$local_app_name" "android"
@@ -212,8 +251,8 @@ main() {
     echo "############################################################"
     echo "[E2E] platform=ios (all versions)"
     echo "############################################################"
-    for rn_version in "${RN_VERSIONS[@]}"; do
-      local_app_name="$(app_name_from_rn_version "$rn_version")"
+    for target in "${RN_TARGETS[@]}"; do
+      IFS='|' read -r local_app_name rn_version <<< "$target"
       echo
       echo "[iOS] version=$rn_version app=$local_app_name"
       run_e2e_for_app_platform "$local_app_name" "ios"

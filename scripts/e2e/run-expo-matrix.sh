@@ -10,6 +10,7 @@ FAILED_E2E=()
 PASSED_E2E=()
 RUN_ANDROID=1
 RUN_IOS=1
+EXPO_APPS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,16 +57,59 @@ run_cmd() {
   "$@"
 }
 
+resolve_expo_apps() {
+  local app_name
+
+  while IFS= read -r app_name; do
+    [[ "$app_name" == "CodePushDemoApp" ]] && continue
+    [[ "$app_name" == Expo* ]] || continue
+    EXPO_APPS+=("$app_name")
+  done < <(
+    find "$EXAMPLES_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+      | sort
+  )
+
+  if [[ ${#EXPO_APPS[@]} -eq 0 ]]; then
+    echo "No Expo app found to run E2E under $EXAMPLES_DIR." >&2
+    exit 1
+  fi
+}
+
+parse_expo_app_name() {
+  local app_name="$1"
+
+  if [[ ! "$app_name" =~ ^Expo([0-9]+)(Beta)?$ ]]; then
+    return 1
+  fi
+
+  local sdk="${BASH_REMATCH[1]}"
+  local beta_suffix="${BASH_REMATCH[2]:-}"
+  local is_beta="false"
+
+  if [[ -n "$beta_suffix" ]]; then
+    is_beta="true"
+  fi
+
+  echo "$sdk $is_beta"
+}
+
 setup_app_if_needed() {
-  local sdk="$1"
-  local beta="$2"
-  local app_name="$3"
+  local app_name="$1"
   local app_path="$EXAMPLES_DIR/$app_name"
+  local parsed
+  local sdk
+  local is_beta
 
   if [[ "$SKIP_SETUP" -eq 1 ]]; then
     echo "[skip] setup for $app_name (--skip-setup)"
     return
   fi
+
+  if ! parsed="$(parse_expo_app_name "$app_name")"; then
+    echo "[skip] setup for $app_name (unsupported app naming)"
+    return
+  fi
+  read -r sdk is_beta <<< "$parsed"
 
   if [[ -d "$app_path" ]]; then
     if [[ "$FORCE_RECREATE" -eq 1 ]]; then
@@ -77,7 +121,7 @@ setup_app_if_needed() {
     fi
   fi
 
-  if [[ "$beta" == "true" ]]; then
+  if [[ "$is_beta" == "true" ]]; then
     run_cmd npm run setup-expo-example-app -- --sdk "$sdk" --beta
   else
     run_cmd npm run setup-expo-example-app -- --sdk "$sdk"
@@ -121,32 +165,22 @@ main() {
     return 0
   fi
 
-  local sdk54_app="Expo54"
-  local sdk55_beta_app="Expo55Beta"
+  resolve_expo_apps
 
-  echo
-  echo "============================================================"
-  echo "[Expo] sdk=54 app=$sdk54_app"
-  echo "============================================================"
-  setup_app_if_needed "54" "false" "$sdk54_app"
-  if [[ "$RUN_ANDROID" -eq 1 ]]; then
-    run_e2e_for_app_platform "$sdk54_app" "android"
-  fi
-  if [[ "$RUN_IOS" -eq 1 ]]; then
-    run_e2e_for_app_platform "$sdk54_app" "ios"
-  fi
-
-  echo
-  echo "============================================================"
-  echo "[Expo] sdk=55 beta app=$sdk55_beta_app"
-  echo "============================================================"
-  setup_app_if_needed "55" "true" "$sdk55_beta_app"
-  if [[ "$RUN_ANDROID" -eq 1 ]]; then
-    run_e2e_for_app_platform "$sdk55_beta_app" "android"
-  fi
-  if [[ "$RUN_IOS" -eq 1 ]]; then
-    run_e2e_for_app_platform "$sdk55_beta_app" "ios"
-  fi
+  local app_name
+  for app_name in "${EXPO_APPS[@]}"; do
+    echo
+    echo "============================================================"
+    echo "[Expo] app=$app_name"
+    echo "============================================================"
+    setup_app_if_needed "$app_name"
+    if [[ "$RUN_ANDROID" -eq 1 ]]; then
+      run_e2e_for_app_platform "$app_name" "android"
+    fi
+    if [[ "$RUN_IOS" -eq 1 ]]; then
+      run_e2e_for_app_platform "$app_name" "ios"
+    fi
+  done
 
   print_e2e_summary
 

@@ -16,13 +16,11 @@ React Native CLI 예제 앱을 버전 매트릭스로 E2E 실행합니다.
 ### 동작
 
 1. `npm run setup-example-app`으로 앱 생성 (`--skip-setup`이면 생략)
-2. 스크립트의 `RN_VERSIONS`에 설정된 RN 버전 각각에 대해 E2E 실행
-3. 일부 타겟이 실패해도 다음 타겟 계속 실행
-4. 마지막에 성공/실패 개수와 실패 타겟 목록 출력
-
-현재 스크립트 기준 매트릭스 대상:
-
-- `0.77.3` (`RN0773`)부터 `0.84.0` (`RN0840`)까지
+2. `Examples/` 아래 `RN*` 앱 디렉터리를 동적으로 조회 (`CodePushDemoApp` 제외)
+3. 각 앱의 `Examples/<app>/package.json`에서 React Native 버전 조회
+4. 조회된 앱별로 E2E 실행
+5. 일부 타겟이 실패해도 다음 타겟 계속 실행
+6. 마지막에 성공/실패 개수와 실패 타겟 목록 출력
 
 ### 사용법
 
@@ -79,14 +77,15 @@ bash scripts/e2e/run-rn-cli-matrix.sh --skip-setup --only ios
 
 ## 2) `run-expo-matrix.sh`
 
-Expo 예제 앱(`Expo54`, `Expo55Beta`)을 매트릭스로 E2E 실행합니다.
+Expo 예제 앱을 매트릭스로 E2E 실행합니다.
 
 ### 동작
 
-1. `npm run setup-expo-example-app`으로 앱 생성 (`--skip-setup`이면 생략)
-2. Expo 앱/플랫폼별로 E2E 실행 (`npm run e2e -- --framework expo ...`)
-3. 일부 타겟이 실패해도 다음 타겟 계속 실행
-4. 마지막에 성공/실패 개수와 실패 타겟 목록 출력
+1. `Examples/` 아래 `Expo*` 앱 디렉터리를 동적으로 조회 (`CodePushDemoApp` 제외)
+2. `npm run setup-expo-example-app`으로 앱 생성 (`--skip-setup`이면 생략)
+3. 조회된 Expo 앱/플랫폼별로 E2E 실행 (`npm run e2e -- --framework expo ...`)
+4. 일부 타겟이 실패해도 다음 타겟 계속 실행
+5. 마지막에 성공/실패 개수와 실패 타겟 목록 출력
 
 ### 사용법
 

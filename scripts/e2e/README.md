@@ -16,13 +16,11 @@ Runs E2E tests for React Native CLI example apps as a version matrix.
 ### What it does
 
 1. Creates apps with `npm run setup-example-app` (unless `--skip-setup` is used).
-2. Runs E2E for each configured RN version (`RN_VERSIONS` in script).
-3. Continues even if some targets fail.
-4. Prints a final summary with passed/failed counts and failed targets.
-
-Current matrix targets in script:
-
-- `0.77.3` (`RN0773`) through `0.84.0` (`RN0840`)
+2. Dynamically discovers `RN*` app directories under `Examples/` (excluding `CodePushDemoApp`).
+3. Resolves each app's React Native version from `Examples/<app>/package.json`.
+4. Runs E2E for each discovered app.
+5. Continues even if some targets fail.
+6. Prints a final summary with passed/failed counts and failed targets.
 
 ### Usage
 
@@ -79,14 +77,15 @@ bash scripts/e2e/run-rn-cli-matrix.sh --skip-setup --only ios
 
 ## 2) `run-expo-matrix.sh`
 
-Runs E2E tests for Expo example apps (`Expo54`, `Expo55Beta`) as a matrix.
+Runs E2E tests for Expo example apps as a matrix.
 
 ### What it does
 
-1. Creates Expo apps with `npm run setup-expo-example-app` (unless `--skip-setup` is used).
-2. Runs E2E for each Expo app and platform (`npm run e2e -- --framework expo ...`).
-3. Continues even if some targets fail.
-4. Prints a final summary with passed/failed counts and failed targets.
+1. Dynamically discovers `Expo*` app directories under `Examples/` (excluding `CodePushDemoApp`).
+2. Creates Expo apps with `npm run setup-expo-example-app` (unless `--skip-setup` is used).
+3. Runs E2E for each discovered Expo app and platform (`npm run e2e -- --framework expo ...`).
+4. Continues even if some targets fail.
+5. Prints a final summary with passed/failed counts and failed targets.
 
 ### Usage
 
