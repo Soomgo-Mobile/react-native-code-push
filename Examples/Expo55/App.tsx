@@ -12,7 +12,6 @@ import CodePush, {
   ReleaseHistoryInterface,
   UpdateCheckRequest,
 } from '@bravemobile/react-native-code-push';
-import axios from 'axios';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Set this to true before run `npx code-push release` to release a new bundle
@@ -117,7 +116,7 @@ function MetadataBlock({
 }
 
 const CODEPUSH_HOST = 'PLACEHOLDER';
-const IDENTIFIER = 'Expo55Beta';
+const IDENTIFIER = 'Expo55';
 
 async function releaseHistoryFetcher(
   updateRequest: UpdateCheckRequest,
@@ -126,13 +125,17 @@ async function releaseHistoryFetcher(
   const releaseHistoryUrl = `${CODEPUSH_HOST}/histories/${getPlatform()}/${IDENTIFIER}/${jsonFileName}`;
 
   try {
-    const { data } = await axios.get<ReleaseHistoryInterface>(releaseHistoryUrl, {
+    const response = await fetch(releaseHistoryUrl, {
+      method: 'GET',
       headers: {
         Accept: 'application/json',
         'Cache-Control': 'no-cache',
       },
     });
-    return data;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch release history: ${response.status} ${response.statusText}`);
+    }
+    return (await response.json()) as ReleaseHistoryInterface;
   } catch (error) {
     console.error(error);
     throw error;

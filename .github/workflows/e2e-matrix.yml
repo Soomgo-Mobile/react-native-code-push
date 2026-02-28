@@ -52,6 +52,7 @@ jobs:
           cache: npm
 
       - name: Setup Ruby (cache gems)
+        if: ${{ hashFiles(format('Examples/{0}/Gemfile', matrix.app)) != '' }}
         uses: ruby/setup-ruby@v1
         env:
           BUNDLE_GEMFILE: Examples/${{ matrix.app }}/Gemfile
@@ -81,6 +82,19 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      - name: Select Xcode for Expo apps
+        if: ${{ startsWith(matrix.app, 'Expo') }}
+        run: |
+          EXPO_XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
+          if [ -z "$EXPO_XCODE_APP" ]; then
+            echo "No Xcode 26.x installation found on this runner."
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          fi
+
+          sudo xcode-select -s "$EXPO_XCODE_APP/Contents/Developer"
+          xcodebuild -version
+
       - name: Select iOS simulator
         id: boot-simulator
         run: |
@@ -92,7 +106,12 @@ jobs:
           xcrun simctl boot "$SIMULATOR_NAME" || true
           echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Reset Xcode module cache
+        run: rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
+
       - name: Run iOS E2E
+        env:
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
         run: |
           if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
             npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
@@ -104,7 +123,7 @@ jobs:
     needs: resolve-app-matrix
     name: e2e-android (${{ matrix.app }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
