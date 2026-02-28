@@ -139,11 +139,6 @@ const setupSteps: SetupStep[] = [
     name: "configure-ios-min-deployment-target",
     description: "Raise iOS minimum deployment target",
     run: configureIosMinDeploymentTarget
-  },
-  {
-    name: "configure-android-cleartext-traffic",
-    description: "Allow Android cleartext HTTP traffic for local mock server",
-    run: configureAndroidCleartextTraffic
   }
 ];
 
@@ -253,7 +248,6 @@ async function configureExpoAppConfig(context: SetupContext): Promise<void> {
 
   const androidConfig = toRecord(expoConfig.android);
   androidConfig.package = bundleIdentifier;
-  androidConfig.usesCleartextTraffic = true;
   expoConfig.android = androidConfig;
 
   expoConfig.plugins = plugins;
@@ -557,51 +551,6 @@ async function configureIosMinDeploymentTarget(context: SetupContext): Promise<v
   }
 }
 
-async function configureAndroidCleartextTraffic(context: SetupContext): Promise<void> {
-  const manifestPath = path.join(
-    context.projectPath,
-    "android",
-    "app",
-    "src",
-    "main",
-    "AndroidManifest.xml"
-  );
-
-  if (!fs.existsSync(manifestPath)) {
-    console.log("[skip] AndroidManifest.xml does not exist");
-    return;
-  }
-
-  const originalContent = fs.readFileSync(manifestPath, "utf8");
-  const applicationTagMatch = originalContent.match(/<application\b[^>]*>/);
-  if (!applicationTagMatch) {
-    console.log("[skip] <application> tag not found in AndroidManifest.xml");
-    return;
-  }
-
-  let updatedApplicationTag = applicationTagMatch[0];
-  if (/android:usesCleartextTraffic\s*=/.test(updatedApplicationTag)) {
-    updatedApplicationTag = updatedApplicationTag.replace(
-      /android:usesCleartextTraffic\s*=\s*"[^"]*"/,
-      'android:usesCleartextTraffic="true"'
-    );
-  } else {
-    updatedApplicationTag = updatedApplicationTag.replace(
-      />$/,
-      ' android:usesCleartextTraffic="true">'
-    );
-  }
-
-  const updatedContent = originalContent.replace(
-    applicationTagMatch[0],
-    updatedApplicationTag
-  );
-
-  if (updatedContent !== originalContent) {
-    fs.writeFileSync(manifestPath, updatedContent, "utf8");
-  }
-}
-
 function findFirstXcodeProjProjectPath(iosPath: string): string | null {
   const entries = fs.readdirSync(iosPath);
   const xcodeProj = entries.find((entry) => entry.endsWith(".xcodeproj"));
@@ -650,6 +599,9 @@ function ensureExpoBuildPropertiesPlugin(
     plugins.push([
       pluginName,
       {
+        android: {
+          usesCleartextTraffic: true
+        },
         ios: {
           deploymentTarget: iosDeploymentTarget
         }
@@ -663,6 +615,9 @@ function ensureExpoBuildPropertiesPlugin(
     plugins[pluginIndex] = [
       pluginName,
       {
+        android: {
+          usesCleartextTraffic: true
+        },
         ios: {
           deploymentTarget: iosDeploymentTarget
         }
@@ -672,6 +627,10 @@ function ensureExpoBuildPropertiesPlugin(
   }
 
   const pluginConfig = toRecord(existingPlugin[1]);
+  const androidConfig = toRecord(pluginConfig.android);
+  androidConfig.usesCleartextTraffic = true;
+  pluginConfig.android = androidConfig;
+
   const iosConfig = toRecord(pluginConfig.ios);
   iosConfig.deploymentTarget = iosDeploymentTarget;
   pluginConfig.ios = iosConfig;

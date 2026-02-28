@@ -65,8 +65,11 @@ The script runs these steps in order:
 1. Creates a new Expo app from `default@sdk-<sdk>`.
 2. Updates `app.json`:
    - Adds `@bravemobile/react-native-code-push` plugin.
-   - Sets iOS bundle identifier and deployment target.
-   - Sets Android package and `usesCleartextTraffic`.
+   - Configures `expo-build-properties` plugin:
+     - iOS deployment target
+     - Android `usesCleartextTraffic: true`
+   - Sets iOS bundle identifier.
+   - Sets Android package.
 3. Adds local library wiring in `package.json`:
    - Adds `@bravemobile/react-native-code-push` dependency.
    - Adds `sync-local-library` and local release scripts.
