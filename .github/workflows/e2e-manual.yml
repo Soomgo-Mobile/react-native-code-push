@@ -126,6 +126,12 @@ jobs:
         run: npm i
         working-directory: Examples/${{ inputs.app }}
 
+      - name: Apply Expo Android CI build overrides
+        run: node scripts/e2e/apply-expo-android-ci-overrides.js
+        env:
+          E2E_EXPO_ANDROID_OVERRIDE_ENABLED: ${{ inputs.expo }}
+          E2E_EXPO_ANDROID_APP_JSON_PATH: Examples/${{ inputs.app }}/app.json
+
       - name: Install maestro-runner
         run: |
           curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
