@@ -104,6 +104,7 @@ jobs:
             exit 1
           fi
           xcrun simctl boot "$SIMULATOR_NAME" || true
+          xcrun simctl bootstatus "$SIMULATOR_NAME" -b
           echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Reset Xcode module cache
@@ -111,7 +112,7 @@ jobs:
 
       - name: Run iOS E2E
         env:
-          MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
         run: |
           if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
             npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
