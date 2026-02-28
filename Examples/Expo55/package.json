@@ -16,11 +16,10 @@
   },
   "dependencies": {
     "@bravemobile/react-native-code-push": "latest",
-    "@expo/vector-icons": "^15.0.2",
     "@react-navigation/bottom-tabs": "^7.7.3",
     "@react-navigation/elements": "^2.8.1",
     "@react-navigation/native": "^7.1.28",
-    "expo": "~55.0.3",
+    "expo": "~55.0.4",
     "expo-build-properties": "~55.0.9",
     "expo-constants": "~55.0.7",
     "expo-device": "~55.0.9",
@@ -48,7 +47,7 @@
     "@supabase/supabase-js": "^2.98.0",
     "@types/node": "^22.19.13",
     "@types/react": "~19.2.2",
-    "axios": "^1.13.5",
+    "axios": "^1.13.6",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.2"
   },
