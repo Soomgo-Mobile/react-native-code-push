@@ -65,8 +65,11 @@ npm run setup-expo-example-app -- --sdk 54 -w /tmp/examples
 1. `default@sdk-<sdk>` 템플릿으로 Expo 앱 생성
 2. `app.json` 수정:
    - `@bravemobile/react-native-code-push` plugin 추가
-   - iOS bundle identifier / deployment target 설정
-   - Android package / `usesCleartextTraffic` 설정
+   - `expo-build-properties` plugin 설정:
+     - iOS deployment target
+     - Android `usesCleartextTraffic: true`
+   - iOS bundle identifier 설정
+   - Android package 설정
 3. `package.json` 로컬 라이브러리 연동:
    - `@bravemobile/react-native-code-push` dependency 추가
    - `sync-local-library` 및 로컬 release 스크립트 추가

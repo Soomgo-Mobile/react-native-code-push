@@ -21,8 +21,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.expo54",
-      "usesCleartextTraffic": true
+      "package": "com.expo54"
     },
     "web": {
       "output": "static",
@@ -46,6 +45,9 @@
       [
         "expo-build-properties",
         {
+          "android": {
+            "usesCleartextTraffic": true
+          },
           "ios": {
             "deploymentTarget": "16.0"
           }
