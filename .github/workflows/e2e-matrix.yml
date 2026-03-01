@@ -98,14 +98,28 @@ jobs:
       - name: Select iOS simulator
         id: boot-simulator
         run: |
-          SIMULATOR_NAME="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $1; exit}' | xargs)"
-          if [ -z "$SIMULATOR_NAME" ]; then
+          SIMULATOR_UDID="$(xcrun simctl list devices available -j | node -e '
+            const fs = require("fs");
+            const input = fs.readFileSync(0, "utf8");
+            const data = JSON.parse(input);
+            const runtimes = Object.values(data.devices);
+            for (const devices of runtimes) {
+              for (const device of devices) {
+                if (device.isAvailable && typeof device.name === "string" && device.name.startsWith("iPhone")) {
+                  process.stdout.write(device.udid);
+                  process.exit(0);
+                }
+              }
+            }
+            process.exit(1);
+          ')"
+          if [ -z "$SIMULATOR_UDID" ]; then
             echo "No available iPhone simulator found."
             exit 1
           fi
-          xcrun simctl boot "$SIMULATOR_NAME" || true
-          xcrun simctl bootstatus "$SIMULATOR_NAME" -b
-          echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          echo "simulator_udid=$SIMULATOR_UDID" >> "$GITHUB_OUTPUT"
 
       - name: Reset Xcode module cache
         run: rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
@@ -117,9 +131,9 @@ jobs:
           E2E_RETRY_DELAY_SEC: "30"
         run: |
           if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
-            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
           else
-            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
           fi
 
   e2e-android:

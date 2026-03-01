@@ -1,0 +1,9 @@
+appId: ${APP_ID}
+---
+# Dismiss common iOS system prompts that can cover the app right after launch in CI.
+- tapOn:
+    text: "(?i)^(allow|ok|continue|not now|allow once|allow while using app|allow paste)$"
+    optional: true
+- tapOn:
+    text: "(?i)^(allow|ok|continue|not now|allow once|allow while using app|allow paste)$"
+    optional: true
