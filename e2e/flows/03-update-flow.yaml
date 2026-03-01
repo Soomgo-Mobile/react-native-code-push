@@ -43,3 +43,10 @@ appId: ${APP_ID}
     timeout: 5000
 - assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
+
+# Keep state for next phase — update should be installed again
+- tapOn: "Check for updates"
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "React Native.*"
+- assertVisible: "UPDATED!"
