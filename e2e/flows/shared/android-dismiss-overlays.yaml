@@ -1,3 +1,4 @@
+appId: ${APP_ID}
 ---
 # Dismiss common Android system prompts that can cover the app right after launch in CI.
 - tapOn:
