@@ -176,10 +176,13 @@ jobs:
           echo "$HOME/.maestro-runner/bin" >> "$GITHUB_PATH"
 
       - name: Run Android E2E
+        env:
+          E2E_RETRY_COUNT: "3"
+          E2E_RETRY_DELAY_SEC: "30"
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count 3 --retry-delay-sec 30; else npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count 3 --retry-delay-sec 30; fi
+          script: if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"; else npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"; fi
