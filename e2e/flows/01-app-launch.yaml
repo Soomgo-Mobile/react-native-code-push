@@ -5,6 +5,10 @@ appId: ${APP_ID}
     when:
       platform: Android
     file: shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: shared/ios-dismiss-overlays.yaml
 - assertVisible: "React Native.*"
 - assertVisible: "Check for updates"
 - assertVisible: "Clear updates"

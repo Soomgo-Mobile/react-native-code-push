@@ -6,6 +6,10 @@ appId: ${APP_ID}
     when:
       platform: Android
     file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
 - assertVisible: "UPDATED!"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
