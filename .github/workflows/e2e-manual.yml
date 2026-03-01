@@ -82,11 +82,14 @@ jobs:
           echo "simulator=$SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run iOS E2E
+        env:
+          E2E_RETRY_COUNT: "3"
+          E2E_RETRY_DELAY_SEC: "30"
         run: |
           if [ "${{ inputs.expo }}" = "true" ]; then
-            npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo
+            npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
           else
-            npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}"
+            npm run e2e -- --app "${{ inputs.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
           fi
 
   e2e-android:
@@ -144,4 +147,4 @@ jobs:
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: if [ "${{ inputs.expo }}" = "true" ]; then npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo; else npm run e2e -- --app "${{ inputs.app }}" --platform android; fi
+          script: if [ "${{ inputs.expo }}" = "true" ]; then npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo --retry-count 3 --retry-delay-sec 30; else npm run e2e -- --app "${{ inputs.app }}" --platform android --retry-count 3 --retry-delay-sec 30; fi
