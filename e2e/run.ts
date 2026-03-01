@@ -14,6 +14,24 @@ interface CliOptions {
   framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
+  retryCount: number;
+  retryDelaySec: number;
+}
+
+function parseRetryCountOption(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error("retry-count must be an integer >= 1");
+  }
+  return parsed;
+}
+
+function parseRetryDelaySecOption(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error("retry-delay-sec must be an integer >= 0");
+  }
+  return parsed;
 }
 
 const program = new Command()
@@ -23,12 +41,25 @@ const program = new Command()
   .requiredOption("--platform <type>", "Platform: ios or android")
   .option("--framework <type>", "Framework: expo")
   .option("--simulator <name>", "iOS simulator name (default: booted)")
-  .option("--maestro-only", "Skip build, only run test flows", false);
+  .option("--maestro-only", "Skip build, only run test flows", false)
+  .option(
+    "--retry-count <count>",
+    "Retry attempts for each Maestro execution block",
+    parseRetryCountOption,
+    1,
+  )
+  .option(
+    "--retry-delay-sec <seconds>",
+    "Delay between Maestro retries in seconds",
+    parseRetryDelaySecOption,
+    10,
+  );
 
 async function main() {
   const options = program.parse(process.argv).opts<CliOptions>();
   const appPath = getAppPath(options.app);
   const repoRoot = path.resolve(__dirname, "..");
+  const retryDelayMs = options.retryDelaySec * 1000;
 
   if (!fs.existsSync(appPath)) {
     console.error(`Example app not found: ${appPath}`);
@@ -66,7 +97,9 @@ async function main() {
     // 5. Run Maestro — Phase 1: main flows
     console.log("\n=== [run-maestro: phase 1] ===");
     const flowsDir = path.resolve(__dirname, "flows");
-    await runMaestro(flowsDir, options.platform, appId);
+    await withRetry("run-maestro: phase 1", options.retryCount, retryDelayMs, () =>
+      runMaestro(flowsDir, options.platform, appId),
+    );
 
     // 6. Disable release for rollback test
     console.log("\n=== [disable-release] ===");
@@ -83,7 +116,12 @@ async function main() {
     // 7. Run Maestro — Phase 2: rollback to binary
     console.log("\n=== [run-maestro: phase 2 (rollback to binary)] ===");
     const rollbackDir = path.resolve(__dirname, "flows-rollback");
-    await runMaestro(rollbackDir, options.platform, appId);
+    await withRetry(
+      "run-maestro: phase 2 (rollback to binary)",
+      options.retryCount,
+      retryDelayMs,
+      () => runMaestro(rollbackDir, options.platform, appId),
+    );
 
     // 8. Prepare partial rollback: release 1.0.1 + 1.0.2 with different hashes
     console.log("\n=== [prepare-bundle: partial rollback] ===");
@@ -124,7 +162,12 @@ async function main() {
     // 9. Run Maestro — update to 1.0.2
     console.log("\n=== [run-maestro: partial rollback — update to 1.0.2] ===");
     const updateFlow = path.resolve(__dirname, "flows-partial-rollback/01-update-to-latest.yaml");
-    await runMaestro(updateFlow, options.platform, appId);
+    await withRetry(
+      "run-maestro: partial rollback — update to 1.0.2",
+      options.retryCount,
+      retryDelayMs,
+      () => runMaestro(updateFlow, options.platform, appId),
+    );
 
     // 10. Disable only 1.0.2 → rollback target is 1.0.1 (not binary)
     console.log("\n=== [disable-release: 1.0.2 only] ===");
@@ -139,7 +182,12 @@ async function main() {
     // 11. Run Maestro — rollback from 1.0.2 to 1.0.1
     console.log("\n=== [run-maestro: partial rollback — rollback to 1.0.1] ===");
     const rollbackFlow = path.resolve(__dirname, "flows-partial-rollback/02-rollback-to-previous.yaml");
-    await runMaestro(rollbackFlow, options.platform, appId);
+    await withRetry(
+      "run-maestro: partial rollback — rollback to 1.0.1",
+      options.retryCount,
+      retryDelayMs,
+      () => runMaestro(rollbackFlow, options.platform, appId),
+    );
 
     console.log("\n=== E2E tests passed ===");
   } catch (error) {
@@ -229,6 +277,45 @@ function buildCodePushBundleIdentifier(appName: string): string {
     throw new Error(`Invalid app name for bundle identifier: ${appName}`);
   }
   return `com.${normalized}`;
+}
+
+async function withRetry(
+  label: string,
+  retryCount: number,
+  retryDelayMs: number,
+  action: () => Promise<void>,
+): Promise<void> {
+  for (let attempt = 1; attempt <= retryCount; attempt += 1) {
+    if (retryCount > 1) {
+      console.log(`[retry] ${label} attempt ${attempt}/${retryCount}`);
+    }
+
+    try {
+      await action();
+      if (attempt > 1) {
+        console.log(`[retry] ${label} succeeded on attempt ${attempt}/${retryCount}`);
+      }
+      return;
+    } catch (error) {
+      if (attempt === retryCount) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[retry] ${label} failed on attempt ${attempt}/${retryCount}: ${message}`);
+
+      if (retryDelayMs > 0) {
+        console.log(`[retry] waiting ${retryDelayMs / 1000}s before retry`);
+        await sleep(retryDelayMs);
+      }
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function runMaestro(
