@@ -1,6 +1,10 @@
 appId: ${APP_ID}
 ---
 - launchApp
+- runFlow:
+    when:
+      platform: Android
+    file: shared/android-dismiss-overlays.yaml
 - assertVisible: "React Native.*"
 
 # Ensure clean state — clear any previous updates

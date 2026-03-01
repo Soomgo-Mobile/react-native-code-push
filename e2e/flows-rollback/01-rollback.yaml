@@ -2,6 +2,10 @@ appId: ${APP_ID}
 ---
 # App should have the update installed from phase 1
 - launchApp
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
 - assertVisible: "UPDATED!"
 
 # Check for updates — server has disabled the release, triggers rollback to binary

@@ -1,0 +1,11 @@
+---
+# Dismiss common Android system prompts that can cover the app right after launch in CI.
+- tapOn:
+    text: "(?i)^(allow|ok|continue|got it|while using the app|only this time|allow all the time)$"
+    optional: true
+- tapOn:
+    text: "(?i)^(allow|ok|continue|got it|while using the app|only this time|allow all the time)$"
+    optional: true
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
