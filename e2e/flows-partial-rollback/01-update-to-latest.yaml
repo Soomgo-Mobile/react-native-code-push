@@ -2,14 +2,6 @@ appId: ${APP_ID}
 ---
 # App should be on binary (after phase 2 rollback)
 - launchApp
-- runFlow:
-    when:
-      platform: Android
-    file: ../flows/shared/android-dismiss-overlays.yaml
-- runFlow:
-    when:
-      platform: iOS
-    file: ../flows/shared/ios-dismiss-overlays.yaml
 - assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
 

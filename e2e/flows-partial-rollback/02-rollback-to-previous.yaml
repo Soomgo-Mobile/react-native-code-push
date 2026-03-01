@@ -2,14 +2,6 @@ appId: ${APP_ID}
 ---
 # App should be on 1.0.2 (from previous update)
 - launchApp
-- runFlow:
-    when:
-      platform: Android
-    file: ../flows/shared/android-dismiss-overlays.yaml
-- runFlow:
-    when:
-      platform: iOS
-    file: ../flows/shared/ios-dismiss-overlays.yaml
 - assertVisible: "UPDATED!"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
