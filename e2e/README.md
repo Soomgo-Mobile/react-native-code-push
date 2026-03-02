@@ -52,7 +52,7 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 3. **Prepare bundle** — Creates release history and bundles v1.0.1 using `npx code-push release`.
 4. **Start mock server** — Starts a local HTTP server (port 18081) that serves bundles and release history JSON.
 5. **Run test flows** — Uses Maestro on iOS and maestro-runner on Android:
-   - `03-update-flow` — Comprehensive phase-1 flow:
+   - `01-update-flow` — Comprehensive phase-1 flow:
      - Verifies app launch and core UI presence.
      - Dismisses common platform overlays (iOS/Android).
      - Verifies restart path does not crash.
@@ -85,7 +85,7 @@ e2e/
 │   ├── prepare-config.ts   # Patches App.tsx, copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
 │   └── build-app.ts        # Builds iOS/Android in Release mode
-├── flows/                  # Phase 1: single comprehensive flow (03-update-flow)
+├── flows/                  # Phase 1: single comprehensive flow (01-update-flow)
 ├── flows-rollback/         # Phase 2: rollback to binary
 └── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
 ```

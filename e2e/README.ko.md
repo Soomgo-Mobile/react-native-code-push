@@ -52,7 +52,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 3. **번들 준비** — `npx code-push release`로 릴리스 히스토리를 생성하고 v1.0.1을 번들링합니다.
 4. **Mock 서버 시작** — 번들과 릴리스 히스토리 JSON을 서빙하는 로컬 HTTP 서버(포트 18081)를 시작합니다.
 5. **테스트 플로우 실행** — iOS는 Maestro, Android는 maestro-runner 사용:
-   - `03-update-flow` — Phase 1 통합 플로우:
+   - `01-update-flow` — Phase 1 통합 플로우:
      - 앱 실행 및 핵심 UI 존재 확인
      - 플랫폼별(iOS/Android) 공통 오버레이 dismiss
      - 재시작 경로에서 크래시 없음 확인
@@ -85,7 +85,7 @@ e2e/
 │   ├── prepare-config.ts   # App.tsx 패치, 설정 복사
 │   ├── prepare-bundle.ts   # code-push CLI로 번들 생성
 │   └── build-app.ts        # iOS/Android Release 빌드
-├── flows/                  # Phase 1: 통합 플로우 (03-update-flow)
+├── flows/                  # Phase 1: 통합 플로우 (01-update-flow)
 ├── flows-rollback/         # Phase 2: 바이너리로 롤백
 └── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
 ```
