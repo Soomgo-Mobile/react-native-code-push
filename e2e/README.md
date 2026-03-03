@@ -68,6 +68,22 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 10. **Disable v1.0.2 only** — Disables only v1.0.2 via `npx code-push update-history`.
 11. **Rollback to previous update** — `02-rollback-to-previous`: Verifies the app rolls back from v1.0.2 to v1.0.1 (not to the binary).
 
+### Phase 4 — Optional Install Modes (`flows-optional/`)
+
+12. **Prepare optional release per scenario** — For each scenario, recreates history and deploys a non-mandatory release (`-m false`) using `npx code-push release`.
+13. **Run optional update flows** — Verifies optional updates are applied when:
+   - `01-optional-update-on-relaunch` — The app is killed and relaunched.
+   - `02-optional-update-on-restart-button` — The in-app "Restart app" button is pressed.
+   - `03-optional-update-on-resume-after-5s` — The app stays in background for 5+ seconds, then resumes.
+   - `04-optional-update-on-suspend-after-5s` — If the app stays in background for 5+ seconds, the update is applied while suspended and is reflected when the app returns to foreground.
+
+### Phase 5 — Failed Update Retry Policy (`flows-failed-update/`)
+
+14. **Prepare broken optional release** — Deploys a non-mandatory release that intentionally crashes on startup.
+15. **Verify `ignoreFailedUpdates` behavior** — `01-ignore-failed-updates` validates:
+   - default sync ignores previously failed update (`UP_TO_DATE`)
+   - `sync({ ignoreFailedUpdates: false })` retries failed update (`UPDATE_INSTALLED`)
+
 ## Architecture
 
 ```
@@ -80,12 +96,16 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # Filesystem-based CodePush config
 ├── helpers/
-│   ├── prepare-config.ts   # Patches App.tsx, copies config
+│   ├── prepare-config.ts   # Patches App.tsx (host + temporary E2E buttons), copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
 │   └── build-app.ts        # Builds iOS/Android in Release mode
 ├── flows/                  # Phase 1: basic flows
 ├── flows-rollback/         # Phase 2: rollback to binary
-└── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
+├── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
+├── flows-optional/         # Phase 4: optional install mode verification
+├── flows-failed-update/    # Phase 5: failed update retry policy verification
+└── scripts/
+    └── sleep.js            # Maestro runScript helper for deterministic waits
 ```
 
 ### Mock Server

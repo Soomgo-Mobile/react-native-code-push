@@ -1,0 +1,31 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "React Native.*"
+
+# Ensure binary state before scenario
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
+# Download optional update (default install mode: ON_NEXT_RESTART)
+- tapOn: "Check for updates"
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "Result: UPDATE_INSTALLED"
+- assertNotVisible: "UPDATED!"
+
+# Restart button should apply the downloaded update
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertVisible: "UPDATED!"
+
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.1.2"
