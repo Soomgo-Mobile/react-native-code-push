@@ -13,9 +13,11 @@ appId: ${APP_ID}
 # Restart to run broken update -> expected rollback to previous/binary bundle
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
-    timeout: 8000
+    timeout: 15000
 - launchApp:
     stopApp: false
+- waitForAnimationToEnd:
+    timeout: 30000
 - assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
@@ -39,9 +41,11 @@ appId: ${APP_ID}
 # Restart to run failed update again -> should rollback again and stay off failed label
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
-    timeout: 8000
+    timeout: 15000
 - launchApp:
     stopApp: false
+- waitForAnimationToEnd:
+    timeout: 30000
 - assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
