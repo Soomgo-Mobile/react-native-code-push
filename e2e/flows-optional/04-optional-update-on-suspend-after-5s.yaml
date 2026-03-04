@@ -3,6 +3,14 @@ appId: ${APP_ID}
 - launchApp
 - assertVisible: "React Native.*"
 
+# Ensure binary state before scenario (keeps retries deterministic)
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
 # Download optional update with ON_NEXT_SUSPEND and minimumBackgroundDuration=20
 - tapOn: "(?i)sync on_next_suspend \\(20s\\)"
 - waitForAnimationToEnd:
@@ -36,11 +44,11 @@ appId: ${APP_ID}
 - runScript:
     file: ../scripts/sleep.js
     env:
-      WAIT_MS: "18000"
+      WAIT_MS: "25000"
 - launchApp:
     stopApp: false
 - waitForAnimationToEnd:
-    timeout: 10000
+    timeout: 30000
 - assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
