@@ -40,6 +40,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--framework <type>` | 아니오 | Expo 예제 앱인 경우 `expo` 지정 |
 | `--simulator <name>` | 아니오 | iOS 시뮬레이터 이름 (부팅된 시뮬레이터 자동 감지, 기본값 "iPhone 16") |
 | `--maestro-only` | 아니오 | 빌드 단계 생략, 테스트 플로우만 실행 |
+| `--include-timing-sensitive` | 아니오 | 타이밍 민감 optional 시나리오(`03`, `04`) 추가 실행. 기본값: 비활성 |
 
 ## 실행 과정
 
@@ -74,8 +75,8 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 13. **optional 업데이트 플로우 실행** — 아래 조건에서 업데이트가 적용되는지 확인합니다.
    - `01-optional-update-on-relaunch` — 앱을 종료 후 재실행할 때
    - `02-optional-update-on-restart-button` — 앱 내 "Restart app" 버튼을 누를 때
-   - `03-optional-update-on-resume-after-5s` — 앱이 백그라운드에 5초 이상 머문 뒤 포그라운드로 돌아올 때
-   - `04-optional-update-on-suspend-after-5s` — 앱이 백그라운드에 5초 이상 머무르면 백그라운드에서 업데이트가 적용되고, 포그라운드 복귀 시 반영된 상태로 시작
+   - `03-optional-update-on-resume-after-5s` — `--include-timing-sensitive` 옵션 사용 시에만 실행
+   - `04-optional-update-on-suspend-after-5s` — `--include-timing-sensitive` 옵션 사용 시에만 실행
 
 ### Phase 5 — 실패 업데이트 재시도 정책 (`flows-failed-update/`)
 

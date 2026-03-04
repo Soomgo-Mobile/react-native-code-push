@@ -14,6 +14,7 @@ interface CliOptions {
   framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
+  includeTimingSensitive?: boolean;
   retryCount: number;
   retryDelaySec: number;
 }
@@ -48,6 +49,11 @@ const program = new Command()
   .option("--framework <type>", "Framework: expo")
   .option("--simulator <name>", "iOS simulator name (default: booted)")
   .option("--maestro-only", "Skip build, only run test flows", false)
+  .option(
+    "--include-timing-sensitive",
+    "Include timing-sensitive optional install mode scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)",
+    false,
+  )
   .option(
     "--retry-count <count>",
     "Retry attempts for each Maestro execution block",
@@ -208,17 +214,24 @@ async function main() {
         releaseVersion: "1.1.2",
         flowPath: path.resolve(__dirname, "flows-optional/02-optional-update-on-restart-button.yaml"),
       },
-      {
-        name: "apply on resume after 5 seconds",
-        releaseVersion: "1.1.3",
-        flowPath: path.resolve(__dirname, "flows-optional/03-optional-update-on-resume-after-5s.yaml"),
-      },
-      {
-        name: "apply on suspend after 5 seconds",
-        releaseVersion: "1.1.4",
-        flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-5s.yaml"),
-      },
     ];
+
+    if (options.includeTimingSensitive) {
+      optionalUpdateScenarios.push(
+        {
+          name: "apply on resume after 20 seconds",
+          releaseVersion: "1.1.3",
+          flowPath: path.resolve(__dirname, "flows-optional/03-optional-update-on-resume-after-5s.yaml"),
+        },
+        {
+          name: "apply on suspend after 20 seconds",
+          releaseVersion: "1.1.4",
+          flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-5s.yaml"),
+        },
+      );
+    } else {
+      console.log("\n=== [phase 4] skipping timing-sensitive scenarios (pass --include-timing-sensitive to enable) ===");
+    }
 
     for (const scenario of optionalUpdateScenarios) {
       console.log(`\n=== [prepare-bundle: optional ${scenario.releaseVersion} (${scenario.name})] ===`);

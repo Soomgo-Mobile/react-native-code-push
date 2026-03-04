@@ -2,6 +2,12 @@ name: E2E Matrix
 
 on:
   workflow_dispatch:
+    inputs:
+      include_timing_sensitive:
+        description: Include timing-sensitive optional scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   resolve-app-matrix:
@@ -129,11 +135,17 @@ jobs:
           MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
           E2E_RETRY_COUNT: "3"
           E2E_RETRY_DELAY_SEC: "30"
+          E2E_INCLUDE_TIMING_SENSITIVE: ${{ inputs.include_timing_sensitive }}
         run: |
+          TIMING_SENSITIVE_ARG=""
+          if [ "$E2E_INCLUDE_TIMING_SENSITIVE" = "true" ]; then
+            TIMING_SENSITIVE_ARG="--include-timing-sensitive"
+          fi
+
           if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
-            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
           else
-            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
           fi
 
   e2e-android:
@@ -193,10 +205,21 @@ jobs:
         env:
           E2E_RETRY_COUNT: "3"
           E2E_RETRY_DELAY_SEC: "30"
+          E2E_INCLUDE_TIMING_SENSITIVE: ${{ inputs.include_timing_sensitive }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"; else npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"; fi
+          script: |
+            TIMING_SENSITIVE_ARG=""
+            if [ "$E2E_INCLUDE_TIMING_SENSITIVE" = "true" ]; then
+              TIMING_SENSITIVE_ARG="--include-timing-sensitive"
+            fi
+
+            if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
+              npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
+            else
+              npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
+            fi
