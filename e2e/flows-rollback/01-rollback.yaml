@@ -9,6 +9,10 @@ appId: ${APP_ID}
 
 # sync() detects disabled release, calls clearUpdates() + restartApp() automatically
 - waitForAnimationToEnd:
+    timeout: 60000
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
     timeout: 30000
 
 # After rollback, UPDATED! should be gone

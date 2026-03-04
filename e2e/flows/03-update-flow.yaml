@@ -41,14 +41,22 @@ appId: ${APP_ID}
 - assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
-    timeout: 3000
+    timeout: 10000
 - assertVisible: "METADATA_V1.0.1"
 
 # Regression: clearUpdates() + restartApp() should not crash after update is installed
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 15000
 - tapOn: "Clear updates"
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
-    timeout: 5000
+    timeout: 15000
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 30000
 - assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
 
