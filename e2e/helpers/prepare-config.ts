@@ -3,8 +3,8 @@ import path from "path";
 import { getMockServerHost } from "../config";
 
 const BACKUP_SUFFIX = ".e2e-backup";
-const RESUME_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (5s)";
-const SUSPEND_SYNC_BUTTON_TITLE = "Sync ON_NEXT_SUSPEND (5s)";
+const RESUME_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (20s)";
+const SUSPEND_SYNC_BUTTON_TITLE = "Sync ON_NEXT_SUSPEND (20s)";
 const RETRY_FAILED_SYNC_BUTTON_TITLE = "Sync retry failed update";
 const HANDLE_SYNC_PATTERN = /const handleSync = useCallback\(\(\) => \{\n[\s\S]*?\n {2}\}, \[\]\);/;
 const DEFAULT_SYNC_BUTTON_PATTERN = /^(\s*)<Button title="Check for updates" onPress={handleSync} \/>$/m;
@@ -89,7 +89,7 @@ function injectResumeSyncSupport(content: string): string {
     "      {",
     "        installMode: CodePush.InstallMode.ON_NEXT_RESUME,",
     "        mandatoryInstallMode: CodePush.InstallMode.ON_NEXT_RESUME,",
-    "        minimumBackgroundDuration: 5,",
+    "        minimumBackgroundDuration: 20,",
     "      },",
     "      status => {",
     "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",
@@ -111,7 +111,7 @@ function injectResumeSyncSupport(content: string): string {
     "      {",
     "        installMode: CodePush.InstallMode.ON_NEXT_SUSPEND,",
     "        mandatoryInstallMode: CodePush.InstallMode.ON_NEXT_SUSPEND,",
-    "        minimumBackgroundDuration: 5,",
+    "        minimumBackgroundDuration: 20,",
     "      },",
     "      status => {",
     "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",

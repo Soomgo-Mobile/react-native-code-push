@@ -3,8 +3,8 @@ appId: ${APP_ID}
 - launchApp
 - assertVisible: "React Native.*"
 
-# Download optional update with ON_NEXT_RESUME and minimumBackgroundDuration=5
-- tapOn: "(?i)sync on_next_resume \\(5s\\)"
+# Download optional update with ON_NEXT_RESUME and minimumBackgroundDuration=20
+- tapOn: "(?i)sync on_next_resume \\(20s\\)"
 - waitForAnimationToEnd:
     timeout: 30000
 - assertVisible: "Result: UPDATE_INSTALLED"
@@ -15,7 +15,7 @@ appId: ${APP_ID}
     timeout: 3000
 - assertNotVisible: "METADATA_V1.1.3"
 
-# Background for <5s, resume should NOT apply update
+# Background for <20s, resume should NOT apply update
 - pressKey: Home
 - runScript:
     file: ../scripts/sleep.js
@@ -31,12 +31,12 @@ appId: ${APP_ID}
     timeout: 3000
 - assertNotVisible: "METADATA_V1.1.3"
 
-# Background for >=5s, then resume should apply update
+# Background for >=20s, then resume should apply update
 - pressKey: Home
 - runScript:
     file: ../scripts/sleep.js
     env:
-      WAIT_MS: "6000"
+      WAIT_MS: "18000"
 - launchApp:
     stopApp: false
 - waitForAnimationToEnd:
