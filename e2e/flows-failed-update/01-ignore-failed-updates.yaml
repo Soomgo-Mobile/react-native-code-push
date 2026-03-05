@@ -42,26 +42,8 @@ appId: ${APP_ID}
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
     timeout: 15000
-- launchApp:
-    stopApp: false
-- waitForAnimationToEnd:
-    timeout: 30000
-- launchApp:
-    stopApp: false
-- waitForAnimationToEnd:
-    timeout: 10000
-- runFlow:
-    when:
-      platform: Android
-    file: ../flows/shared/android-dismiss-overlays.yaml
-- runFlow:
-    when:
-      platform: iOS
-    file: ../flows/shared/ios-dismiss-overlays.yaml
-- waitForAnimationToEnd:
-    timeout: 60000
-- launchApp:
-    stopApp: false
+- stopApp
+- launchApp
 - waitForAnimationToEnd:
     timeout: 30000
 - runFlow:
@@ -72,6 +54,8 @@ appId: ${APP_ID}
     when:
       platform: iOS
     file: ../flows/shared/ios-dismiss-overlays.yaml
+- waitForAnimationToEnd:
+    timeout: 30000
 - assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
@@ -96,26 +80,8 @@ appId: ${APP_ID}
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
     timeout: 15000
-- launchApp:
-    stopApp: false
-- waitForAnimationToEnd:
-    timeout: 30000
-- launchApp:
-    stopApp: false
-- waitForAnimationToEnd:
-    timeout: 10000
-- runFlow:
-    when:
-      platform: Android
-    file: ../flows/shared/android-dismiss-overlays.yaml
-- runFlow:
-    when:
-      platform: iOS
-    file: ../flows/shared/ios-dismiss-overlays.yaml
-- waitForAnimationToEnd:
-    timeout: 60000
-- launchApp:
-    stopApp: false
+- stopApp
+- launchApp
 - waitForAnimationToEnd:
     timeout: 30000
 - runFlow:
@@ -126,6 +92,8 @@ appId: ${APP_ID}
     when:
       platform: iOS
     file: ../flows/shared/ios-dismiss-overlays.yaml
+- waitForAnimationToEnd:
+    timeout: 30000
 - assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
