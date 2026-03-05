@@ -9,5 +9,8 @@ appId: ${APP_ID}
     stopApp: false
 - waitForAnimationToEnd:
     timeout: 30000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
 - assertVisible: "React Native.*"
 - assertVisible: "Check for updates"

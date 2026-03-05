@@ -34,6 +34,9 @@ appId: ${APP_ID}
     timeout: 30000
 
 # After restart, UPDATED! should be visible
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
 - assertVisible: "UPDATED!"
 - assertVisible: "React Native.*"
 
@@ -64,5 +67,8 @@ appId: ${APP_ID}
 - tapOn: "Check for updates"
 - waitForAnimationToEnd:
     timeout: 30000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
 - assertVisible: "React Native.*"
 - assertVisible: "UPDATED!"
