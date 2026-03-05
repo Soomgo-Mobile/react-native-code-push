@@ -1,6 +1,14 @@
 appId: ${APP_ID}
 ---
 - launchApp
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
 - assertVisible: "React Native.*"
 - assertVisible: "(?i)sync retry failed update"
 
@@ -13,6 +21,14 @@ appId: ${APP_ID}
     stopApp: false
 - waitForAnimationToEnd:
     timeout: 30000
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
 - assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
 
@@ -34,7 +50,17 @@ appId: ${APP_ID}
     stopApp: false
 - waitForAnimationToEnd:
     timeout: 10000
-- assertVisible: "React Native.*"
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
+- assertVisible:
+    text: "React Native.*"
+    timeout: 60000
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 3000
@@ -66,7 +92,17 @@ appId: ${APP_ID}
     stopApp: false
 - waitForAnimationToEnd:
     timeout: 10000
-- assertVisible: "React Native.*"
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
+- assertVisible:
+    text: "React Native.*"
+    timeout: 60000
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 3000
