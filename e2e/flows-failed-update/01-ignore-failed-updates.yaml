@@ -58,9 +58,9 @@ appId: ${APP_ID}
     when:
       platform: iOS
     file: ../flows/shared/ios-dismiss-overlays.yaml
-- assertVisible:
-    text: "React Native.*"
+- waitForAnimationToEnd:
     timeout: 60000
+- assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 3000
@@ -100,9 +100,9 @@ appId: ${APP_ID}
     when:
       platform: iOS
     file: ../flows/shared/ios-dismiss-overlays.yaml
-- assertVisible:
-    text: "React Native.*"
+- waitForAnimationToEnd:
     timeout: 60000
+- assertVisible: "React Native.*"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 3000
