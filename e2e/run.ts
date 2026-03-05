@@ -181,27 +181,38 @@ async function main() {
       () => runMaestro(updateFlow, options.platform, appId),
     );
 
-    // 10. Disable only 1.0.2 → rollback target is 1.0.1 (not binary)
-    console.log("\n=== [disable-release: 1.0.2 only] ===");
-    await runCodePushCommand(appPath, options.platform, [
-      "update-history",
-      "-c", "code-push.config.local.ts",
-      "-b", "1.0.0", "-v", "1.0.2",
-      "-p", options.platform, "-i", releaseIdentifier,
-      "-e", "false",
-    ]);
-
-    // 11. Run Maestro — rollback from 1.0.2 to 1.0.1
+    // 10. Run Maestro — rollback from 1.0.2 to 1.0.1
     console.log("\n=== [run-maestro: partial rollback — rollback to 1.0.1] ===");
     const rollbackFlow = path.resolve(__dirname, "flows-partial-rollback/02-rollback-to-previous.yaml");
     await withRetry(
       "run-maestro: partial rollback — rollback to 1.0.1",
       options.retryCount,
       retryDelayMs,
-      () => runMaestro(rollbackFlow, options.platform, appId),
+      async () => {
+        // Rebuild preconditions on every attempt so retry starts from the same state.
+        await runCodePushCommand(appPath, options.platform, [
+          "update-history",
+          "-c", "code-push.config.local.ts",
+          "-b", "1.0.0", "-v", "1.0.2",
+          "-p", options.platform, "-i", releaseIdentifier,
+          "-e", "true",
+        ]);
+
+        await runMaestro(updateFlow, options.platform, appId);
+
+        await runCodePushCommand(appPath, options.platform, [
+          "update-history",
+          "-c", "code-push.config.local.ts",
+          "-b", "1.0.0", "-v", "1.0.2",
+          "-p", options.platform, "-i", releaseIdentifier,
+          "-e", "false",
+        ]);
+
+        await runMaestro(rollbackFlow, options.platform, appId);
+      },
     );
 
-    // 12. Run Maestro — Phase 4: optional update install modes
+    // 11. Run Maestro — Phase 4: optional update install modes
     console.log("\n=== [run-maestro: phase 4 (optional install modes)] ===");
     const optionalUpdateScenarios: OptionalUpdateScenario[] = [
       {
@@ -256,7 +267,7 @@ async function main() {
       );
     }
 
-    // 13. Run Maestro — Phase 5: ignoreFailedUpdates behavior
+    // 12. Run Maestro — Phase 5: ignoreFailedUpdates behavior
     console.log("\n=== [prepare-bundle: failed update behavior] ===");
     cleanMockData();
     await prepareBundle(
