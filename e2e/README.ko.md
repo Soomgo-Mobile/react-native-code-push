@@ -75,8 +75,8 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 13. **optional 업데이트 플로우 실행** — 아래 조건에서 업데이트가 적용되는지 확인합니다.
    - `01-optional-update-on-relaunch` — 앱을 종료 후 재실행할 때
    - `02-optional-update-on-restart-button` — 앱 내 "Restart app" 버튼을 누를 때
-   - `03-optional-update-on-resume-after-5s` — `--include-timing-sensitive` 옵션 사용 시에만 실행
-   - `04-optional-update-on-suspend-after-5s` — `--include-timing-sensitive` 옵션 사용 시에만 실행
+   - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
+   - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
 
 ### Phase 5 — 실패 업데이트 재시도 정책 (`flows-failed-update/`)
 

@@ -75,8 +75,8 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 13. **Run optional update flows** — Verifies optional updates are applied when:
    - `01-optional-update-on-relaunch` — The app is killed and relaunched.
    - `02-optional-update-on-restart-button` — The in-app "Restart app" button is pressed.
-   - `03-optional-update-on-resume-after-5s` — Runs only with `--include-timing-sensitive`.
-   - `04-optional-update-on-suspend-after-5s` — Runs only with `--include-timing-sensitive`.
+   - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs only with `--include-timing-sensitive`.
+   - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs only with `--include-timing-sensitive`.
 
 ### Phase 5 — Failed Update Retry Policy (`flows-failed-update/`)
 

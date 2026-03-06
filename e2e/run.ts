@@ -232,12 +232,12 @@ async function main() {
         {
           name: "apply on resume after 20 seconds",
           releaseVersion: "1.1.3",
-          flowPath: path.resolve(__dirname, "flows-optional/03-optional-update-on-resume-after-5s.yaml"),
+          flowPath: path.resolve(__dirname, "flows-optional/03-optional-update-on-resume-after-20s.yaml"),
         },
         {
           name: "apply on suspend after 20 seconds",
           releaseVersion: "1.1.4",
-          flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-5s.yaml"),
+          flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-20s.yaml"),
         },
       );
     } else {
