@@ -6,10 +6,6 @@ appId: ${APP_ID}
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
     timeout: 15000
-- launchApp:
-    stopApp: false
-- waitForAnimationToEnd:
-    timeout: 30000
 
 # App should be on binary (after clear + restart)
 - assertVisible: "React Native.*"
