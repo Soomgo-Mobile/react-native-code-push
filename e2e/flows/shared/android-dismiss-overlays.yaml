@@ -1,12 +1,18 @@
 appId: ${APP_ID}
 ---
 # Dismiss common Android system prompts that can cover the app right after launch in CI.
-- tapOn:
-    text: "(?i)^(allow|ok|continue|got it|not now|allow once|allow while using app|allow while using the app|allow paste|while using the app|only this time|allow all the time)$"
-    optional: true
-- tapOn:
-    text: "(?i)^(allow|ok|continue|got it|not now|allow once|allow while using app|allow while using the app|allow paste|while using the app|only this time|allow all the time)$"
-    optional: true
-- tapOn:
-    text: "(?i)^wait$"
-    optional: true
+- runFlow:
+    when:
+      visible: "(?i)^(allow|ok|continue|got it|not now|allow once|allow while using app|allow while using the app|allow paste|while using the app|only this time|allow all the time)$"
+    commands:
+      - tapOn: "(?i)^(allow|ok|continue|got it|not now|allow once|allow while using app|allow while using the app|allow paste|while using the app|only this time|allow all the time)$"
+- runFlow:
+    when:
+      visible: "(?i)^(allow|ok|continue|got it|not now|allow once|allow while using app|allow while using the app|allow paste|while using the app|only this time|allow all the time)$"
+    commands:
+      - tapOn: "(?i)^(allow|ok|continue|got it|not now|allow once|allow while using app|allow while using the app|allow paste|while using the app|only this time|allow all the time)$"
+- runFlow:
+    when:
+      visible: "(?i)^wait$"
+    commands:
+      - tapOn: "(?i)^wait$"
