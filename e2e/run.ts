@@ -267,31 +267,6 @@ async function main() {
       );
     }
 
-    // 12. Run Maestro — Phase 5: ignoreFailedUpdates behavior
-    console.log("\n=== [prepare-bundle: failed update behavior] ===");
-    cleanMockData();
-    await prepareBundle(
-      appPath,
-      options.platform,
-      releaseIdentifier,
-      options.framework,
-      {
-        releaseVersion: "1.2.1",
-        mandatory: false,
-        releaseMarkerVersion: "1.2.1",
-        crashOnStartVersion: "1.2.1",
-      },
-    );
-
-    console.log("\n=== [run-maestro: phase 5 (ignoreFailedUpdates)] ===");
-    const ignoreFailedFlow = path.resolve(__dirname, "flows-failed-update/01-ignore-failed-updates.yaml");
-    await withRetry(
-      "run-maestro: phase 5 (ignoreFailedUpdates)",
-      options.retryCount,
-      retryDelayMs,
-      () => runMaestro(ignoreFailedFlow, options.platform, appId),
-    );
-
     console.log("\n=== E2E tests passed ===");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

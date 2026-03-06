@@ -78,13 +78,6 @@ The test runner (`e2e/run.ts`) executes these phases in order:
    - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs only with `--include-timing-sensitive`.
    - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs only with `--include-timing-sensitive`.
 
-### Phase 5 — Failed Update Retry Policy (`flows-failed-update/`)
-
-14. **Prepare broken optional release** — Deploys a non-mandatory release that intentionally crashes on startup.
-15. **Verify `ignoreFailedUpdates` behavior** — `01-ignore-failed-updates` validates:
-   - default sync ignores previously failed update (`UP_TO_DATE`)
-   - `sync({ ignoreFailedUpdates: false })` retries failed update (`UPDATE_INSTALLED`)
-
 ## Architecture
 
 ```
@@ -104,7 +97,6 @@ e2e/
 ├── flows-rollback/         # Phase 2: rollback to binary
 ├── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
 ├── flows-optional/         # Phase 4: optional install mode verification
-├── flows-failed-update/    # Phase 5: failed update retry policy verification
 └── scripts/
     └── sleep.js            # Maestro runScript helper for deterministic waits
 ```

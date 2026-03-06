@@ -78,13 +78,6 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
    - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
    - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
 
-### Phase 5 — 실패 업데이트 재시도 정책 (`flows-failed-update/`)
-
-14. **의도적으로 실패하는 optional 릴리스 준비** — 시작 시 크래시가 발생하도록 만든 non-mandatory 릴리스를 배포합니다.
-15. **`ignoreFailedUpdates` 동작 검증** — `01-ignore-failed-updates`에서 다음을 확인합니다.
-   - 기본 sync는 이전 실패 업데이트를 무시(`UP_TO_DATE`)
-   - `sync({ ignoreFailedUpdates: false })`는 실패 업데이트를 재시도(`UPDATE_INSTALLED`)
-
 ## 아키텍처
 
 ```
@@ -104,7 +97,6 @@ e2e/
 ├── flows-rollback/         # Phase 2: 바이너리로 롤백
 ├── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
 ├── flows-optional/         # Phase 4: optional 설치 모드 검증
-├── flows-failed-update/    # Phase 5: 실패 업데이트 재시도 정책 검증
 └── scripts/
     └── sleep.js            # Maestro runScript 대기 헬퍼
 ```

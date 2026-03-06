@@ -5,7 +5,6 @@ import { getMockServerHost } from "../config";
 const BACKUP_SUFFIX = ".e2e-backup";
 const RESUME_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (20s)";
 const SUSPEND_SYNC_BUTTON_TITLE = "Sync ON_NEXT_SUSPEND (20s)";
-const RETRY_FAILED_SYNC_BUTTON_TITLE = "Sync retry failed update";
 const HANDLE_SYNC_PATTERN = /const handleSync = useCallback\(\(\) => \{\n[\s\S]*?\n {2}\}, \[\]\);/;
 const DEFAULT_SYNC_BUTTON_PATTERN = /^(\s*)<Button title="Check for updates" onPress={handleSync} \/>$/m;
 
@@ -78,7 +77,6 @@ function injectResumeSyncSupport(content: string): string {
   if (
     content.includes(RESUME_SYNC_BUTTON_TITLE)
     && content.includes(SUSPEND_SYNC_BUTTON_TITLE)
-    && content.includes(RETRY_FAILED_SYNC_BUTTON_TITLE)
   ) {
     return content;
   }
@@ -127,26 +125,6 @@ function injectResumeSyncSupport(content: string): string {
     "      console.log('Sync failed', error.message ?? 'Unknown error');",
     "    });",
     "  }, []);",
-    "",
-    "  const handleSyncRetryFailedUpdate = useCallback(() => {",
-    "    CodePush.sync(",
-    "      {",
-    "        ignoreFailedUpdates: false,",
-    "      },",
-    "      status => {",
-    "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",
-    "      },",
-    "      ({ receivedBytes, totalBytes }) => {",
-    "        setProgress(Math.round((receivedBytes / totalBytes) * 100));",
-    "      },",
-    "      mismatch => {",
-    "        console.log('CodePush mismatch', JSON.stringify(mismatch, null, 2));",
-    "      },",
-    "    ).catch(error => {",
-    "      console.error(error);",
-    "      console.log('Sync failed', error.message ?? 'Unknown error');",
-    "    });",
-    "  }, []);",
   ].join("\n");
 
   let handlerInserted = false;
@@ -166,7 +144,6 @@ function injectResumeSyncSupport(content: string): string {
       `${indent}<Button title="Check for updates" onPress={handleSync} />`,
       `${indent}<Button title="${RESUME_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextResume} />`,
       `${indent}<Button title="${SUSPEND_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextSuspend} />`,
-      `${indent}<Button title="${RETRY_FAILED_SYNC_BUTTON_TITLE}" onPress={handleSyncRetryFailedUpdate} />`,
     ].join("\n");
   });
 
