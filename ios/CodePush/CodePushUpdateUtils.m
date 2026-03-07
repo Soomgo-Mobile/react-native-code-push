@@ -12,15 +12,12 @@ NSString * const ManifestFolderPrefix = @"CodePush";
  */
 NSString * const IgnoreMacOSX= @"__MACOSX/";
 NSString * const IgnoreDSStore = @".DS_Store";
-NSString * const IgnoreCodePushMetadata = @".codepushrelease";
 
 + (BOOL)isHashIgnoredFor:(NSString *) relativePath
 {
     return [relativePath hasPrefix:IgnoreMacOSX]
     || [relativePath isEqualToString:IgnoreDSStore]
-    || [relativePath hasSuffix:[NSString stringWithFormat:@"/%@", IgnoreDSStore]]
-    || [relativePath isEqualToString:IgnoreCodePushMetadata]
-    || [relativePath hasSuffix:[NSString stringWithFormat:@"/%@", IgnoreCodePushMetadata]];
+    || [relativePath hasSuffix:[NSString stringWithFormat:@"/%@", IgnoreDSStore]];
 }
 
 + (BOOL)addContentsOfFolderToManifest:(NSString *)folderPath

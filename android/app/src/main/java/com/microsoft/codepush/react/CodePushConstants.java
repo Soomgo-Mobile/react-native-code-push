@@ -24,7 +24,6 @@ public class CodePushConstants {
     public static final String RELATIVE_BUNDLE_PATH_KEY = "bundlePath";
     public static final String STATUS_FILE = "codepush.json";
     public static final String UNZIPPED_FOLDER_NAME = "unzipped";
-    public static final String BUNDLE_JWT_FILE = ".codepushrelease";
     public static final String LATEST_ROLLBACK_INFO_KEY = "LATEST_ROLLBACK_INFO";
     public static final String LATEST_ROLLBACK_PACKAGE_HASH_KEY = "packageHash";
     public static final String LATEST_ROLLBACK_TIME_KEY = "time";
