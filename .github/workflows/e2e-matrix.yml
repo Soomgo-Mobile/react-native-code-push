@@ -2,6 +2,22 @@ name: E2E Matrix
 
 on:
   workflow_dispatch:
+    inputs:
+      run_ios:
+        description: Run iOS E2E jobs
+        required: false
+        default: true
+        type: boolean
+      run_android:
+        description: Run Android E2E jobs
+        required: false
+        default: true
+        type: boolean
+      include_timing_sensitive:
+        description: Include timing-sensitive optional scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   resolve-app-matrix:
@@ -32,6 +48,7 @@ jobs:
           echo "apps=$apps_json" >> "$GITHUB_OUTPUT"
 
   e2e-ios:
+    if: ${{ inputs.run_ios }}
     needs: resolve-app-matrix
     name: e2e-ios (${{ matrix.app }})
     runs-on: macos-latest
@@ -129,14 +146,21 @@ jobs:
           MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
           E2E_RETRY_COUNT: "3"
           E2E_RETRY_DELAY_SEC: "30"
+          E2E_INCLUDE_TIMING_SENSITIVE: ${{ inputs.include_timing_sensitive }}
         run: |
+          TIMING_SENSITIVE_ARG=""
+          if [ "$E2E_INCLUDE_TIMING_SENSITIVE" = "true" ]; then
+            TIMING_SENSITIVE_ARG="--include-timing-sensitive"
+          fi
+
           if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then
-            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
           else
-            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"
+            npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
           fi
 
   e2e-android:
+    if: ${{ inputs.run_android }}
     needs: resolve-app-matrix
     name: e2e-android (${{ matrix.app }})
     runs-on: ubuntu-latest
@@ -186,7 +210,17 @@ jobs:
 
       - name: Install maestro-runner
         run: |
-          curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash
+          for attempt in 1 2 3; do
+            if curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to install maestro-runner after 3 attempts."
+              exit 1
+            fi
+            echo "maestro-runner install failed (attempt $attempt/3). Retrying in 10s..."
+            sleep 10
+          done
           echo "$HOME/.maestro-runner/bin" >> "$GITHUB_PATH"
 
       - name: Run Android E2E
@@ -199,4 +233,4 @@ jobs:
           arch: x86_64
           profile: pixel_7
           emulator-boot-timeout: 900
-          script: if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"; else npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC"; fi
+          script: TIMING_SENSITIVE_ARG=$([ "${{ inputs.include_timing_sensitive }}" = "true" ] && echo "--include-timing-sensitive" || echo ""); if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG; else npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG; fi

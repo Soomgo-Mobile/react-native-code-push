@@ -1,7 +1,13 @@
 appId: ${APP_ID}
 ---
-# App should be on binary (after phase 2 rollback)
+# Force binary baseline so this flow is retry-safe
 - launchApp
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# App should be on binary (after clear + restart)
 - assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
 

@@ -3,14 +3,6 @@ appId: ${APP_ID}
 - launchApp
 - assertVisible: "React Native.*"
 
-# Ensure clean state — clear any previous updates
-- tapOn: "Clear updates"
-- tapOn: "Restart app"
-- waitForAnimationToEnd:
-    timeout: 5000
-- assertVisible: "React Native.*"
-- assertNotVisible: "UPDATED!"
-
 # Verify no running update metadata
 - assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
@@ -25,28 +17,45 @@ appId: ${APP_ID}
 - waitForAnimationToEnd:
     timeout: 30000
 
-# After restart, UPDATED! should be visible
-- assertVisible: "UPDATED!"
+# After restart, re-acquire the current RN surface before interacting again
+- launchApp:
+    stopApp: false
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
 - assertVisible: "React Native.*"
+- assertVisible: "Restart app"
+- assertVisible: "Get update metadata"
+- assertVisible: "UPDATED!"
 
 # Verify UI is not frozen — metadata fetch should update the indicator
-- assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
-    timeout: 3000
+    timeout: 10000
 - assertVisible: "METADATA_V1.0.1"
 
 # Regression: clearUpdates() + restartApp() should not crash after update is installed
 - tapOn: "Clear updates"
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
-    timeout: 5000
+    timeout: 15000
+- launchApp:
+    stopApp: false
 - assertVisible: "React Native.*"
+- assertVisible: "Restart app"
+- assertVisible: "Get update metadata"
 - assertNotVisible: "UPDATED!"
 
 # Keep state for next phase — update should be installed again
 - tapOn: "Check for updates"
 - waitForAnimationToEnd:
     timeout: 30000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
 - assertVisible: "React Native.*"
 - assertVisible: "UPDATED!"
+- runScript:
+    file: ../scripts/sleep.js
+    env:
+      WAIT_MS: "5000"

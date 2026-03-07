@@ -14,8 +14,15 @@ interface CliOptions {
   framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
+  includeTimingSensitive?: boolean;
   retryCount: number;
   retryDelaySec: number;
+}
+
+interface OptionalUpdateScenario {
+  name: string;
+  releaseVersion: string;
+  flowPath: string;
 }
 
 function parseRetryCountOption(value: string): number {
@@ -42,6 +49,11 @@ const program = new Command()
   .option("--framework <type>", "Framework: expo")
   .option("--simulator <name>", "iOS simulator name (default: booted)")
   .option("--maestro-only", "Skip build, only run test flows", false)
+  .option(
+    "--include-timing-sensitive",
+    "Include timing-sensitive optional install mode scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)",
+    false,
+  )
   .option(
     "--retry-count <count>",
     "Retry attempts for each Maestro execution block",
@@ -169,25 +181,91 @@ async function main() {
       () => runMaestro(updateFlow, options.platform, appId),
     );
 
-    // 10. Disable only 1.0.2 → rollback target is 1.0.1 (not binary)
-    console.log("\n=== [disable-release: 1.0.2 only] ===");
-    await runCodePushCommand(appPath, options.platform, [
-      "update-history",
-      "-c", "code-push.config.local.ts",
-      "-b", "1.0.0", "-v", "1.0.2",
-      "-p", options.platform, "-i", releaseIdentifier,
-      "-e", "false",
-    ]);
-
-    // 11. Run Maestro — rollback from 1.0.2 to 1.0.1
+    // 10. Run Maestro — rollback from 1.0.2 to 1.0.1
     console.log("\n=== [run-maestro: partial rollback — rollback to 1.0.1] ===");
     const rollbackFlow = path.resolve(__dirname, "flows-partial-rollback/02-rollback-to-previous.yaml");
     await withRetry(
       "run-maestro: partial rollback — rollback to 1.0.1",
       options.retryCount,
       retryDelayMs,
-      () => runMaestro(rollbackFlow, options.platform, appId),
+      async () => {
+        // Rebuild preconditions on every attempt so retry starts from the same state.
+        await runCodePushCommand(appPath, options.platform, [
+          "update-history",
+          "-c", "code-push.config.local.ts",
+          "-b", "1.0.0", "-v", "1.0.2",
+          "-p", options.platform, "-i", releaseIdentifier,
+          "-e", "true",
+        ]);
+
+        await runMaestro(updateFlow, options.platform, appId);
+
+        await runCodePushCommand(appPath, options.platform, [
+          "update-history",
+          "-c", "code-push.config.local.ts",
+          "-b", "1.0.0", "-v", "1.0.2",
+          "-p", options.platform, "-i", releaseIdentifier,
+          "-e", "false",
+        ]);
+
+        await runMaestro(rollbackFlow, options.platform, appId);
+      },
     );
+
+    // 11. Run Maestro — Phase 4: optional update install modes
+    console.log("\n=== [run-maestro: phase 4 (optional install modes)] ===");
+    const optionalUpdateScenarios: OptionalUpdateScenario[] = [
+      {
+        name: "apply on app relaunch",
+        releaseVersion: "1.1.1",
+        flowPath: path.resolve(__dirname, "flows-optional/01-optional-update-on-relaunch.yaml"),
+      },
+      {
+        name: "apply on restart button",
+        releaseVersion: "1.1.2",
+        flowPath: path.resolve(__dirname, "flows-optional/02-optional-update-on-restart-button.yaml"),
+      },
+    ];
+
+    if (options.includeTimingSensitive) {
+      optionalUpdateScenarios.push(
+        {
+          name: "apply on resume after 20 seconds",
+          releaseVersion: "1.1.3",
+          flowPath: path.resolve(__dirname, "flows-optional/03-optional-update-on-resume-after-20s.yaml"),
+        },
+        {
+          name: "apply on suspend after 20 seconds",
+          releaseVersion: "1.1.4",
+          flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-20s.yaml"),
+        },
+      );
+    } else {
+      console.log("\n=== [phase 4] skipping timing-sensitive scenarios (pass --include-timing-sensitive to enable) ===");
+    }
+
+    for (const scenario of optionalUpdateScenarios) {
+      console.log(`\n=== [prepare-bundle: optional ${scenario.releaseVersion} (${scenario.name})] ===`);
+      cleanMockData();
+      await prepareBundle(
+        appPath,
+        options.platform,
+        releaseIdentifier,
+        options.framework,
+        {
+          releaseVersion: scenario.releaseVersion,
+          mandatory: false,
+          releaseMarkerVersion: scenario.releaseVersion,
+        },
+      );
+
+      await withRetry(
+        `run-maestro: optional update (${scenario.name})`,
+        options.retryCount,
+        retryDelayMs,
+        () => runMaestro(scenario.flowPath, options.platform, appId),
+      );
+    }
 
     console.log("\n=== E2E tests passed ===");
   } catch (error) {
@@ -195,7 +273,7 @@ async function main() {
     console.error(`\nE2E test failed: ${message}`);
     process.exitCode = 1;
   } finally {
-    // 8. Cleanup
+    // Cleanup
     console.log("\n=== [cleanup] ===");
     await stopMockServer();
     restoreConfig(appPath);

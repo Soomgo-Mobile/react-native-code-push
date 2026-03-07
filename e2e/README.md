@@ -40,6 +40,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--framework <type>` | No | Use `expo` for Expo example apps |
 | `--simulator <name>` | No | iOS simulator name (auto-detects booted simulator, defaults to "iPhone 16") |
 | `--maestro-only` | No | Skip build step, only run test flows |
+| `--include-timing-sensitive` | No | Also run timing-sensitive optional scenarios (`03`, `04`). Default: off |
 
 ## What It Does
 
@@ -68,6 +69,15 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 10. **Disable v1.0.2 only** — Disables only v1.0.2 via `npx code-push update-history`.
 11. **Rollback to previous update** — `02-rollback-to-previous`: Verifies the app rolls back from v1.0.2 to v1.0.1 (not to the binary).
 
+### Phase 4 — Optional Install Modes (`flows-optional/`)
+
+12. **Prepare optional release per scenario** — For each scenario, recreates history and deploys a non-mandatory release (`-m false`) using `npx code-push release`.
+13. **Run optional update flows** — Verifies optional updates are applied when:
+   - `01-optional-update-on-relaunch` — The app is killed and relaunched.
+   - `02-optional-update-on-restart-button` — The in-app "Restart app" button is pressed.
+   - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs only with `--include-timing-sensitive`.
+   - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs only with `--include-timing-sensitive`.
+
 ## Architecture
 
 ```
@@ -80,12 +90,15 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # Filesystem-based CodePush config
 ├── helpers/
-│   ├── prepare-config.ts   # Patches App.tsx, copies config
+│   ├── prepare-config.ts   # Patches App.tsx (host + temporary E2E buttons), copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
 │   └── build-app.ts        # Builds iOS/Android in Release mode
 ├── flows/                  # Phase 1: basic flows
 ├── flows-rollback/         # Phase 2: rollback to binary
-└── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
+├── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
+├── flows-optional/         # Phase 4: optional install mode verification
+└── scripts/
+    └── sleep.js            # Maestro runScript helper for deterministic waits
 ```
 
 ### Mock Server

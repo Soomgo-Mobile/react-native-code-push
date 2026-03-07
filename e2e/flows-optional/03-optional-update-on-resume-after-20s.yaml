@@ -1,0 +1,57 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "React Native.*"
+
+# Ensure binary state before scenario (keeps retries deterministic)
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
+# Download optional update with ON_NEXT_RESUME and minimumBackgroundDuration=20
+- tapOn: "(?i)sync on_next_resume \\(20s\\)"
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "Result: UPDATE_INSTALLED"
+
+# Not applied yet before background/resume (still running previous bundle)
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertNotVisible: "METADATA_V1.1.3"
+
+# Background for <20s, resume should NOT apply update
+- pressKey: Home
+- runScript:
+    file: ../scripts/sleep.js
+    env:
+      WAIT_MS: "2000"
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "React Native.*"
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertNotVisible: "METADATA_V1.1.3"
+
+# Background for >=20s, then resume should apply update
+- pressKey: Home
+- runScript:
+    file: ../scripts/sleep.js
+    env:
+      WAIT_MS: "25000"
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "React Native.*"
+
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.1.3"

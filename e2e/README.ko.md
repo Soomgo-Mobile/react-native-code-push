@@ -40,6 +40,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--framework <type>` | 아니오 | Expo 예제 앱인 경우 `expo` 지정 |
 | `--simulator <name>` | 아니오 | iOS 시뮬레이터 이름 (부팅된 시뮬레이터 자동 감지, 기본값 "iPhone 16") |
 | `--maestro-only` | 아니오 | 빌드 단계 생략, 테스트 플로우만 실행 |
+| `--include-timing-sensitive` | 아니오 | 타이밍 민감 optional 시나리오(`03`, `04`) 추가 실행. 기본값: 비활성 |
 
 ## 실행 과정
 
@@ -68,6 +69,15 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 10. **v1.0.2만 비활성화** — `npx code-push update-history`로 v1.0.2만 비활성화합니다.
 11. **이전 업데이트로 롤백** — `02-rollback-to-previous`: v1.0.2에서 v1.0.1로 롤백되는 것을 확인합니다 (바이너리가 아닌 이전 업데이트로).
 
+### Phase 4 — Optional Install Mode 검증 (`flows-optional/`)
+
+12. **시나리오별 optional 릴리스 준비** — 각 시나리오마다 히스토리를 다시 만들고 `npx code-push release -m false`로 not mandatory 릴리스를 배포합니다.
+13. **optional 업데이트 플로우 실행** — 아래 조건에서 업데이트가 적용되는지 확인합니다.
+   - `01-optional-update-on-relaunch` — 앱을 종료 후 재실행할 때
+   - `02-optional-update-on-restart-button` — 앱 내 "Restart app" 버튼을 누를 때
+   - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
+   - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
+
 ## 아키텍처
 
 ```
@@ -80,12 +90,15 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # 파일시스템 기반 CodePush 설정
 ├── helpers/
-│   ├── prepare-config.ts   # App.tsx 패치, 설정 복사
+│   ├── prepare-config.ts   # App.tsx 패치(호스트 + 임시 E2E 버튼), 설정 복사
 │   ├── prepare-bundle.ts   # code-push CLI로 번들 생성
 │   └── build-app.ts        # iOS/Android Release 빌드
 ├── flows/                  # Phase 1: 기본 플로우
 ├── flows-rollback/         # Phase 2: 바이너리로 롤백
-└── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
+├── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
+├── flows-optional/         # Phase 4: optional 설치 모드 검증
+└── scripts/
+    └── sleep.js            # Maestro runScript 대기 헬퍼
 ```
 
 ### Mock 서버
