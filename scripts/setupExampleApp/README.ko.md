@@ -33,8 +33,9 @@ npm run setup-example-app -- -v <react-native-버전>
 
 | 플래그 | 설명 | 기본값 |
 |---|---|---|
-| `-v, --rn-version <version>` | React Native 버전 (예: `0.83.1`, `0.84.0-rc.5`) | **필수** |
+| `-v, --rn-version <version>` | React Native 버전 (예: `0.83.1`, `0.84.0`) | **필수** |
 | `-w, --working-dir <path>` | 앱이 생성될 디렉토리 | `./Examples` |
+| `--force-recreate` | 기존 `RNxxxx` 디렉토리를 삭제하고 다시 생성 | `false` |
 | `--skip-pod-install` | `bundle install`과 `pod install`을 건너뜀 | `false` |
 
 ### 실행 예시
@@ -44,7 +45,10 @@ npm run setup-example-app -- -v <react-native-버전>
 npm run setup-example-app -- -v 0.83.1
 
 # pod install 없이 생성 (macOS가 아니거나 CI 환경에서 유용)
-npm run setup-example-app -- -v 0.84.0-rc.5 --skip-pod-install
+npm run setup-example-app -- -v 0.84.0 --skip-pod-install
+
+# 기존 예제 앱 디렉토리를 다시 생성
+npm run setup-example-app -- -v 0.83.1 --force-recreate
 ```
 
 생성된 프로젝트는 `Examples/RN<버전>/` 경로에 위치합니다 (예: `Examples/RN0831/`).
@@ -75,9 +79,21 @@ npm run setup-example-app -- -v 0.84.0-rc.5 --skip-pod-install
 `package.json`을 수정하여 로컬 라이브러리를 연결합니다:
 - `@bravemobile/react-native-code-push`를 dependency로 추가합니다.
 - `syncLocalLibrary.ts`를 가리키는 `sync-local-library` npm 스크립트를 추가합니다.
-- `setup:pods` 편의 스크립트를 추가합니다 (`bundle install && cd ios && bundle exec pod install`).
+- RN 버전에 따라 달라지는 `setup:pods` 편의 스크립트를 추가합니다.
 - `postinstall` 훅에 `sync-local-library`를 등록하여, `npm install` 시마다 로컬 빌드가 자동 동기화되도록 합니다.
 - 누락된 필수 dev dependencies를 설치합니다: `ts-node`, `axios`, `@types/node`, `@supabase/supabase-js`.
+
+### RN 버전별 iOS prebuild 동작
+
+생성되는 `setup:pods` 스크립트는 React Native 버전에 따라 자동으로 달라집니다.
+
+- RN `< 0.81.0`: `bundle install && cd ios && bundle exec pod install`
+- RN `0.81.x` ~ `0.83.x`: `bundle install && cd ios && RCT_USE_RN_DEP=1 RCT_USE_PREBUILT_RNCORE=1 bundle exec pod install`
+- RN `>= 0.84.0`: React Native가 iOS prebuild를 기본 활성화하므로 기본 명령을 그대로 사용합니다
+
+React Native prerelease 템플릿이 실제로 배포된 경우에는 prerelease 빌드도 해당 릴리즈 라인의 규칙을 그대로 따릅니다. 예를 들어 `0.84.0-rc.5`가 게시되어 있다면 기본 명령을 사용합니다.
+
+RN `0.81.x`에서는 legacy architecture 설정과 prebuild opt-in이 서로 독립적입니다. `RCT_NEW_ARCH_ENABLED=0`으로 pod install을 다시 실행하더라도 같은 prebuild 플래그를 함께 전달해야 합니다.
 
 ### 5. create-code-push-config
 
@@ -99,7 +115,7 @@ npm run setup-example-app -- -v 0.84.0-rc.5 --skip-pod-install
 
 ### 9. install-ios-pods
 
-`ios/` 디렉토리에서 `bundle install` 후 `bundle exec pod install`을 실행합니다. `--skip-pod-install` 옵션이 지정된 경우 이 단계는 건너뜁니다.
+생성된 `setup:pods` 스크립트를 실행하며, 이 스크립트가 대상 RN 버전에 맞는 prebuild 플래그를 붙여 `pod install`을 수행합니다. `--skip-pod-install` 옵션이 지정된 경우 이 단계는 건너뜁니다.
 
 ### 10. initialize-code-push
 

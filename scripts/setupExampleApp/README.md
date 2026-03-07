@@ -33,8 +33,9 @@ npm run setup-example-app -- -v <react-native-version>
 
 | Flag | Description | Default |
 |---|---|---|
-| `-v, --rn-version <version>` | React Native version (e.g. `0.83.1`, `0.84.0-rc.5`) | **Required** |
+| `-v, --rn-version <version>` | React Native version (e.g. `0.83.1`, `0.84.0`) | **Required** |
 | `-w, --working-dir <path>` | Directory where the app will be created | `./Examples` |
+| `--force-recreate` | Remove the existing `RNxxxx` directory before recreating it | `false` |
 | `--skip-pod-install` | Skip `bundle install` and `pod install` | `false` |
 
 ### Example
@@ -44,7 +45,10 @@ npm run setup-example-app -- -v <react-native-version>
 npm run setup-example-app -- -v 0.83.1
 
 # Create without pod install (useful on non-macOS or CI)
-npm run setup-example-app -- -v 0.84.0-rc.5 --skip-pod-install
+npm run setup-example-app -- -v 0.84.0 --skip-pod-install
+
+# Recreate an existing example app directory
+npm run setup-example-app -- -v 0.83.1 --force-recreate
 ```
 
 The generated project will be placed at `Examples/RN<version>/` (e.g. `Examples/RN0831/`).
@@ -75,9 +79,21 @@ Edits `android/app/build.gradle`:
 Modifies `package.json` to wire up the local library:
 - Adds `@bravemobile/react-native-code-push` as a dependency.
 - Adds an npm `sync-local-library` script pointing to `syncLocalLibrary.ts`.
-- Adds a `setup:pods` convenience script (`bundle install && cd ios && bundle exec pod install`).
-- Registers `sync-local-library` as a `postinstall` hook so the local build is synced on every `npm install`.
+- Adds a version-aware `setup:pods` convenience script.
+- Registers `sync-local-library` as a `postinstall` hook so every `npm install` keeps the local build in sync.
 - Installs required dev dependencies if missing: `ts-node`, `axios`, `@types/node`, `@supabase/supabase-js`.
+
+### iOS prebuild behavior by React Native version
+
+The generated `setup:pods` script changes automatically by React Native version:
+
+- RN `< 0.81.0`: `bundle install && cd ios && bundle exec pod install`
+- RN `0.81.x` to `0.83.x`: `bundle install && cd ios && RCT_USE_RN_DEP=1 RCT_USE_PREBUILT_RNCORE=1 bundle exec pod install`
+- RN `>= 0.84.0`: falls back to the default command because React Native enables iOS prebuilt artifacts by default
+
+When a React Native prerelease template is published, prerelease builds follow the same rule as their target release line. For example, `0.84.0-rc.5` would use the default command.
+
+Legacy architecture is orthogonal to this opt-in for RN `0.81.x`. If you run pods with `RCT_NEW_ARCH_ENABLED=0`, keep the same prebuild flags in the environment.
 
 ### 5. create-code-push-config
 
@@ -99,7 +115,7 @@ Runs `npm install` inside the generated project. Because a `postinstall` hook wa
 
 ### 9. install-ios-pods
 
-Runs `bundle install` followed by `bundle exec pod install` inside the `ios/` directory. Skipped entirely when `--skip-pod-install` is specified.
+Runs the generated `setup:pods` script, which applies the correct prebuild flags for the target React Native version before `pod install`. Skipped entirely when `--skip-pod-install` is specified.
 
 ### 10. initialize-code-push
 
