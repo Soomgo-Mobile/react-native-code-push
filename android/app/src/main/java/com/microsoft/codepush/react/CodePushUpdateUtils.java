@@ -1,13 +1,6 @@
 package com.microsoft.codepush.react;
 
 import android.content.Context;
-import android.util.Base64;
-
-import com.nimbusds.jose.JWSVerifier;
-import com.nimbusds.jose.crypto.RSASSAVerifier;
-import com.nimbusds.jwt.SignedJWT;
-
-import java.security.interfaces.*;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -20,14 +13,10 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.DigestInputStream;
-import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Map;
 
 public class CodePushUpdateUtils {
 
@@ -183,88 +172,4 @@ public class CodePushUpdateUtils {
         CodePushUtils.log("The update contents succeeded the data integrity check.");
     }
 
-    public static Map<String, Object> verifyAndDecodeJWT(String jwt, PublicKey publicKey) {
-        try {
-            SignedJWT signedJWT = SignedJWT.parse(jwt);
-            JWSVerifier verifier = new RSASSAVerifier((RSAPublicKey) publicKey);
-            if (signedJWT.verify(verifier)) {
-                Map<String, Object> claims = signedJWT.getJWTClaimsSet().getClaims();
-                CodePushUtils.log("JWT verification succeeded, payload content: " + claims.toString());
-                return claims;
-            }
-            return null;
-        } catch (Exception ex) {
-            CodePushUtils.log(ex.getMessage());
-            CodePushUtils.log(ex.getStackTrace().toString());
-            return null;
-        }
-    }
-
-    public static PublicKey parsePublicKey(String stringPublicKey) {
-        try {
-            //remove unnecessary "begin/end public key" entries from string
-            stringPublicKey = stringPublicKey
-                    .replace("-----BEGIN PUBLIC KEY-----", "")
-                    .replace("-----END PUBLIC KEY-----", "")
-                    .replace(NEW_LINE, "");
-            byte[] byteKey = Base64.decode(stringPublicKey.getBytes(), Base64.DEFAULT);
-            X509EncodedKeySpec X509Key = new X509EncodedKeySpec(byteKey);
-            KeyFactory kf = KeyFactory.getInstance("RSA");
-
-            return kf.generatePublic(X509Key);
-        } catch (Exception e) {
-            CodePushUtils.log(e.getMessage());
-            CodePushUtils.log(e.getStackTrace().toString());
-            return null;
-        }
-    }
-
-    public static String getSignatureFilePath(String updateFolderPath) {
-        return CodePushUtils.appendPathComponent(
-                CodePushUtils.appendPathComponent(updateFolderPath, CodePushConstants.CODE_PUSH_FOLDER_PREFIX),
-                CodePushConstants.BUNDLE_JWT_FILE
-        );
-    }
-
-    public static String getSignature(String folderPath) {
-        final String signatureFilePath = getSignatureFilePath(folderPath);
-
-        try {
-            return FileUtils.readFileToString(signatureFilePath);
-        } catch (IOException e) {
-            CodePushUtils.log(e.getMessage());
-            CodePushUtils.log(e.getStackTrace().toString());
-            return null;
-        }
-    }
-
-    public static void verifyUpdateSignature(String folderPath, String packageHash, String stringPublicKey) throws CodePushInvalidUpdateException {
-        CodePushUtils.log("Verifying signature for folder path: " + folderPath);
-
-        final PublicKey publicKey = parsePublicKey(stringPublicKey);
-        if (publicKey == null) {
-            throw new CodePushInvalidUpdateException("The update could not be verified because no public key was found.");
-        }
-
-        final String signature = getSignature(folderPath);
-        if (signature == null) {
-            throw new CodePushInvalidUpdateException("The update could not be verified because no signature was found.");
-        }
-
-        final Map<String, Object> claims = verifyAndDecodeJWT(signature, publicKey);
-        if (claims == null) {
-            throw new CodePushInvalidUpdateException("The update could not be verified because it was not signed by a trusted party.");
-        }
-
-        final String contentHash = (String) claims.get("contentHash");
-        if (contentHash == null) {
-            throw new CodePushInvalidUpdateException("The update could not be verified because the signature did not specify a content hash.");
-        }
-
-        if (!contentHash.equals(packageHash)) {
-            throw new CodePushInvalidUpdateException("The update contents failed the code signing check.");
-        }
-
-        CodePushUtils.log("The update contents succeeded the code signing check.");
-    }
 }
