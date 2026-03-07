@@ -3,6 +3,16 @@ name: E2E Matrix
 on:
   workflow_dispatch:
     inputs:
+      run_ios:
+        description: Run iOS E2E jobs
+        required: false
+        default: true
+        type: boolean
+      run_android:
+        description: Run Android E2E jobs
+        required: false
+        default: true
+        type: boolean
       include_timing_sensitive:
         description: Include timing-sensitive optional scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)
         required: false
@@ -38,6 +48,7 @@ jobs:
           echo "apps=$apps_json" >> "$GITHUB_OUTPUT"
 
   e2e-ios:
+    if: ${{ inputs.run_ios }}
     needs: resolve-app-matrix
     name: e2e-ios (${{ matrix.app }})
     runs-on: macos-latest
@@ -149,6 +160,7 @@ jobs:
           fi
 
   e2e-android:
+    if: ${{ inputs.run_android }}
     needs: resolve-app-matrix
     name: e2e-android (${{ matrix.app }})
     runs-on: ubuntu-latest
