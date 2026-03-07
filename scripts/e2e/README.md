@@ -131,7 +131,7 @@ Runs E2E tests for React Native CLI apps with temporary legacy architecture setu
 1. Discovers only `RN*` apps whose React Native version is `< 0.82` (Expo is not included).
 2. Optionally creates apps with `npm run setup-example-app` (unless `--skip-setup` is used).
 3. Before Android build: temporarily sets `newArchEnabled=false` in `android/gradle.properties`.
-4. Before iOS build: runs `RCT_NEW_ARCH_ENABLED=0 bundle exec pod install`, then runs E2E with `RCT_NEW_ARCH_ENABLED=0`.
+4. Before iOS build: runs `RCT_NEW_ARCH_ENABLED=0 npm run setup:pods`, then runs E2E with `RCT_NEW_ARCH_ENABLED=0`.
 5. Restores Android `gradle.properties` after each run.
 6. Continues even if some targets fail and prints the final summary.
 
@@ -175,3 +175,4 @@ bash scripts/e2e/run-rn-cli-legacy-arch-matrix.sh --skip-setup --only android
 
 - Run from repository root for predictable paths.
 - Both scripts intentionally continue after per-target failures and report all failures at the end.
+- For RN `0.81.x`, the legacy iOS helper still keeps the React Native iOS prebuild opt-in enabled through each app's `setup:pods` script.

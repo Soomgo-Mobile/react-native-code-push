@@ -4,10 +4,12 @@ import path from "path";
 import { spawn } from "child_process";
 import semver from "semver";
 import ts from "typescript";
+import { buildSetupPodsScript } from "./iosPodInstallConfig";
 
 interface SetupCliOptions {
   rnVersion: string;
   workingDir: string;
+  forceRecreate?: boolean;
   skipPodInstall?: boolean;
   disableNewArchitecture?: boolean;
 }
@@ -17,6 +19,7 @@ interface SetupContext {
   projectName: string;
   workingDirectory: string;
   projectPath: string;
+  forceRecreate: boolean;
   skipPodInstall: boolean;
   disableNewArchitecture: boolean;
 }
@@ -38,6 +41,11 @@ const program = new Command()
     "-w, --working-dir <path>",
     "Directory where the template app will be created",
     path.resolve(process.cwd(), "Examples")
+  )
+  .option(
+    "--force-recreate",
+    "Remove the target app directory before recreating it",
+    false
   )
   .option(
     "--skip-pod-install",
@@ -122,6 +130,7 @@ async function main() {
       projectName,
       workingDirectory: workingDir,
       projectPath,
+      forceRecreate: options.forceRecreate ?? false,
       skipPodInstall: options.skipPodInstall ?? false,
       disableNewArchitecture:
         (options.disableNewArchitecture ?? false) ||
@@ -175,7 +184,11 @@ async function createReactNativeTemplateApp(context: SetupContext): Promise<void
   ensureDirectory(context.workingDirectory);
 
   if (fs.existsSync(context.projectPath)) {
-    throw new Error(`Target directory already exists: ${context.projectPath}`);
+    if (!context.forceRecreate) {
+      throw new Error(`Target directory already exists: ${context.projectPath}`);
+    }
+
+    fs.rmSync(context.projectPath, { recursive: true, force: true });
   }
 
   const initArgs = [
@@ -398,16 +411,18 @@ function ensureLocalCodePushSyncScript(
   context: SetupContext
 ) {
   const scripts = packageJson.scripts ?? {};
-  const syncScriptPath = path.resolve(__dirname, "./syncLocalLibrary.ts");
-  const relativeScriptPath = path.relative(context.projectPath, syncScriptPath);
+  const projectRealPath = fs.realpathSync(context.projectPath);
+  const syncScriptPath = fs.realpathSync(
+    path.resolve(__dirname, "./syncLocalLibrary.ts")
+  );
+  const relativeScriptPath = path.relative(projectRealPath, syncScriptPath);
   const normalizedPath = relativeScriptPath.split(path.sep).join(path.posix.sep);
   const syncScriptCommand = `ts-node --project tsconfig.json ${JSON.stringify(
     normalizedPath
   )}`;
 
   scripts[TEMPLATE_SYNC_SCRIPT_NAME] = syncScriptCommand;
-  scripts[TEMPLATE_POD_INSTALL_SCRIPT_NAME] =
-    "bundle install && cd ios && bundle exec pod install";
+  scripts[TEMPLATE_POD_INSTALL_SCRIPT_NAME] = buildSetupPodsScript(context.rnVersion);
 
   const postInstallCommand = `npm run ${TEMPLATE_SYNC_SCRIPT_NAME}`;
   if (!scripts.postinstall) {

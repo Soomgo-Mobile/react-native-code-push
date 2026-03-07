@@ -224,14 +224,14 @@ restore_android_legacy_architecture() {
 
 prepare_ios_legacy_architecture() {
   local app_path="$1"
-  local ios_dir_path="$app_path/ios"
+  local package_json_path="$app_path/package.json"
 
-  if [[ ! -d "$ios_dir_path" ]]; then
-    echo "[error] missing iOS directory: $ios_dir_path" >&2
+  if [[ ! -f "$package_json_path" ]]; then
+    echo "[error] missing package.json: $package_json_path" >&2
     return 1
   fi
 
-  run_cmd_in_dir "$ios_dir_path" env RCT_NEW_ARCH_ENABLED=0 bundle exec pod install
+  run_cmd_in_dir "$app_path" env RCT_NEW_ARCH_ENABLED=0 npm run setup:pods
 }
 
 run_e2e_for_app_platform() {

@@ -9,7 +9,7 @@
     "start": "react-native start",
     "test": "jest",
     "sync-local-library": "ts-node --project tsconfig.json \"../../scripts/setupExampleApp/syncLocalLibrary.ts\"",
-    "setup:pods": "bundle install && cd ios && bundle exec pod install",
+    "setup:pods": "bundle install && cd ios && RCT_USE_RN_DEP=1 RCT_USE_PREBUILT_RNCORE=1 bundle exec pod install",
     "postinstall": "npm run sync-local-library"
   },
   "dependencies": {
