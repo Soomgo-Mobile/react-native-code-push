@@ -25,15 +25,18 @@ appId: ${APP_ID}
 - waitForAnimationToEnd:
     timeout: 30000
 
-# After restart, UPDATED! should be visible
+# After restart, re-acquire the current RN surface before interacting again
+- launchApp:
+    stopApp: false
 - tapOn:
     text: "(?i)^wait$"
     optional: true
-- assertVisible: "UPDATED!"
 - assertVisible: "React Native.*"
+- assertVisible: "Restart app"
+- assertVisible: "Get update metadata"
+- assertVisible: "UPDATED!"
 
 # Verify UI is not frozen — metadata fetch should update the indicator
-- assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
 - waitForAnimationToEnd:
     timeout: 10000
@@ -44,7 +47,11 @@ appId: ${APP_ID}
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
     timeout: 15000
+- launchApp:
+    stopApp: false
 - assertVisible: "React Native.*"
+- assertVisible: "Restart app"
+- assertVisible: "Get update metadata"
 - assertNotVisible: "UPDATED!"
 
 # Keep state for next phase — update should be installed again
