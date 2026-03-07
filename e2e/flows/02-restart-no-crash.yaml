@@ -5,10 +5,6 @@ appId: ${APP_ID}
 - tapOn: "Restart app"
 - waitForAnimationToEnd:
     timeout: 15000
-- launchApp:
-    stopApp: false
-- waitForAnimationToEnd:
-    timeout: 30000
 - tapOn:
     text: "(?i)^wait$"
     optional: true
