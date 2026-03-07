@@ -22,6 +22,4 @@ Pod::Spec.new do |s|
   # linked properly at a parent workspace level.
   s.dependency 'React-Core'
   s.dependency 'SSZipArchive', '~> 2.5.5'
-  s.dependency 'JWT', '~> 3.0.0-beta.12'
-  s.dependency 'Base64', '~> 1.1'
 end

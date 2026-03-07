@@ -12,7 +12,6 @@ static NSString * const BuildVersionConfigKey = @"buildVersion";
 static NSString * const ClientUniqueIDConfigKey = @"clientUniqueId";
 static NSString * const DeploymentKeyConfigKey = @"deploymentKey";
 static NSString * const ServerURLConfigKey = @"serverUrl";
-static NSString * const PublicKeyKey = @"publicKey";
 
 + (instancetype)current
 {
@@ -35,7 +34,6 @@ static NSString * const PublicKeyKey = @"publicKey";
     NSString *buildVersion = [infoDictionary objectForKey:(NSString *)kCFBundleVersionKey];
     NSString *deploymentKey = [infoDictionary objectForKey:@"CodePushDeploymentKey"];
     NSString *serverURL = [infoDictionary objectForKey:@"CodePushServerURL"];
-    NSString *publicKey = [infoDictionary objectForKey:@"CodePushPublicKey"];
 
     NSUserDefaults *userDefaults = [NSUserDefaults standardUserDefaults];
     NSString *clientUniqueId = [userDefaults stringForKey:ClientUniqueIDConfigKey];
@@ -56,7 +54,6 @@ static NSString * const PublicKeyKey = @"publicKey";
     if (serverURL) [_configDictionary setObject:serverURL forKey:ServerURLConfigKey];
     if (clientUniqueId) [_configDictionary setObject:clientUniqueId forKey:ClientUniqueIDConfigKey];
     if (deploymentKey) [_configDictionary setObject:deploymentKey forKey:DeploymentKeyConfigKey];
-    if (publicKey) [_configDictionary setObject:publicKey forKey:PublicKeyKey];
 
     return self;
 }
@@ -91,11 +88,6 @@ static NSString * const PublicKeyKey = @"publicKey";
     return [_configDictionary objectForKey:ClientUniqueIDConfigKey];
 }
 
-- (NSString *)publicKey
-{
-    return [_configDictionary objectForKey:PublicKeyKey];
-}
-
 - (void)setAppVersion:(NSString *)appVersion
 {
     [_configDictionary setValue:appVersion forKey:AppVersionConfigKey];
@@ -110,7 +102,5 @@ static NSString * const PublicKeyKey = @"publicKey";
 {
     [_configDictionary setValue:serverURL forKey:ServerURLConfigKey];
 }
-
-//no setter for PublicKey, because it's need to be hard coded within Info.plist for safety
 
 @end
