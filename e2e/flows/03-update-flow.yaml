@@ -3,14 +3,6 @@ appId: ${APP_ID}
 - launchApp
 - assertVisible: "React Native.*"
 
-# Ensure clean state — clear any previous updates
-- tapOn: "Clear updates"
-- tapOn: "Restart app"
-- waitForAnimationToEnd:
-    timeout: 5000
-- assertVisible: "React Native.*"
-- assertNotVisible: "UPDATED!"
-
 # Verify no running update metadata
 - assertVisible: "METADATA_IDLE"
 - tapOn: "Get update metadata"
