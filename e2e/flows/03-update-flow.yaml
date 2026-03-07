@@ -55,3 +55,7 @@ appId: ${APP_ID}
     optional: true
 - assertVisible: "React Native.*"
 - assertVisible: "UPDATED!"
+- runScript:
+    file: ../scripts/sleep.js
+    env:
+      WAIT_MS: "5000"
