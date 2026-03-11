@@ -3,7 +3,6 @@ package com.microsoft.codepush.react;
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.res.Resources;
 
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.JavaScriptModule;
@@ -40,8 +39,6 @@ public class CodePush implements ReactPackage {
     private Context mContext;
     private final boolean mIsDebugMode;
 
-    private static String mPublicKey;
-
     private static CodePush mCurrentInstance;
 
     public static String getServiceUrl() {
@@ -75,31 +72,10 @@ public class CodePush implements ReactPackage {
 
         mCurrentInstance = this;
 
-        String publicKeyFromStrings = getCustomPropertyFromStringsIfExist("PublicKey");
-        if (publicKeyFromStrings != null) mPublicKey = publicKeyFromStrings;
-
         String serverUrlFromStrings = getCustomPropertyFromStringsIfExist("ServerUrl");
         if (serverUrlFromStrings != null) mServerUrl = serverUrlFromStrings;
 
         initializeUpdateAfterRestart();
-    }
-
-    private String getPublicKeyByResourceDescriptor(int publicKeyResourceDescriptor){
-        String publicKey;
-        try {
-            publicKey = mContext.getString(publicKeyResourceDescriptor);
-        } catch (Resources.NotFoundException e) {
-            throw new CodePushInvalidPublicKeyException(
-                    "Unable to get public key, related resource descriptor " +
-                            publicKeyResourceDescriptor +
-                            " can not be found", e
-            );
-        }
-
-        if (publicKey.isEmpty()) {
-            throw new CodePushInvalidPublicKeyException("Specified public key is empty");
-        }
-        return publicKey;
     }
 
     private String getCustomPropertyFromStringsIfExist(String propertyName) {
@@ -131,10 +107,6 @@ public class CodePush implements ReactPackage {
 
     public String getAssetsBundleFileName() {
         return mAssetsBundleFileName;
-    }
-
-    public String getPublicKey() {
-        return mPublicKey;
     }
 
     public String getPackageFolder() {

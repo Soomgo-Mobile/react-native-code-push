@@ -61,13 +61,10 @@ class PackageManifest {
     static isIgnored(relativeFilePath: string): boolean {
         const __MACOSX = '__MACOSX/';
         const DS_STORE = '.DS_Store';
-        const CODEPUSH_METADATA = '.codepushrelease';
         return (
             relativeFilePath.startsWith(__MACOSX) ||
             relativeFilePath === DS_STORE ||
-            relativeFilePath.endsWith('/' + DS_STORE) ||
-            relativeFilePath === CODEPUSH_METADATA ||
-            relativeFilePath.endsWith('/' + CODEPUSH_METADATA)
+            relativeFilePath.endsWith('/' + DS_STORE)
         );
     }
 }
