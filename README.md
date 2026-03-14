@@ -8,7 +8,7 @@
 
 ### 🚀 New Architecture support
 
-Supports React Native 0.74 ~ 0.84.
+Supports React Native 0.77 ~ 0.84.
 
 > [!NOTE]
 > If you are using React Native 0.76 or lower, please use version `12.0.2` of this library.
@@ -17,7 +17,7 @@ Supports React Native 0.74 ~ 0.84.
 
 ### ✅ Requirements
 
-- **React Native**: 0.74 or higher
+- **React Native**: 0.77 or higher
 - **iOS**: 15.5 or higher
 - **Android**: API level 16 or higher
 
