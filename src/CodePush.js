@@ -1,13 +1,36 @@
-import { Alert } from "./AlertAdapter";
-import { AppState, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import log from "./logging";
 import hoistStatics from 'hoist-non-react-statics';
 import { SemverVersioning } from './versioning/SemverVersioning'
 
-let NativeCodePush = require("react-native").NativeModules.CodePush;
-const PackageMixins = require("./package-mixins")(NativeCodePush);
+const NativeCodePushModule = require("./native/NativeCodePush");
+let NativeCodePush = NativeCodePushModule.getNativeCodePush?.() ?? NativeCodePushModule.default;
+const { InstallMode, UpdateState } = NativeCodePushModule;
+let PackageMixins = NativeCodePush ? require("./package-mixins")(NativeCodePush) : null;
 
 const DEPLOYMENT_KEY = 'deprecated_deployment_key';
+
+function getNativeCodePush() {
+  if (!NativeCodePush) {
+    const NativeCodePushModule = require("./native/NativeCodePush");
+    NativeCodePush = NativeCodePushModule.getNativeCodePush?.() ?? NativeCodePushModule.default;
+  }
+
+  if (NativeCodePush && !PackageMixins) {
+    PackageMixins = require("./package-mixins")(NativeCodePush);
+  }
+
+  return NativeCodePush;
+}
+
+function getPackageMixins() {
+  getNativeCodePush();
+  return PackageMixins;
+}
+
+function logMissingNativeModule() {
+  log("The CodePush module doesn't appear to be properly installed. Please double-check that everything is setup correctly.");
+}
 
 /**
  * @param deviceId {string}
@@ -217,8 +240,15 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
 
     return null;
   } else {
-    const remotePackage = { ...update, ...PackageMixins.remote() };
-    remotePackage.failedInstall = await NativeCodePush.isFailedUpdate(remotePackage.packageHash);
+    const nativeCodePush = getNativeCodePush();
+    const packageMixins = getPackageMixins();
+    if (!nativeCodePush || !packageMixins) {
+      logMissingNativeModule();
+      return null;
+    }
+
+    const remotePackage = { ...update, ...packageMixins.remote() };
+    remotePackage.failedInstall = await nativeCodePush.isFailedUpdate(remotePackage.packageHash);
     return remotePackage;
   }
 }
@@ -258,7 +288,12 @@ const getConfiguration = (() => {
     } else if (testConfig) {
       return testConfig;
     } else {
-      config = await NativeCodePush.getConfiguration();
+      const nativeCodePush = getNativeCodePush();
+      if (!nativeCodePush) {
+        throw new Error("The CodePush native module isn't available yet.");
+      }
+
+      config = await nativeCodePush.getConfiguration();
       return config;
     }
   }
@@ -269,11 +304,17 @@ async function getCurrentPackage() {
 }
 
 async function getUpdateMetadata(updateState) {
-  let updateMetadata = await NativeCodePush.getUpdateMetadata(updateState || CodePush.UpdateState.RUNNING);
+  const nativeCodePush = getNativeCodePush();
+  const packageMixins = getPackageMixins();
+  if (!nativeCodePush || !packageMixins) {
+    return null;
+  }
+
+  let updateMetadata = await nativeCodePush.getUpdateMetadata(updateState || CodePush.UpdateState.RUNNING);
   if (updateMetadata) {
-    updateMetadata = { ...PackageMixins.local, ...updateMetadata };
-    updateMetadata.failedInstall = await NativeCodePush.isFailedUpdate(updateMetadata.packageHash);
-    updateMetadata.isFirstRun = await NativeCodePush.isFirstRun(updateMetadata.packageHash);
+    updateMetadata = { ...packageMixins.local, ...updateMetadata };
+    updateMetadata.failedInstall = await nativeCodePush.isFailedUpdate(updateMetadata.packageHash);
+    updateMetadata.isFirstRun = await nativeCodePush.isFirstRun(updateMetadata.packageHash);
   }
   return updateMetadata;
 }
@@ -292,14 +333,27 @@ const notifyApplicationReady = (() => {
 })();
 
 async function notifyApplicationReadyInternal() {
-  await NativeCodePush.notifyApplicationReady();
-  const statusReport = await NativeCodePush.getNewStatusReport();
+  const nativeCodePush = getNativeCodePush();
+  if (!nativeCodePush) {
+    logMissingNativeModule();
+    return null;
+  }
+
+  await nativeCodePush.notifyApplicationReady();
+  const statusReport = await nativeCodePush.getNewStatusReport();
   statusReport && tryReportStatus(statusReport); // Don't wait for this to complete.
 
   return statusReport;
 }
 
 async function tryReportStatus(statusReport, retryOnAppResume) {
+  const nativeCodePush = getNativeCodePush();
+  if (!nativeCodePush) {
+    logMissingNativeModule();
+    retryOnAppResume && retryOnAppResume.remove();
+    return;
+  }
+
   try {
     if (statusReport.appVersion) {
       log(`Reporting binary update (${statusReport.appVersion})`);
@@ -310,22 +364,27 @@ async function tryReportStatus(statusReport, retryOnAppResume) {
         sharedCodePushOptions?.onUpdateSuccess?.(label);
       } else {
         log(`Reporting CodePush update rollback (${label})`);
-        await NativeCodePush.setLatestRollbackInfo(statusReport.package.packageHash);
+        await nativeCodePush.setLatestRollbackInfo(statusReport.package.packageHash);
         sharedCodePushOptions?.onUpdateRollback?.(label);
       }
     }
 
-    NativeCodePush.recordStatusReported(statusReport);
+    nativeCodePush.recordStatusReported(statusReport);
     retryOnAppResume && retryOnAppResume.remove();
   } catch (e) {
     log(`${e}`)
     log(`Report status failed: ${JSON.stringify(statusReport)}`);
-    NativeCodePush.saveStatusReportForRetry(statusReport);
+    nativeCodePush.saveStatusReportForRetry(statusReport);
     // Try again when the app resumes
     if (!retryOnAppResume) {
       const resumeListener = AppState.addEventListener("change", async (newState) => {
         if (newState !== "active") return;
-        const refreshedStatusReport = await NativeCodePush.getNewStatusReport();
+        const refreshedNativeCodePush = getNativeCodePush();
+        if (!refreshedNativeCodePush) {
+          return;
+        }
+
+        const refreshedStatusReport = await refreshedNativeCodePush.getNewStatusReport();
         if (refreshedStatusReport) {
           tryReportStatus(refreshedStatusReport, resumeListener);
         } else {
@@ -358,7 +417,12 @@ async function shouldUpdateBeIgnored(remotePackage, syncOptions) {
     return true;
   }
 
-  const latestRollbackInfo = await NativeCodePush.getLatestRollbackInfo();
+  const nativeCodePush = getNativeCodePush();
+  if (!nativeCodePush) {
+    return true;
+  }
+
+  const latestRollbackInfo = await nativeCodePush.getLatestRollbackInfo();
   if (!validateLatestRollbackInfo(latestRollbackInfo, remotePackage.packageHash)) {
     log("The latest rollback info is not valid.");
     return true;
@@ -407,11 +471,20 @@ let testConfig;
 function setUpTestDependencies(testSdk, providedTestConfig, testNativeBridge) {
   if (testSdk) module.exports.AcquisitionSdk = testSdk;
   if (providedTestConfig) testConfig = providedTestConfig;
-  if (testNativeBridge) NativeCodePush = testNativeBridge;
+  if (testNativeBridge) {
+    NativeCodePush = testNativeBridge;
+    PackageMixins = require("./package-mixins")(NativeCodePush);
+  }
 }
 
 async function restartApp(onlyIfUpdateIsPending = false) {
-  NativeCodePush.restartApp(onlyIfUpdateIsPending);
+  const nativeCodePush = getNativeCodePush();
+  if (!nativeCodePush) {
+    logMissingNativeModule();
+    return;
+  }
+
+  nativeCodePush.restartApp(onlyIfUpdateIsPending);
 }
 
 // This function allows only one syncInternal operation to proceed at any given time.
@@ -817,76 +890,88 @@ function codePushify(options = {}) {
   }
 }
 
-// If the "NativeCodePush" variable isn't defined, then
-// the app didn't properly install the native module,
-// and therefore, it doesn't make sense initializing
-// the JS interface when it wouldn't work anyways.
-if (NativeCodePush) {
-  CodePush = codePushify;
-  Object.assign(CodePush, {
-    checkForUpdate,
-    getConfiguration,
-    getCurrentPackage,
-    getUpdateMetadata,
-    log,
-    notifyAppReady: notifyApplicationReady,
-    notifyApplicationReady,
-    restartApp,
-    setUpTestDependencies,
-    sync,
-    disallowRestart: NativeCodePush.disallow,
-    allowRestart: NativeCodePush.allow,
-    clearUpdates: NativeCodePush.clearUpdates,
-    InstallMode: {
-      IMMEDIATE: NativeCodePush.codePushInstallModeImmediate, // Restart the app immediately
-      ON_NEXT_RESTART: NativeCodePush.codePushInstallModeOnNextRestart, // Don't artificially restart the app. Allow the update to be "picked up" on the next app restart
-      ON_NEXT_RESUME: NativeCodePush.codePushInstallModeOnNextResume, // Restart the app the next time it is resumed from the background
-      ON_NEXT_SUSPEND: NativeCodePush.codePushInstallModeOnNextSuspend, // Restart the app _while_ it is in the background,
-      // but only after it has been in the background for "minimumBackgroundDuration" seconds (0 by default),
-      // so that user context isn't lost unless the app suspension is long enough to not matter
-    },
-    SyncStatus: {
-      UP_TO_DATE: 0, // The running app is up-to-date
-      UPDATE_INSTALLED: 1, // The app had an optional/mandatory update that was successfully downloaded and is about to be installed.
-      UPDATE_IGNORED: 2, // The app had an optional update and the end-user chose to ignore it
-      UNKNOWN_ERROR: 3,
-      SYNC_IN_PROGRESS: 4, // There is an ongoing "sync" operation in progress.
-      CHECKING_FOR_UPDATE: 5,
-      AWAITING_USER_ACTION: 6,
-      DOWNLOADING_PACKAGE: 7,
-      INSTALLING_UPDATE: 8,
-    },
-    CheckFrequency: {
-      ON_APP_START: 0,
-      ON_APP_RESUME: 1,
-      MANUAL: 2,
-    },
-    UpdateState: {
-      RUNNING: NativeCodePush.codePushUpdateStateRunning,
-      PENDING: NativeCodePush.codePushUpdateStatePending,
-      LATEST: NativeCodePush.codePushUpdateStateLatest,
-    },
-    DeploymentStatus: {
-      FAILED: "DeploymentFailed",
-      SUCCEEDED: "DeploymentSucceeded",
-    },
-    DEFAULT_UPDATE_DIALOG: {
-      appendReleaseDescription: false,
-      descriptionPrefix: " Description: ",
-      mandatoryContinueButtonLabel: "Continue",
-      mandatoryUpdateMessage: "An update is available that must be installed.",
-      optionalIgnoreButtonLabel: "Ignore",
-      optionalInstallButtonLabel: "Install",
-      optionalUpdateMessage: "An update is available. Would you like to install it?",
-      title: "Update available",
-    },
-    DEFAULT_ROLLBACK_RETRY_OPTIONS: {
-      delayInHours: 24,
-      maxRetryAttempts: 1,
-    },
-  });
-} else {
-  log("The CodePush module doesn't appear to be properly installed. Please double-check that everything is setup correctly.");
-}
+CodePush = codePushify;
+Object.assign(CodePush, {
+  checkForUpdate,
+  getConfiguration,
+  getCurrentPackage,
+  getUpdateMetadata,
+  log,
+  notifyAppReady: notifyApplicationReady,
+  notifyApplicationReady,
+  restartApp,
+  setUpTestDependencies,
+  sync,
+  disallowRestart: () => {
+    const nativeCodePush = getNativeCodePush();
+    if (!nativeCodePush) {
+      logMissingNativeModule();
+      return;
+    }
+
+    return nativeCodePush.disallow();
+  },
+  allowRestart: () => {
+    const nativeCodePush = getNativeCodePush();
+    if (!nativeCodePush) {
+      logMissingNativeModule();
+      return;
+    }
+
+    return nativeCodePush.allow();
+  },
+  clearUpdates: () => {
+    const nativeCodePush = getNativeCodePush();
+    if (!nativeCodePush) {
+      logMissingNativeModule();
+      return;
+    }
+
+    return nativeCodePush.clearUpdates();
+  },
+  InstallMode: {
+    IMMEDIATE: InstallMode.IMMEDIATE, // Restart the app immediately
+    ON_NEXT_RESTART: InstallMode.ON_NEXT_RESTART, // Don't artificially restart the app. Allow the update to be "picked up" on the next app restart
+    ON_NEXT_RESUME: InstallMode.ON_NEXT_RESUME, // Restart the app the next time it is resumed from the background
+    ON_NEXT_SUSPEND: InstallMode.ON_NEXT_SUSPEND, // Restart the app _while_ it is in the background,
+    // but only after it has been in the background for "minimumBackgroundDuration" seconds (0 by default),
+    // so that user context isn't lost unless the app suspension is long enough to not matter
+  },
+  SyncStatus: {
+    UP_TO_DATE: 0, // The running app is up-to-date
+    UPDATE_INSTALLED: 1, // The app had an optional/mandatory update that was successfully downloaded and is about to be installed.
+    UPDATE_IGNORED: 2, // The app had an optional update and the end-user chose to ignore it
+    UNKNOWN_ERROR: 3,
+    SYNC_IN_PROGRESS: 4, // There is an ongoing "sync" operation in progress.
+    CHECKING_FOR_UPDATE: 5,
+    AWAITING_USER_ACTION: 6,
+    DOWNLOADING_PACKAGE: 7,
+    INSTALLING_UPDATE: 8,
+  },
+  CheckFrequency: {
+    ON_APP_START: 0,
+    ON_APP_RESUME: 1,
+    MANUAL: 2,
+  },
+  UpdateState,
+  DeploymentStatus: {
+    FAILED: "DeploymentFailed",
+    SUCCEEDED: "DeploymentSucceeded",
+  },
+  DEFAULT_UPDATE_DIALOG: {
+    appendReleaseDescription: false,
+    descriptionPrefix: " Description: ",
+    mandatoryContinueButtonLabel: "Continue",
+    mandatoryUpdateMessage: "An update is available that must be installed.",
+    optionalIgnoreButtonLabel: "Ignore",
+    optionalInstallButtonLabel: "Install",
+    optionalUpdateMessage: "An update is available. Would you like to install it?",
+    title: "Update available",
+  },
+  DEFAULT_ROLLBACK_RETRY_OPTIONS: {
+    delayInHours: 24,
+    maxRetryAttempts: 1,
+  },
+});
 
 module.exports = CodePush;

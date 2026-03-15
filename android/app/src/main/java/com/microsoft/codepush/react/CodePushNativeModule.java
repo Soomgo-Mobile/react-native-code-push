@@ -2,7 +2,6 @@ package com.microsoft.codepush.react;
 
 import android.app.Activity;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -20,11 +19,11 @@ import com.facebook.react.bridge.JSBundleLoader;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.common.annotations.UnstableReactNativeAPI;
+import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.modules.core.ReactChoreographer;
 import com.facebook.react.runtime.ReactHostDelegate;
@@ -37,15 +36,19 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class CodePushNativeModule extends ReactContextBaseJavaModule {
+@ReactModule(name = CodePushNativeModule.NAME)
+public class CodePushNativeModule extends NativeCodePushSpec {
+    public static final String NAME = "CodePush";
+
     private String mBinaryContentsHash = null;
     private String mClientUniqueId = null;
     private LifecycleEventListener mLifecycleEventListener = null;
     private int mMinimumBackgroundDuration = 0;
+    private final ExecutorService mBackgroundExecutor = Executors.newSingleThreadExecutor();
 
     private CodePush mCodePush;
     private SettingsManager mSettingsManager;
@@ -76,24 +79,15 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
     }
 
     @Override
-    public Map<String, Object> getConstants() {
-        final Map<String, Object> constants = new HashMap<>();
-
-        constants.put("codePushInstallModeImmediate", CodePushInstallMode.IMMEDIATE.getValue());
-        constants.put("codePushInstallModeOnNextRestart", CodePushInstallMode.ON_NEXT_RESTART.getValue());
-        constants.put("codePushInstallModeOnNextResume", CodePushInstallMode.ON_NEXT_RESUME.getValue());
-        constants.put("codePushInstallModeOnNextSuspend", CodePushInstallMode.ON_NEXT_SUSPEND.getValue());
-
-        constants.put("codePushUpdateStateRunning", CodePushUpdateState.RUNNING.getValue());
-        constants.put("codePushUpdateStatePending", CodePushUpdateState.PENDING.getValue());
-        constants.put("codePushUpdateStateLatest", CodePushUpdateState.LATEST.getValue());
-
-        return constants;
+    public String getName() {
+        return NAME;
     }
 
     @Override
-    public String getName() {
-        return "CodePush";
+    public void invalidate() {
+        clearLifecycleEventListener();
+        mBackgroundExecutor.shutdownNow();
+        super.invalidate();
     }
 
     private void loadBundleLegacy() {
@@ -265,6 +259,21 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
         return null;
     }
 
+    private void executeInBackground(Runnable runnable) {
+        mBackgroundExecutor.execute(runnable);
+    }
+
+    private void emitDownloadProgressEvent(DownloadProgress downloadProgress) {
+        if (mEventEmitterCallback != null) {
+            emitOnDownloadProgress(downloadProgress.createWritableMap());
+            return;
+        }
+
+        getReactApplicationContext()
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit(CodePushConstants.DOWNLOAD_PROGRESS_EVENT_NAME, downloadProgress.createWritableMap());
+    }
+
     private void restartAppInternal(boolean onlyIfUpdateIsPending) {
         if (this._restartInProgress) {
             CodePushUtils.log("Restart request queued until the current restart is completed");
@@ -292,7 +301,7 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void allow(Promise promise) {
+    public void allow() {
         CodePushUtils.log("Re-allowing restarts");
         this._allowed = true;
 
@@ -302,42 +311,29 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
             this._restartQueue.remove(0);
             this.restartAppInternal(buf);
         }
-
-        promise.resolve(null);
-        return;
     }
 
     @ReactMethod
-    public void clearPendingRestart(Promise promise) {
+    public void clearPendingRestart() {
         this._restartQueue.clear();
-        promise.resolve(null);
-        return;
     }
 
     @ReactMethod
-    public void disallow(Promise promise) {
+    public void disallow() {
         CodePushUtils.log("Disallowing restarts");
         this._allowed = false;
-        promise.resolve(null);
-        return;
     }
 
     @ReactMethod
-    public void restartApp(boolean onlyIfUpdateIsPending, Promise promise) {
-        try {
-            restartAppInternal(onlyIfUpdateIsPending);
-            promise.resolve(null);
-        } catch(CodePushUnknownException e) {
-            CodePushUtils.log(e);
-            promise.reject(e);
-        }
+    public void restartApp(boolean onlyIfUpdateIsPending) {
+        restartAppInternal(onlyIfUpdateIsPending);
     }
 
     @ReactMethod
     public void downloadUpdate(final ReadableMap updatePackage, final boolean notifyProgress, final Promise promise) {
-        AsyncTask<Void, Void, Void> asyncTask = new AsyncTask<Void, Void, Void>() {
+        executeInBackground(new Runnable() {
             @Override
-            protected Void doInBackground(Void... params) {
+            public void run() {
                 try {
                     JSONObject mutableUpdatePackage = CodePushUtils.convertReadableToJsonObject(updatePackage);
                     mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
@@ -351,7 +347,6 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                             }
 
                             latestDownloadProgress = downloadProgress;
-                            // If the download is completed, synchronously send the last event.
                             if (latestDownloadProgress.isCompleted()) {
                                 dispatchDownloadProgressEvent();
                                 return;
@@ -365,24 +360,25 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                             getReactApplicationContext().runOnUiQueueThread(new Runnable() {
                                 @Override
                                 public void run() {
-                                    ReactChoreographer.getInstance().postFrameCallback(ReactChoreographer.CallbackType.TIMERS_EVENTS, new Choreographer.FrameCallback() {
-                                        @Override
-                                        public void doFrame(long frameTimeNanos) {
-                                            if (!latestDownloadProgress.isCompleted()) {
-                                                dispatchDownloadProgressEvent();
-                                            }
+                                    ReactChoreographer.getInstance().postFrameCallback(
+                                            ReactChoreographer.CallbackType.TIMERS_EVENTS,
+                                            new Choreographer.FrameCallback() {
+                                                @Override
+                                                public void doFrame(long frameTimeNanos) {
+                                                    if (!latestDownloadProgress.isCompleted()) {
+                                                        dispatchDownloadProgressEvent();
+                                                    }
 
-                                            hasScheduledNextFrame = false;
-                                        }
-                                    });
+                                                    hasScheduledNextFrame = false;
+                                                }
+                                            }
+                                    );
                                 }
                             });
                         }
 
                         public void dispatchDownloadProgressEvent() {
-                            getReactApplicationContext()
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit(CodePushConstants.DOWNLOAD_PROGRESS_EVENT_NAME, latestDownloadProgress.createWritableMap());
+                            emitDownloadProgressEvent(latestDownloadProgress);
                         }
                     });
 
@@ -396,12 +392,8 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                     CodePushUtils.log(e);
                     promise.reject(e);
                 }
-
-                return null;
             }
-        };
-
-        asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        });
     }
 
     @ReactMethod
@@ -426,16 +418,17 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void getUpdateMetadata(final int updateState, final Promise promise) {
-        AsyncTask<Void, Void, Void> asyncTask = new AsyncTask<Void, Void, Void>() {
+    public void getUpdateMetadata(final double updateStateValue, final Promise promise) {
+        executeInBackground(new Runnable() {
             @Override
-            protected Void doInBackground(Void... params) {
+            public void run() {
                 try {
+                    int updateState = (int) updateStateValue;
                     JSONObject currentPackage = mUpdateManager.getCurrentPackage();
 
                     if (currentPackage == null) {
                         promise.resolve(null);
-                        return null;
+                        return;
                     }
 
                     Boolean currentUpdateIsPending = false;
@@ -446,38 +439,25 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                     }
 
                     if (updateState == CodePushUpdateState.PENDING.getValue() && !currentUpdateIsPending) {
-                        // The caller wanted a pending update
-                        // but there isn't currently one.
                         promise.resolve(null);
                     } else if (updateState == CodePushUpdateState.RUNNING.getValue() && currentUpdateIsPending) {
-                        // The caller wants the running update, but the current
-                        // one is pending, so we need to grab the previous.
                         JSONObject previousPackage = mUpdateManager.getPreviousPackage();
 
                         if (previousPackage == null) {
                             promise.resolve(null);
-                            return null;
+                            return;
                         }
 
                         promise.resolve(CodePushUtils.convertJsonObjectToWritable(previousPackage));
                     } else {
-                        // The current package satisfies the request:
-                        // 1) Caller wanted a pending, and there is a pending update
-                        // 2) Caller wanted the running update, and there isn't a pending
-                        // 3) Caller wants the latest update, regardless if it's pending or not
                         if (mCodePush.isRunningBinaryVersion()) {
-                            // This only matters in Debug builds. Since we do not clear "outdated" updates,
-                            // we need to indicate to the JS side that somehow we have a current update on
-                            // disk that is not actually running.
                             CodePushUtils.setJSONValueForKey(currentPackage, "_isDebugOnly", true);
                         }
 
-                        // Enable differentiating pending vs. non-pending updates
                         CodePushUtils.setJSONValueForKey(currentPackage, "isPending", currentUpdateIsPending);
                         promise.resolve(CodePushUtils.convertJsonObjectToWritable(currentPackage));
                     }
                 } catch (CodePushMalformedDataException e) {
-                    // We need to recover the app in case 'codepush.json' is corrupted
                     CodePushUtils.log(e.getMessage());
                     clearUpdates();
                     promise.resolve(null);
@@ -485,19 +465,15 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                     CodePushUtils.log(e);
                     promise.reject(e);
                 }
-
-                return null;
             }
-        };
-
-        asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        });
     }
 
     @ReactMethod
     public void getNewStatusReport(final Promise promise) {
-        AsyncTask<Void, Void, Void> asyncTask = new AsyncTask<Void, Void, Void>() {
+        executeInBackground(new Runnable() {
             @Override
-            protected Void doInBackground(Void... params) {
+            public void run() {
                 try {
                     if (mCodePush.needToReportRollback()) {
                         mCodePush.setNeedToReportRollback(false);
@@ -509,7 +485,7 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                                 WritableMap failedStatusReport = mTelemetryManager.getRollbackReport(lastFailedPackage);
                                 if (failedStatusReport != null) {
                                     promise.resolve(failedStatusReport);
-                                    return null;
+                                    return;
                                 }
                             } catch (JSONException e) {
                                 throw new CodePushUnknownException("Unable to read failed updates information stored in SharedPreferences.", e);
@@ -521,41 +497,40 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                             WritableMap newPackageStatusReport = mTelemetryManager.getUpdateReport(CodePushUtils.convertJsonObjectToWritable(currentPackage));
                             if (newPackageStatusReport != null) {
                                 promise.resolve(newPackageStatusReport);
-                                return null;
+                                return;
                             }
                         }
                     } else if (mCodePush.isRunningBinaryVersion()) {
                         WritableMap newAppVersionStatusReport = mTelemetryManager.getBinaryUpdateReport(mCodePush.getAppVersion());
                         if (newAppVersionStatusReport != null) {
                             promise.resolve(newAppVersionStatusReport);
-                            return null;
+                            return;
                         }
                     } else {
                         WritableMap retryStatusReport = mTelemetryManager.getRetryStatusReport();
                         if (retryStatusReport != null) {
                             promise.resolve(retryStatusReport);
-                            return null;
+                            return;
                         }
                     }
 
-                    promise.resolve("");
+                    promise.resolve(null);
                 } catch(CodePushUnknownException e) {
                     CodePushUtils.log(e);
                     promise.reject(e);
                 }
-                return null;
             }
-        };
-
-        asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        });
     }
 
     @ReactMethod
-    public void installUpdate(final ReadableMap updatePackage, final int installMode, final int minimumBackgroundDuration, final Promise promise) {
-        AsyncTask<Void, Void, Void> asyncTask = new AsyncTask<Void, Void, Void>() {
+    public void installUpdate(final ReadableMap updatePackage, final double installModeValue, final double minimumBackgroundDurationValue, final Promise promise) {
+        executeInBackground(new Runnable() {
             @Override
-            protected Void doInBackground(Void... params) {
+            public void run() {
                 try {
+                    int installMode = (int) installModeValue;
+                    int minimumBackgroundDuration = (int) minimumBackgroundDurationValue;
                     mUpdateManager.installPackage(CodePushUtils.convertReadableToJsonObject(updatePackage), mSettingsManager.isPendingUpdate(null));
 
                     String pendingHash = CodePushUtils.tryGetString(updatePackage, CodePushConstants.PACKAGE_HASH_KEY);
@@ -565,20 +540,12 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                         mSettingsManager.savePendingUpdate(pendingHash, /* isLoading */false);
                     }
 
-                    if (installMode == CodePushInstallMode.ON_NEXT_RESUME.getValue() ||
-                        // We also add the resume listener if the installMode is IMMEDIATE, because
-                        // if the current activity is backgrounded, we want to reload the bundle when
-                        // it comes back into the foreground.
-                        installMode == CodePushInstallMode.IMMEDIATE.getValue() ||
-                        installMode == CodePushInstallMode.ON_NEXT_SUSPEND.getValue()) {
-
-                        // Store the minimum duration on the native module as an instance
-                        // variable instead of relying on a closure below, so that any
-                        // subsequent resume-based installs could override it.
+                    if (installMode == CodePushInstallMode.ON_NEXT_RESUME.getValue()
+                            || installMode == CodePushInstallMode.IMMEDIATE.getValue()
+                            || installMode == CodePushInstallMode.ON_NEXT_SUSPEND.getValue()) {
                         CodePushNativeModule.this.mMinimumBackgroundDuration = minimumBackgroundDuration;
 
                         if (mLifecycleEventListener == null) {
-                            // Ensure we do not add the listener twice.
                             mLifecycleEventListener = new LifecycleEventListener() {
                                 private Date lastPausedDate = null;
                                 private Handler appSuspendHandler = new Handler(Looper.getMainLooper());
@@ -593,8 +560,6 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                                 @Override
                                 public void onHostResume() {
                                     appSuspendHandler.removeCallbacks(loadBundleRunnable);
-                                    // As of RN 36, the resume handler fires immediately if the app is in
-                                    // the foreground, so explicitly wait for it to be backgrounded first
                                     if (lastPausedDate != null) {
                                         long durationInBackground = (new Date().getTime() - lastPausedDate.getTime()) / 1000;
                                         if (installMode == CodePushInstallMode.IMMEDIATE.getValue()
@@ -607,8 +572,6 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
 
                                 @Override
                                 public void onHostPause() {
-                                    // Save the current time so that when the app is later
-                                    // resumed, we can detect how long it was in the background.
                                     lastPausedDate = new Date();
 
                                     if (installMode == CodePushInstallMode.ON_NEXT_SUSPEND.getValue() && mSettingsManager.isPendingUpdate(null)) {
@@ -625,17 +588,13 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                         }
                     }
 
-                    promise.resolve("");
+                    promise.resolve(null);
                 } catch(CodePushUnknownException e) {
                     CodePushUtils.log(e);
                     promise.reject(e);
                 }
-
-                return null;
             }
-        };
-
-        asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        });
     }
 
     @ReactMethod
@@ -692,7 +651,7 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
     public void notifyApplicationReady(Promise promise) {
         try {
             mSettingsManager.removePendingUpdate();
-            promise.resolve("");
+            promise.resolve(null);
         } catch(CodePushUnknownException e) {
             CodePushUtils.log(e);
             promise.reject(e);
