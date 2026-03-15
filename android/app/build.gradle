@@ -1,9 +1,16 @@
 apply plugin: "com.android.library"
+apply plugin: "com.facebook.react"
 
 def DEFAULT_COMPILE_SDK_VERSION = 26
 def DEFAULT_BUILD_TOOLS_VERSION = "26.0.3"
 def DEFAULT_TARGET_SDK_VERSION = 26
 def DEFAULT_MIN_SDK_VERSION = 16
+
+react {
+    jsRootDir = file("../..")
+    libraryName = "RNCodePushSpec"
+    codegenJavaPackageName = "com.microsoft.codepush.react"
+}
 
 android {
     namespace "com.microsoft.codepush.react"

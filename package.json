@@ -6,6 +6,19 @@
   "react-native": "src/CodePush.js",
   "source": "src/CodePush.js",
   "types": "typings/react-native-code-push.d.ts",
+  "codegenConfig": {
+    "name": "RNCodePushSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/specs",
+    "android": {
+      "javaPackageName": "com.microsoft.codepush.react"
+    },
+    "ios": {
+      "modulesProvider": {
+        "CodePush": "CodePush"
+      }
+    }
+  },
   "homepage": "https://microsoft.github.io/code-push",
   "keywords": [
     "react-native",

@@ -8,7 +8,11 @@
 
 #import "CodePush.h"
 
-@interface CodePush () <RCTBridgeModule, RCTFrameUpdateObserver>
+@interface CodePush () <RCTFrameUpdateObserver
+#ifdef RCT_NEW_ARCH_ENABLED
+, NativeCodePushSpec
+#endif
+>
 @end
 
 @implementation CodePush {
@@ -62,6 +66,7 @@ static NSString *const PackageIsPendingKey = @"isPending";
 static BOOL isRunningBinaryVersion = NO;
 static BOOL needToReportRollback = NO;
 static BOOL testConfigurationFlag = NO;
+static BOOL hasInitializedUpdateAfterRestartForCurrentLoad = NO;
 
 // These values are used to save the NS bundle, name, extension and subdirectory
 // for the JS bundle in the binary.
@@ -246,6 +251,9 @@ static NSString *const LatestRollbackCountKey = @"count";
 
 #pragma mark - Private API methods
 
+#ifdef RCT_NEW_ARCH_ENABLED
+@synthesize bridge = _bridge;
+#endif
 @synthesize methodQueue = _methodQueue;
 @synthesize pauseCallback = _pauseCallback;
 @synthesize paused = _paused;
@@ -269,7 +277,7 @@ static NSString *const LatestRollbackCountKey = @"count";
 - (void)clearDebugUpdates
 {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if ([super.bridge.bundleURL.scheme hasPrefix:@"http"]) {
+        if ([self.bridge.bundleURL.scheme hasPrefix:@"http"]) {
             NSError *error;
             NSString *binaryAppVersion = [[CodePushConfig current] appVersion];
             NSDictionary *currentPackageMetadata = [CodePushPackage getCurrentPackage:&error];
@@ -282,28 +290,6 @@ static NSString *const LatestRollbackCountKey = @"count";
         }
     });
 }
-
-/*
- * This method is used by the React Native bridge to allow
- * our plugin to expose constants to the JS-side. In our case
- * we're simply exporting enum values so that the JS and Native
- * sides of the plugin can be in sync.
- */
-- (NSDictionary *)constantsToExport
-{
-    // Export the values of the CodePushInstallMode and CodePushUpdateState
-    // enums so that the script-side can easily stay in sync
-    return @{
-             @"codePushInstallModeOnNextRestart":@(CodePushInstallModeOnNextRestart),
-             @"codePushInstallModeImmediate": @(CodePushInstallModeImmediate),
-             @"codePushInstallModeOnNextResume": @(CodePushInstallModeOnNextResume),
-             @"codePushInstallModeOnNextSuspend": @(CodePushInstallModeOnNextSuspend),
-
-             @"codePushUpdateStateRunning": @(CodePushUpdateStateRunning),
-             @"codePushUpdateStatePending": @(CodePushUpdateStatePending),
-             @"codePushUpdateStateLatest": @(CodePushUpdateStateLatest)
-            };
-};
 
 + (BOOL)requiresMainQueueSetup
 {
@@ -318,14 +304,16 @@ static NSString *const LatestRollbackCountKey = @"count";
 }
 
 - (void)dispatchDownloadProgressEvent {
-  // Notify the script-side about the progress
-  [self sendEventWithName:DownloadProgressEvent
-                     body:@{
-                       @"totalBytes" : [NSNumber
-                           numberWithLongLong:_latestExpectedContentLength],
-                       @"receivedBytes" : [NSNumber
-                           numberWithLongLong:_latestReceivedConentLength]
-                     }];
+  NSDictionary *progress = @{
+    @"totalBytes" : [NSNumber numberWithLongLong:_latestExpectedContentLength],
+    @"receivedBytes" : [NSNumber numberWithLongLong:_latestReceivedConentLength]
+  };
+
+#ifndef RCT_NEW_ARCH_ENABLED
+  [self sendEventWithName:DownloadProgressEvent body:progress];
+#else
+  [self emitOnDownloadProgress:progress];
+#endif
 }
 
 - (void)dispatchThrottledDownloadProgressEventWithForce:(BOOL)force
@@ -385,7 +373,12 @@ static NSString *const LatestRollbackCountKey = @"count";
 
     self = [super init];
     if (self) {
-        [self initializeUpdateAfterRestart];
+        @synchronized([CodePush class]) {
+            if (!hasInitializedUpdateAfterRestartForCurrentLoad) {
+                hasInitializedUpdateAfterRestartForCurrentLoad = YES;
+                [self initializeUpdateAfterRestart];
+            }
+        }
     }
 
     return self;
@@ -535,6 +528,10 @@ static NSString *const LatestRollbackCountKey = @"count";
  */
 - (void)loadBundle
 {
+    @synchronized([CodePush class]) {
+        hasInitializedUpdateAfterRestartForCurrentLoad = NO;
+    }
+
     // This needs to be async dispatched because the bridge is not set on init
     // when the app first starts, therefore rollbacks will not take effect.
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -542,8 +539,8 @@ static NSString *const LatestRollbackCountKey = @"count";
         // is debugging and therefore, shouldn't be redirected to a local
         // file (since Chrome wouldn't support it). Otherwise, update
         // the current bundle URL to point at the latest update
-        if ([CodePush isUsingTestConfiguration] || ![super.bridge.bundleURL.scheme hasPrefix:@"http"]) {
-            [super.bridge setValue:[CodePush bundleURL] forKey:@"bundleURL"];
+        if ([CodePush isUsingTestConfiguration] || ![self.bridge.bundleURL.scheme hasPrefix:@"http"]) {
+            [self.bridge setValue:[CodePush bundleURL] forKey:@"bundleURL"];
         }
 
         RCTTriggerReloadCommandListeners(@"CodePush reload");
@@ -713,8 +710,8 @@ static NSString *const LatestRollbackCountKey = @"count";
  */
 RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
                   notifyProgress:(BOOL)notifyProgress
-                        resolver:(RCTPromiseResolveBlock)resolve
-                        rejecter:(RCTPromiseRejectBlock)reject)
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject)
 {
     NSDictionary *mutableUpdatePackage = [updatePackage mutableCopy];
     NSURL *binaryBundleURL = [CodePush binaryBundleURL];
@@ -813,7 +810,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
  * app version, as well as the deployment key that was configured in the Info.plist file.
  */
 RCT_EXPORT_METHOD(getConfiguration:(RCTPromiseResolveBlock)resolve
-                          rejecter:(RCTPromiseRejectBlock)reject)
+                            reject:(RCTPromiseRejectBlock)reject)
 {
     NSDictionary *configuration = [[CodePushConfig current] configuration];
     NSError *error;
@@ -846,10 +843,11 @@ RCT_EXPORT_METHOD(getConfiguration:(RCTPromiseResolveBlock)resolve
 /*
  * This method is the native side of the CodePush.getUpdateMetadata method.
  */
-RCT_EXPORT_METHOD(getUpdateMetadata:(CodePushUpdateState)updateState
-                           resolver:(RCTPromiseResolveBlock)resolve
-                           rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(getUpdateMetadata:(double)updateStateValue
+                            resolve:(RCTPromiseResolveBlock)resolve
+                             reject:(RCTPromiseRejectBlock)reject)
 {
+    CodePushUpdateState updateState = (CodePushUpdateState)updateStateValue;
     NSError *error;
     NSMutableDictionary *package = [[CodePushPackage getCurrentPackage:&error] mutableCopy];
 
@@ -895,11 +893,13 @@ RCT_EXPORT_METHOD(getUpdateMetadata:(CodePushUpdateState)updateState
  * This method is the native side of the LocalPackage.install method.
  */
 RCT_EXPORT_METHOD(installUpdate:(NSDictionary*)updatePackage
-                    installMode:(CodePushInstallMode)installMode
-      minimumBackgroundDuration:(int)minimumBackgroundDuration
-                       resolver:(RCTPromiseResolveBlock)resolve
-                       rejecter:(RCTPromiseRejectBlock)reject)
+                    installMode:(double)installModeValue
+      minimumBackgroundDuration:(double)minimumBackgroundDurationValue
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject)
 {
+    CodePushInstallMode installMode = (CodePushInstallMode)installModeValue;
+    int minimumBackgroundDuration = (int)minimumBackgroundDurationValue;
     NSError *error;
     [CodePushPackage installPackage:updatePackage
                 removePendingUpdate:[[self class] isPendingUpdate:nil]
@@ -965,7 +965,7 @@ RCT_EXPORT_METHOD(setLatestRollbackInfo:(NSString *)packageHash
 
 
 RCT_EXPORT_METHOD(getLatestRollbackInfo:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
+                            reject:(RCTPromiseRejectBlock)reject)
 {
     NSDictionary *latestRollbackInfo = [[self class] getLatestRollbackInfo];
     resolve(latestRollbackInfo);
@@ -977,7 +977,7 @@ RCT_EXPORT_METHOD(getLatestRollbackInfo:(RCTPromiseResolveBlock)resolve
  */
 RCT_EXPORT_METHOD(isFirstRun:(NSString *)packageHash
                      resolve:(RCTPromiseResolveBlock)resolve
-                    rejecter:(RCTPromiseRejectBlock)reject)
+                      reject:(RCTPromiseRejectBlock)reject)
 {
     NSError *error;
     BOOL isFirstRun = _isFirstRunAfterUpdate
@@ -992,14 +992,13 @@ RCT_EXPORT_METHOD(isFirstRun:(NSString *)packageHash
  * This method is the native side of the CodePush.notifyApplicationReady() method.
  */
 RCT_EXPORT_METHOD(notifyApplicationReady:(RCTPromiseResolveBlock)resolve
-                                rejecter:(RCTPromiseRejectBlock)reject)
+                                  reject:(RCTPromiseRejectBlock)reject)
 {
     [CodePush removePendingUpdate];
     resolve(nil);
 }
 
-RCT_EXPORT_METHOD(allow:(RCTPromiseResolveBlock)resolve
-                    rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(allow)
 {
     CPLog(@"Re-allowing restarts.");
     _allowed = YES;
@@ -1010,34 +1009,25 @@ RCT_EXPORT_METHOD(allow:(RCTPromiseResolveBlock)resolve
         [_restartQueue removeObjectAtIndex:0];
         [self restartAppInternal:buf];
     }
-
-    resolve(nil);
 }
 
-RCT_EXPORT_METHOD(clearPendingRestart:(RCTPromiseResolveBlock)resolve
-                    rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(clearPendingRestart)
 {
     [_restartQueue removeAllObjects];
-    resolve(nil);
 }
 
-RCT_EXPORT_METHOD(disallow:(RCTPromiseResolveBlock)resolve
-                    rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(disallow)
 {
     CPLog(@"Disallowing restarts.");
     _allowed = NO;
-    resolve(nil);
 }
 
 /*
  * This method is the native side of the CodePush.restartApp() method.
  */
-RCT_EXPORT_METHOD(restartApp:(BOOL)onlyIfUpdateIsPending
-                     resolve:(RCTPromiseResolveBlock)resolve
-                    rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(restartApp:(BOOL)onlyIfUpdateIsPending)
 {
     [self restartAppInternal:onlyIfUpdateIsPending];
-    resolve(nil);
 }
 
 /*
@@ -1071,7 +1061,7 @@ RCT_EXPORT_METHOD(downloadAndReplaceCurrentBundle:(NSString *)remoteBundleUrl)
  * or an update failed) and return its details (version label, status).
  */
 RCT_EXPORT_METHOD(getNewStatusReport:(RCTPromiseResolveBlock)resolve
-                            rejecter:(RCTPromiseRejectBlock)reject)
+                              reject:(RCTPromiseRejectBlock)reject)
 {
     if (needToReportRollback) {
         needToReportRollback = NO;
@@ -1127,5 +1117,13 @@ RCT_EXPORT_METHOD(saveStatusReportForRetry:(NSDictionary *)statusReport)
     [self dispatchThrottledDownloadProgressEventWithForce:YES];
     _didUpdateProgress = NO;
 }
+
+#ifdef RCT_NEW_ARCH_ENABLED
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
+    (const facebook::react::ObjCTurboModule::InitParams &)params
+{
+    return std::make_shared<facebook::react::NativeCodePushSpecJSI>(params);
+}
+#endif
 
 @end

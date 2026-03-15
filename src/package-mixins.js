@@ -1,4 +1,3 @@
-import { NativeEventEmitter } from "react-native";
 import log from "./logging";
 
 // This function is used to augment remote and local
@@ -14,10 +13,7 @@ module.exports = (NativeCodePush) => {
 
         let downloadProgressSubscription;
         if (downloadProgressCallback) {
-          const codePushEventEmitter = new NativeEventEmitter(NativeCodePush);
-          // Use event subscription to obtain download progress.
-          downloadProgressSubscription = codePushEventEmitter.addListener(
-            "CodePushDownloadProgress",
+          downloadProgressSubscription = NativeCodePush.addDownloadProgressListener(
             downloadProgressCallback
           );
         }
@@ -41,12 +37,12 @@ module.exports = (NativeCodePush) => {
   };
 
   const local = {
-    async install(installMode = NativeCodePush.codePushInstallModeOnNextRestart, minimumBackgroundDuration = 0, updateInstalledCallback) {
+    async install(installMode = NativeCodePush.InstallMode.ON_NEXT_RESTART, minimumBackgroundDuration = 0, updateInstalledCallback) {
       const localPackage = this;
       const localPackageCopy = Object.assign({}, localPackage); // In dev mode, React Native deep freezes any object queued over the bridge
       await NativeCodePush.installUpdate(localPackageCopy, installMode, minimumBackgroundDuration);
       updateInstalledCallback && updateInstalledCallback();
-      if (installMode == NativeCodePush.codePushInstallModeImmediate) {
+      if (installMode == NativeCodePush.InstallMode.IMMEDIATE) {
         NativeCodePush.restartApp(false);
       } else {
         NativeCodePush.clearPendingRestart();
