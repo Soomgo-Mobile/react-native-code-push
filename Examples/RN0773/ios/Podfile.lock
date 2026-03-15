@@ -1,9 +1,6 @@
 PODS:
-  - Base64 (1.1.2)
   - boost (1.84.0)
-  - CodePush (12.3.1):
-    - Base64 (~> 1.1)
-    - JWT (~> 3.0.0-beta.12)
+  - CodePush (12.3.2):
     - React-Core
     - SSZipArchive (~> 2.5.5)
   - DoubleConversion (1.1.6)
@@ -14,8 +11,6 @@ PODS:
   - hermes-engine (0.77.3):
     - hermes-engine/Pre-built (= 0.77.3)
   - hermes-engine/Pre-built (0.77.3)
-  - JWT (3.0.0-beta.14):
-    - Base64 (~> 1.1.2)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -1651,8 +1646,6 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - Base64
-    - JWT
     - SocketRocket
     - SSZipArchive
 
@@ -1796,16 +1789,14 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  Base64: cecfb41a004124895a7bcee567a89bae5a89d49b
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
-  CodePush: da8426622788989a417be9250cdfcca18bea3966
+  CodePush: 65689ae1c412f20483f6488ed373e2688b6cf19d
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: 23d8c5470c648a635893dc0956c6dbaead54b656
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: eb93e2f488219332457c3c4eafd2738ddc7e80b8
   hermes-engine: b2187dbe13edb0db8fcb2a93a69c1987a30d98a4
-  JWT: ef71dfb03e1f842081e64dc42eef0e164f35d251
   RCT-Folly: 36fe2295e44b10d831836cc0d1daec5f8abcf809
   RCTDeprecation: 6ee92578d332db1d4e03267d3ae98bcf8b780863
   RCTRequired: 5b3da0e0f91fddda935574b81748c3e3d3649ee7

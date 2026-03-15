@@ -1,16 +1,11 @@
 PODS:
-  - Base64 (1.1.2)
-  - CodePush (12.3.1):
-    - Base64 (~> 1.1)
-    - JWT (~> 3.0.0-beta.12)
+  - CodePush (12.3.2):
     - React-Core
     - SSZipArchive (~> 2.5.5)
   - FBLazyVector (0.81.6)
   - hermes-engine (0.81.6):
     - hermes-engine/Pre-built (= 0.81.6)
   - hermes-engine/Pre-built (0.81.6)
-  - JWT (3.0.0-beta.14):
-    - Base64 (~> 1.1.2)
   - RCTDeprecation (0.81.6)
   - RCTRequired (0.81.6)
   - RCTTypeSafety (0.81.6):
@@ -1786,8 +1781,6 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - Base64
-    - JWT
     - SSZipArchive
 
 EXTERNAL SOURCES:
@@ -1932,11 +1925,9 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  Base64: cecfb41a004124895a7bcee567a89bae5a89d49b
-  CodePush: da8426622788989a417be9250cdfcca18bea3966
+  CodePush: 65689ae1c412f20483f6488ed373e2688b6cf19d
   FBLazyVector: 14ce6e3675cacb2683ad30272f04274a4ee5b67d
   hermes-engine: 7219f6e751ad6ec7f3d7ec121830ee34dae40749
-  JWT: ef71dfb03e1f842081e64dc42eef0e164f35d251
   RCTDeprecation: ff38238d8b6ddfe1fcfeb2718d1c14da9564c1c3
   RCTRequired: 5916f53ff05efcc2bf095b0de01a0e5b00112a55
   RCTTypeSafety: bfbd8d69504a7459a65040705fc6ce10806c383b
