@@ -1,5 +1,3 @@
-import log from "./logging";
-
 // This function is used to augment remote and local
 // package objects with additional functionality/properties
 // beyond what is included in the metadata sent by the server.
