@@ -82,6 +82,10 @@ async function main() {
   await resetWatchmanProject(repoRoot);
   await syncLocalLibraryIfAvailable(appPath, options.maestroOnly ?? false);
 
+  if (options.platform === "android" && !options.maestroOnly) {
+    invalidateAndroidAutolinkingArtifacts(appPath);
+  }
+
   const releaseIdentifier = getCodePushReleaseIdentifier(appPath);
   try {
     // 1. Prepare config
@@ -607,4 +611,26 @@ function syncLocalLibraryIfAvailable(appPath: string, maestroOnly: boolean): Pro
       }
     });
   });
+}
+
+function invalidateAndroidAutolinkingArtifacts(appPath: string): void {
+  const androidPath = path.join(appPath, "android");
+  const generatedPaths = [
+    path.join(androidPath, "build", "generated", "autolinking"),
+    path.join(androidPath, "app", "build", "generated", "autolinking"),
+  ];
+
+  let removedAny = false;
+  for (const generatedPath of generatedPaths) {
+    if (!fs.existsSync(generatedPath)) {
+      continue;
+    }
+
+    fs.rmSync(generatedPath, { recursive: true, force: true });
+    removedAny = true;
+  }
+
+  if (removedAny) {
+    console.log("[android-autolinking] cleared generated autolinking artifacts");
+  }
 }
