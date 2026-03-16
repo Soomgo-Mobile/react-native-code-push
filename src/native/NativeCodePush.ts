@@ -48,7 +48,14 @@ type LegacyCodePushModule = {
   setLatestRollbackInfo: (packageHash: string) => Promise<void>;
 };
 
-type CodePushModule = NativeCodePushSpec & LegacyCodePushModule;
+type CodePushModule = LegacyCodePushModule & {
+  onDownloadProgress?: NativeCodePushSpec['onDownloadProgress'];
+};
+
+type EventEmitterCapableCodePushModule = LegacyCodePushModule & {
+  addListener: NonNullable<LegacyCodePushModule['addListener']>;
+  removeListeners: NonNullable<LegacyCodePushModule['removeListeners']>;
+};
 
 function getTurboModule(): CodePushModule | null {
   return getNativeCodePushTurboModule() as CodePushModule | null;
@@ -75,6 +82,15 @@ function normalizeStatusReport(statusReport: object | string | null | undefined)
   return statusReport;
 }
 
+function canUseNativeEventEmitter(
+  module: LegacyCodePushModule,
+): module is EventEmitterCapableCodePushModule {
+  return (
+    typeof module.addListener === 'function' &&
+    typeof module.removeListeners === 'function'
+  );
+}
+
 function addDownloadProgressListener(
   listener: (progress: DownloadProgress) => void,
 ): Subscription {
@@ -91,13 +107,13 @@ function addDownloadProgressListener(
   }
 
   const legacyModule = getLegacyModule();
-  if (!legacyModule) {
+  if (!legacyModule || !canUseNativeEventEmitter(legacyModule)) {
     return {
       remove() {},
     };
   }
 
-  const eventEmitter = new NativeEventEmitter(legacyModule ?? nativeModule);
+  const eventEmitter = new NativeEventEmitter(legacyModule);
   return eventEmitter.addListener(DOWNLOAD_PROGRESS_EVENT_NAME, listener);
 }
 
