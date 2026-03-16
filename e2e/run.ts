@@ -25,6 +25,12 @@ interface OptionalUpdateScenario {
   flowPath: string;
 }
 
+interface AlertUpdateScenario {
+  name: string;
+  releaseVersion: string;
+  flowPath: string;
+}
+
 function parseRetryCountOption(value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
@@ -98,6 +104,7 @@ async function main() {
       await buildApp(appPath, options.platform, options.simulator);
     }
 
+    const appId = getAppId(appPath, options.platform);
     // 3. Prepare update bundle
     console.log("\n=== [prepare-bundle] ===");
     cleanMockData();
@@ -106,8 +113,6 @@ async function main() {
     // 4. Start mock server
     console.log("\n=== [start-mock-server] ===");
     await startMockServer();
-
-    const appId = getAppId(appPath, options.platform);
     await resetAppStateBeforeFlows(options.platform, appId);
 
     // 5. Run Maestro — Phase 1: main flows
@@ -267,6 +272,44 @@ async function main() {
 
       await withRetry(
         `run-maestro: optional update (${scenario.name})`,
+        options.retryCount,
+        retryDelayMs,
+        () => runMaestro(scenario.flowPath, options.platform, appId),
+      );
+    }
+
+    // 12. Run Maestro — Phase 5: updateDialog alert flows
+    console.log("\n=== [run-maestro: phase 5 (updateDialog alert flows)] ===");
+    const alertUpdateScenarios: AlertUpdateScenario[] = [
+      {
+        name: "ignore optional update from alert",
+        releaseVersion: "1.2.1",
+        flowPath: path.resolve(__dirname, "flows-alert/01-update-dialog-ignore.yaml"),
+      },
+      {
+        name: "install optional update from alert",
+        releaseVersion: "1.2.2",
+        flowPath: path.resolve(__dirname, "flows-alert/02-update-dialog-install.yaml"),
+      },
+    ];
+
+    for (const scenario of alertUpdateScenarios) {
+      console.log(`\n=== [prepare-bundle: alert ${scenario.releaseVersion} (${scenario.name})] ===`);
+      cleanMockData();
+      await prepareBundle(
+        appPath,
+        options.platform,
+        releaseIdentifier,
+        options.framework,
+        {
+          releaseVersion: scenario.releaseVersion,
+          mandatory: false,
+          releaseMarkerVersion: scenario.releaseVersion,
+        },
+      );
+
+      await withRetry(
+        `run-maestro: updateDialog alert (${scenario.name})`,
         options.retryCount,
         retryDelayMs,
         () => runMaestro(scenario.flowPath, options.platform, appId),
