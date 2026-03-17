@@ -40,7 +40,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--framework <type>` | No | Use `expo` for Expo example apps |
 | `--simulator <name>` | No | iOS simulator name (auto-detects booted simulator, defaults to "iPhone 16") |
 | `--maestro-only` | No | Skip build step, only run test flows |
-| `--include-timing-sensitive` | No | Also run timing-sensitive optional scenarios (`03`, `04`). Default: off |
+| `--exclude-timing-sensitive` | No | Skip timing-sensitive optional scenarios (`03`, `04`). Default: off, so local runs include them |
 
 ## What It Does
 
@@ -75,8 +75,8 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 13. **Run optional update flows** — Verifies optional updates are applied when:
    - `01-optional-update-on-relaunch` — The app is killed and relaunched.
    - `02-optional-update-on-restart-button` — The in-app "Restart app" button is pressed.
-   - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs only with `--include-timing-sensitive`.
-   - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs only with `--include-timing-sensitive`.
+   - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs unless `--exclude-timing-sensitive` is passed.
+   - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs unless `--exclude-timing-sensitive` is passed.
 
 ## Architecture
 
