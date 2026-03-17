@@ -14,7 +14,7 @@ interface CliOptions {
   framework?: "expo";
   simulator?: string;
   maestroOnly?: boolean;
-  includeTimingSensitive?: boolean;
+  excludeTimingSensitive?: boolean;
   retryCount: number;
   retryDelaySec: number;
 }
@@ -50,8 +50,8 @@ const program = new Command()
   .option("--simulator <name>", "iOS simulator name (default: booted)")
   .option("--maestro-only", "Skip build, only run test flows", false)
   .option(
-    "--include-timing-sensitive",
-    "Include timing-sensitive optional install mode scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)",
+    "--exclude-timing-sensitive",
+    "Exclude timing-sensitive optional install mode scenarios (ON_NEXT_RESUME/ON_NEXT_SUSPEND)",
     false,
   )
   .option(
@@ -227,7 +227,7 @@ async function main() {
       },
     ];
 
-    if (options.includeTimingSensitive) {
+    if (!options.excludeTimingSensitive) {
       optionalUpdateScenarios.push(
         {
           name: "apply on resume after 20 seconds",
@@ -240,8 +240,10 @@ async function main() {
           flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-20s.yaml"),
         },
       );
-    } else {
-      console.log("\n=== [phase 4] skipping timing-sensitive scenarios (pass --include-timing-sensitive to enable) ===");
+    }
+
+    if (options.excludeTimingSensitive) {
+      console.log("\n=== [phase 4] skipping timing-sensitive scenarios (omit --exclude-timing-sensitive to include them) ===");
     }
 
     for (const scenario of optionalUpdateScenarios) {

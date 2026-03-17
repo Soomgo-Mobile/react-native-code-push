@@ -40,7 +40,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 | `--framework <type>` | 아니오 | Expo 예제 앱인 경우 `expo` 지정 |
 | `--simulator <name>` | 아니오 | iOS 시뮬레이터 이름 (부팅된 시뮬레이터 자동 감지, 기본값 "iPhone 16") |
 | `--maestro-only` | 아니오 | 빌드 단계 생략, 테스트 플로우만 실행 |
-| `--include-timing-sensitive` | 아니오 | 타이밍 민감 optional 시나리오(`03`, `04`) 추가 실행. 기본값: 비활성 |
+| `--exclude-timing-sensitive` | 아니오 | 타이밍 민감 optional 시나리오(`03`, `04`)를 제외합니다. 기본값: 비활성, 즉 로컬 실행에는 기본 포함 |
 
 ## 실행 과정
 
@@ -75,8 +75,8 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 13. **optional 업데이트 플로우 실행** — 아래 조건에서 업데이트가 적용되는지 확인합니다.
    - `01-optional-update-on-relaunch` — 앱을 종료 후 재실행할 때
    - `02-optional-update-on-restart-button` — 앱 내 "Restart app" 버튼을 누를 때
-   - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
-   - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--include-timing-sensitive` 옵션 사용 시에만 실행
+   - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
+   - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
 
 ## 아키텍처
 
