@@ -23,13 +23,22 @@ function getNativeCodePush() {
   return NativeCodePush;
 }
 
-function getPackageMixins() {
-  getNativeCodePush();
-  return PackageMixins;
+function requireNativeCodePush(callerName) {
+  const nativeCodePush = getNativeCodePush();
+  if (!nativeCodePush) {
+    throw new Error(`The CodePush native module isn't available during ${callerName}.`);
+  }
+
+  return nativeCodePush;
 }
 
-function logMissingNativeModule() {
-  log("The CodePush module doesn't appear to be properly installed. Please double-check that everything is setup correctly.");
+function requirePackageMixins(callerName) {
+  const nativeCodePush = requireNativeCodePush(callerName);
+  if (!PackageMixins) {
+    PackageMixins = require("./package-mixins")(nativeCodePush);
+  }
+
+  return PackageMixins;
 }
 
 /**
@@ -90,7 +99,7 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
    * for their specific deployment and version and which are actually
    * different from the CodePush update they have already installed.
    */
-  const nativeConfig = await getConfiguration();
+  const nativeConfig = await getConfiguration("checkForUpdate");
 
   // Use dynamically overridden getCurrentPackage() during tests.
   const localPackage = await module.exports.getCurrentPackage();
@@ -240,13 +249,8 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
 
     return null;
   } else {
-    const nativeCodePush = getNativeCodePush();
-    const packageMixins = getPackageMixins();
-    if (!nativeCodePush || !packageMixins) {
-      logMissingNativeModule();
-      return null;
-    }
-
+    const nativeCodePush = requireNativeCodePush("checkForUpdate");
+    const packageMixins = requirePackageMixins("checkForUpdate");
     const remotePackage = { ...update, ...packageMixins.remote() };
     remotePackage.failedInstall = await nativeCodePush.isFailedUpdate(remotePackage.packageHash);
     return remotePackage;
@@ -282,17 +286,13 @@ function mapToRemotePackageMetadata(updateInfo) {
 
 const getConfiguration = (() => {
   let config;
-  return async function getConfiguration() {
+  return async function getConfiguration(callerName = "getConfiguration") {
     if (config) {
       return config;
     } else if (testConfig) {
       return testConfig;
     } else {
-      const nativeCodePush = getNativeCodePush();
-      if (!nativeCodePush) {
-        throw new Error("The CodePush native module isn't available yet.");
-      }
-
+      const nativeCodePush = requireNativeCodePush(callerName);
       config = await nativeCodePush.getConfiguration();
       return config;
     }
@@ -304,12 +304,8 @@ async function getCurrentPackage() {
 }
 
 async function getUpdateMetadata(updateState) {
-  const nativeCodePush = getNativeCodePush();
-  const packageMixins = getPackageMixins();
-  if (!nativeCodePush || !packageMixins) {
-    return null;
-  }
-
+  const nativeCodePush = requireNativeCodePush("getUpdateMetadata");
+  const packageMixins = requirePackageMixins("getUpdateMetadata");
   let updateMetadata = await nativeCodePush.getUpdateMetadata(updateState || CodePush.UpdateState.RUNNING);
   if (updateMetadata) {
     updateMetadata = { ...packageMixins.local, ...updateMetadata };
@@ -333,12 +329,7 @@ const notifyApplicationReady = (() => {
 })();
 
 async function notifyApplicationReadyInternal() {
-  const nativeCodePush = getNativeCodePush();
-  if (!nativeCodePush) {
-    logMissingNativeModule();
-    return null;
-  }
-
+  const nativeCodePush = requireNativeCodePush("notifyApplicationReady");
   await nativeCodePush.notifyApplicationReady();
   const statusReport = await nativeCodePush.getNewStatusReport();
   statusReport && tryReportStatus(statusReport); // Don't wait for this to complete.
@@ -349,7 +340,6 @@ async function notifyApplicationReadyInternal() {
 async function tryReportStatus(statusReport, retryOnAppResume) {
   const nativeCodePush = getNativeCodePush();
   if (!nativeCodePush) {
-    logMissingNativeModule();
     retryOnAppResume && retryOnAppResume.remove();
     return;
   }
@@ -417,11 +407,7 @@ async function shouldUpdateBeIgnored(remotePackage, syncOptions) {
     return true;
   }
 
-  const nativeCodePush = getNativeCodePush();
-  if (!nativeCodePush) {
-    return true;
-  }
-
+  const nativeCodePush = requireNativeCodePush("shouldUpdateBeIgnored");
   const latestRollbackInfo = await nativeCodePush.getLatestRollbackInfo();
   if (!validateLatestRollbackInfo(latestRollbackInfo, remotePackage.packageHash)) {
     log("The latest rollback info is not valid.");
@@ -478,12 +464,7 @@ function setUpTestDependencies(testSdk, providedTestConfig, testNativeBridge) {
 }
 
 async function restartApp(onlyIfUpdateIsPending = false) {
-  const nativeCodePush = getNativeCodePush();
-  if (!nativeCodePush) {
-    logMissingNativeModule();
-    return;
-  }
-
+  const nativeCodePush = requireNativeCodePush("restartApp");
   nativeCodePush.restartApp(onlyIfUpdateIsPending);
 }
 
@@ -903,30 +884,15 @@ Object.assign(CodePush, {
   setUpTestDependencies,
   sync,
   disallowRestart: () => {
-    const nativeCodePush = getNativeCodePush();
-    if (!nativeCodePush) {
-      logMissingNativeModule();
-      return;
-    }
-
+    const nativeCodePush = requireNativeCodePush("disallowRestart");
     return nativeCodePush.disallow();
   },
   allowRestart: () => {
-    const nativeCodePush = getNativeCodePush();
-    if (!nativeCodePush) {
-      logMissingNativeModule();
-      return;
-    }
-
+    const nativeCodePush = requireNativeCodePush("allowRestart");
     return nativeCodePush.allow();
   },
   clearUpdates: () => {
-    const nativeCodePush = getNativeCodePush();
-    if (!nativeCodePush) {
-      logMissingNativeModule();
-      return;
-    }
-
+    const nativeCodePush = requireNativeCodePush("clearUpdates");
     return nativeCodePush.clearUpdates();
   },
   InstallMode: {
