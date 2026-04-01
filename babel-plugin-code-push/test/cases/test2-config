@@ -1,9 +1,0 @@
-const {
-  SemverVersioning,
-} = require("@bravemobile/react-native-code-push/versioning");
-
-module.exports = {
-  bundleHost: "bundleHost",
-  runtimeVersion: "runtimeVersion",
-  versioning: SemverVersioning,
-};

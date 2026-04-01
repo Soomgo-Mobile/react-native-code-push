@@ -1,7 +1,0 @@
-import { SemverVersioning } from "@bravemobile/react-native-code-push/versioning";
-import codePush from "@bravemobile/react-native-code-push";
-codePush({
-  bundleHost: "bundleHost",
-  runtimeVersion: "runtimeVersion",
-  versioning: SemverVersioning
-});
