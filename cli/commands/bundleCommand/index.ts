@@ -9,6 +9,7 @@ type Options = {
     entryFile: string;
     bundleName: string;
     outputBundleDir: string;
+    outputMetroDir?: string;
 }
 
 program.command('bundle')
@@ -18,6 +19,7 @@ program.command('bundle')
     .option('-o, --output-path <string>', 'path to output root directory', ROOT_OUTPUT_DIR)
     .option('-e, --entry-file <string>', 'path to JS/TS entry file', ENTRY_FILE)
     .option('-b, --bundle-name <string>', 'bundle file name (default-ios: "main.jsbundle" / default-android: "index.android.bundle")')
+    .option('--output-metro-dir <string>', 'name of directory to copy the Metro JS bundle and sourcemap before Hermes compilation')
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
     .action((options: Options) => {
         bundleCodePush(
@@ -27,5 +29,6 @@ program.command('bundle')
             options.entryFile,
             options.bundleName,
             `${options.outputPath}/${options.outputBundleDir}`,
+            options.outputMetroDir,
         )
     });

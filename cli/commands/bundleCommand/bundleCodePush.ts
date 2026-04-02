@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import { prepareToBundleJS } from "../../functions/prepareToBundleJS.js";
 import { runReactNativeBundleCommand } from "../../functions/runReactNativeBundleCommand.js";
 import { runExpoBundleCommand } from "../../functions/runExpoBundleCommand.js";
@@ -17,6 +18,7 @@ export async function bundleCodePush(
   entryFile: string = ENTRY_FILE,
   jsBundleName: string, // JS bundle file name (not CodePush bundle file)
   bundleDirectory: string, // CodePush bundle output directory
+  outputMetroDir?: string,
 ): Promise<string> {
     if (fs.existsSync(outputRootPath)) {
         fs.rmSync(outputRootPath, { recursive: true });
@@ -49,6 +51,8 @@ export async function bundleCodePush(
 
     console.log('log: JS bundling complete');
 
+    copyMetroOutputsIfNeeded(outputRootPath, outputMetroDir, OUTPUT_CONTENT_PATH, _jsBundleName, SOURCEMAP_OUTPUT);
+
     await runHermesEmitBinaryCommand(
       _jsBundleName,
       OUTPUT_CONTENT_PATH,
@@ -60,4 +64,29 @@ export async function bundleCodePush(
     console.log(`log: CodePush bundle created (file path: ./${bundleDirectory}/${codePushBundleFileName})`);
 
     return codePushBundleFileName;
+}
+
+function copyMetroOutputsIfNeeded(
+  outputRootPath: string,
+  outputMetroDir: string | undefined,
+  outputContentPath: string,
+  jsBundleName: string,
+  sourceMapOutputPath: string,
+) {
+    if (!outputMetroDir) {
+        return;
+    }
+
+    const resolvedOutputMetroDir = path.join(outputRootPath, outputMetroDir);
+
+    fs.mkdirSync(resolvedOutputMetroDir, { recursive: true });
+    fs.copyFileSync(
+        path.join(outputContentPath, jsBundleName),
+        path.join(resolvedOutputMetroDir, jsBundleName),
+    );
+    fs.copyFileSync(
+        sourceMapOutputPath,
+        path.join(resolvedOutputMetroDir, path.basename(sourceMapOutputPath)),
+    );
+    console.log(`log: Metro outputs copied to: ${resolvedOutputMetroDir}`);
 }
