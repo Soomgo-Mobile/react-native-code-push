@@ -19,6 +19,7 @@ type Options = {
     skipBundle: boolean;
     skipCleanup: boolean;
     outputBundleDir: string;
+    outputMetroDir?: string;
     hashCalc?: boolean;
 }
 
@@ -39,6 +40,7 @@ program.command('release')
     .option('--skip-bundle <bool>', 'skip bundle process', parseBoolean, false)
     .option('--hash-calc <bool>', 'calculates the bundle file hash used for packageHash in the release history (Requires setting --skip-bundle to true)', parseBoolean)
     .option('--skip-cleanup <bool>', 'skip cleanup process', parseBoolean, false)
+    .option('--output-metro-dir <string>', 'name of directory to copy the Metro JS bundle and sourcemap before Hermes compilation')
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
     .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
@@ -71,6 +73,7 @@ program.command('release')
             options.skipBundle,
             options.skipCleanup,
             `${options.outputPath}/${options.outputBundleDir}`,
+            options.outputMetroDir,
             options.hashCalc,
         )
 

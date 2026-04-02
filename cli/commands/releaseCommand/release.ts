@@ -24,11 +24,12 @@ export async function release(
     skipBundle: boolean,
     skipCleanup: boolean,
     bundleDirectory: string,
+    outputMetroDir?: string,
     hashCalc?: boolean,
 ): Promise<void> {
     const bundleFileName = skipBundle
         ? readBundleFileNameFrom(bundleDirectory)
-        : await bundleCodePush(framework, platform, outputPath, entryFile, jsBundleName, bundleDirectory);
+        : await bundleCodePush(framework, platform, outputPath, entryFile, jsBundleName, bundleDirectory, outputMetroDir);
     const bundleFilePath = `${bundleDirectory}/${bundleFileName}`;
 
     const packageHash = await (() => {
