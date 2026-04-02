@@ -397,6 +397,8 @@ module.exports = Config;
 
 > [!TIP]
 > You can use `--help` command to see the available commands and options.
+>
+> For detailed documentation, see the [CLI README](cli/README.md) ([한국어](cli/README.ko.md)).
 
 (interactive mode not supported yet)
 
