@@ -1,7 +1,11 @@
 PODS:
   - boost (1.84.0)
   - CodePush (12.3.2):
+    - RCTRequired
+    - RCTTypeSafety
     - React-Core
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
     - SSZipArchive (~> 2.5.5)
   - DoubleConversion (1.1.6)
   - fast_float (6.1.4)
@@ -1790,7 +1794,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
-  CodePush: 65689ae1c412f20483f6488ed373e2688b6cf19d
+  CodePush: b744a6558bd51db38bdfcb2e2df71b66750f10fc
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: 23d8c5470c648a635893dc0956c6dbaead54b656
