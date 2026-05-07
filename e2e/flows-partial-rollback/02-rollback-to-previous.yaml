@@ -12,6 +12,15 @@ appId: ${APP_ID}
 - tapOn: "Check for updates"
 - waitForAnimationToEnd:
     timeout: 30000
+- runScript:
+    file: ../scripts/sleep.js
+    env:
+      WAIT_MS: "5000"
+- launchApp:
+    stopApp: false
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
 
 # After rollback to 1.0.1, UPDATED! should still be visible
 - assertVisible: "UPDATED!"
