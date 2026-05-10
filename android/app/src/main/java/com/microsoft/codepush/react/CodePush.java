@@ -4,18 +4,25 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 
-import com.facebook.react.ReactPackage;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.facebook.react.TurboReactPackage;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.module.model.ReactModuleInfo;
+import com.facebook.react.module.model.ReactModuleInfoProvider;
 import com.facebook.react.uimanager.ViewManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-public class CodePush implements ReactPackage {
+public class CodePush extends TurboReactPackage {
 
     private static boolean sIsRunningBinaryVersion = false;
     private static boolean sNeedToReportRollback = false;
@@ -300,17 +307,45 @@ public class CodePush implements ReactPackage {
     }
 
     @Override
-    public List<NativeModule> createNativeModules(ReactApplicationContext reactApplicationContext) {
-        CodePushNativeModule codePushModule = new CodePushNativeModule(reactApplicationContext, this, mUpdateManager, mTelemetryManager, mSettingsManager);
-        CodePushDialog dialogModule = new CodePushDialog(reactApplicationContext);
+    public @Nullable NativeModule getModule(String name, ReactApplicationContext reactApplicationContext) {
+        if (!CodePushNativeModule.NAME.equals(name)) {
+            return null;
+        }
 
-        List<NativeModule> nativeModules = new ArrayList<>();
-        nativeModules.add(codePushModule);
-        nativeModules.add(dialogModule);
-        return nativeModules;
+        return new CodePushNativeModule(
+                reactApplicationContext,
+                this,
+                mUpdateManager,
+                mTelemetryManager,
+                mSettingsManager
+        );
     }
+
     @Override
-    public List<ViewManager> createViewManagers(ReactApplicationContext reactApplicationContext) {
+    public ReactModuleInfoProvider getReactModuleInfoProvider() {
+        return new ReactModuleInfoProvider() {
+            @Override
+            public Map<String, ReactModuleInfo> getReactModuleInfos() {
+                Map<String, ReactModuleInfo> reactModuleInfoMap = new HashMap<>();
+                reactModuleInfoMap.put(
+                        CodePushNativeModule.NAME,
+                        new ReactModuleInfo(
+                                CodePushNativeModule.NAME,
+                                CodePushNativeModule.class.getName(),
+                                false,
+                                false,
+                                false,
+                                false,
+                                true
+                        )
+                );
+                return reactModuleInfoMap;
+            }
+        };
+    }
+
+    @Override
+    public List<ViewManager> createViewManagers(@NonNull ReactApplicationContext reactApplicationContext) {
         return new ArrayList<>();
     }
 }

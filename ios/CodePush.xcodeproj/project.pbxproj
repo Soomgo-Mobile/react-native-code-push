@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		13BE3DEE1AC21097009241FE /* CodePush.m in Sources */ = {isa = PBXBuildFile; fileRef = 13BE3DED1AC21097009241FE /* CodePush.m */; };
+		13BE3DEE1AC21097009241FE /* CodePush.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13BE3DED1AC21097009241FE /* CodePush.mm */; };
 		1B23B9141BF9267B000BB2F0 /* RCTConvert+CodePushInstallMode.m in Sources */ = {isa = PBXBuildFile; fileRef = 1B23B9131BF9267B000BB2F0 /* RCTConvert+CodePushInstallMode.m */; };
 		1B762E901C9A5E9A006EF800 /* CodePushErrorUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 1B762E8F1C9A5E9A006EF800 /* CodePushErrorUtils.m */; };
 		1BCC09A71CC19EB700DDC0DD /* RCTConvert+CodePushUpdateState.m in Sources */ = {isa = PBXBuildFile; fileRef = 1BCC09A61CC19EB700DDC0DD /* RCTConvert+CodePushUpdateState.m */; };
@@ -82,7 +82,7 @@
 		5498D8F61D21F14100B5EB43 /* CodePushUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 5498D8F51D21F14100B5EB43 /* CodePushUtils.m */; };
 		54FFEDE01BF550630061DD23 /* CodePushDownloadHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = 54FFEDDF1BF550630061DD23 /* CodePushDownloadHandler.m */; };
 		6463C82D1EBA0CFB0095B8CD /* CodePushUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 5498D8F51D21F14100B5EB43 /* CodePushUtils.m */; };
-		6463C82E1EBA0CFB0095B8CD /* CodePush.m in Sources */ = {isa = PBXBuildFile; fileRef = 13BE3DED1AC21097009241FE /* CodePush.m */; };
+		6463C82E1EBA0CFB0095B8CD /* CodePush.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13BE3DED1AC21097009241FE /* CodePush.mm */; };
 		6463C82F1EBA0CFB0095B8CD /* CodePushConfig.m in Sources */ = {isa = PBXBuildFile; fileRef = 81D51F391B6181C2000DA084 /* CodePushConfig.m */; };
 		6463C8301EBA0CFB0095B8CD /* CodePushDownloadHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = 54FFEDDF1BF550630061DD23 /* CodePushDownloadHandler.m */; };
 		6463C8311EBA0CFB0095B8CD /* CodePushErrorUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 1B762E8F1C9A5E9A006EF800 /* CodePushErrorUtils.m */; };
@@ -125,7 +125,7 @@
 /* Begin PBXFileReference section */
 		134814201AA4EA6300B7C361 /* libCodePush.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libCodePush.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		13BE3DEC1AC21097009241FE /* CodePush.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CodePush.h; path = CodePush/CodePush.h; sourceTree = "<group>"; };
-		13BE3DED1AC21097009241FE /* CodePush.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = CodePush.m; path = CodePush/CodePush.m; sourceTree = "<group>"; };
+		13BE3DED1AC21097009241FE /* CodePush.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CodePush.mm; path = CodePush/CodePush.mm; sourceTree = "<group>"; };
 		1B23B9131BF9267B000BB2F0 /* RCTConvert+CodePushInstallMode.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = "RCTConvert+CodePushInstallMode.m"; path = "CodePush/RCTConvert+CodePushInstallMode.m"; sourceTree = "<group>"; };
 		1B762E8F1C9A5E9A006EF800 /* CodePushErrorUtils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = CodePushErrorUtils.m; path = CodePush/CodePushErrorUtils.m; sourceTree = "<group>"; };
 		1BCC09A61CC19EB700DDC0DD /* RCTConvert+CodePushUpdateState.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = "RCTConvert+CodePushUpdateState.m"; path = "CodePush/RCTConvert+CodePushUpdateState.m"; sourceTree = "<group>"; };
@@ -277,7 +277,7 @@
 				FF90DEF92C5A808600CA8692 /* PrivacyInfo.xcprivacy */,
 				5498D8F51D21F14100B5EB43 /* CodePushUtils.m */,
 				13BE3DEC1AC21097009241FE /* CodePush.h */,
-				13BE3DED1AC21097009241FE /* CodePush.m */,
+				13BE3DED1AC21097009241FE /* CodePush.mm */,
 				81D51F391B6181C2000DA084 /* CodePushConfig.m */,
 				54FFEDDF1BF550630061DD23 /* CodePushDownloadHandler.m */,
 				1B762E8F1C9A5E9A006EF800 /* CodePushErrorUtils.m */,
@@ -451,7 +451,7 @@
 				3221E4912C8ABE1400268379 /* SSZipArchive.m in Sources */,
 				5421FE311C58AD5A00986A55 /* CodePushTelemetryManager.m in Sources */,
 				3221E46F2C8ABE1300268379 /* mz_strm_wzaes.c in Sources */,
-				13BE3DEE1AC21097009241FE /* CodePush.m in Sources */,
+				13BE3DEE1AC21097009241FE /* CodePush.mm in Sources */,
 				3221E45D2C8ABE1300268379 /* mz_zip.c in Sources */,
 				1B762E901C9A5E9A006EF800 /* CodePushErrorUtils.m in Sources */,
 				3221E4832C8ABE1400268379 /* mz_strm_split.c in Sources */,
@@ -473,7 +473,7 @@
 				3221E4822C8ABE1400268379 /* mz_strm_buf.c in Sources */,
 				3221E45E2C8ABE1300268379 /* mz_zip.c in Sources */,
 				6463C82D1EBA0CFB0095B8CD /* CodePushUtils.m in Sources */,
-				6463C82E1EBA0CFB0095B8CD /* CodePush.m in Sources */,
+				6463C82E1EBA0CFB0095B8CD /* CodePush.mm in Sources */,
 				6463C82F1EBA0CFB0095B8CD /* CodePushConfig.m in Sources */,
 				6463C8301EBA0CFB0095B8CD /* CodePushDownloadHandler.m in Sources */,
 				6463C8311EBA0CFB0095B8CD /* CodePushErrorUtils.m in Sources */,

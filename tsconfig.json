@@ -1,18 +1,18 @@
 {
-    "compilerOptions": {
-        "target": "ES5",
-        "module": "commonjs",
-        "lib": ["es6"],
-        "noImplicitAny": true,
-        "noEmitOnError": true,
-        "moduleResolution": "node",
-        "sourceMap": true,
-        "rootDir": "test",
-        "outDir": "bin",
-        "removeComments": true
-    },
-    "exclude": [
-        "Examples/CodePushDemoApp",
-        "code-push.config.example.*"
-    ]
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "commonjs",
+    "lib": ["es6"],
+    "esModuleInterop": true,
+    "noImplicitAny": true,
+    "moduleResolution": "node",
+    "noEmit": true,
+    "rootDir": "src",
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "Examples/**",
+    "code-push.config.example.*"
+  ]
 }
