@@ -304,6 +304,7 @@ static NSString *const LatestRollbackCountKey = @"count";
 }
 
 - (void)dispatchDownloadProgressEvent {
+  // Notify the script-side about the progress
   NSDictionary *progress = @{
     @"totalBytes" : [NSNumber numberWithLongLong:_latestExpectedContentLength],
     @"receivedBytes" : [NSNumber numberWithLongLong:_latestReceivedConentLength]

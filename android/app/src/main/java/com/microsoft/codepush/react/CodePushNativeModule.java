@@ -440,8 +440,12 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                     }
 
                     if (updateState == CodePushUpdateState.PENDING.getValue() && !currentUpdateIsPending) {
+                        // The caller wanted a pending update
+                        // but there isn't currently one.
                         promise.resolve(null);
                     } else if (updateState == CodePushUpdateState.RUNNING.getValue() && currentUpdateIsPending) {
+                        // The caller wants the running update, but the current
+                        // one is pending, so we need to grab the previous.
                         JSONObject previousPackage = mUpdateManager.getPreviousPackage();
 
                         if (previousPackage == null) {
@@ -451,14 +455,23 @@ public class CodePushNativeModule extends NativeCodePushSpec {
 
                         promise.resolve(CodePushUtils.convertJsonObjectToWritable(previousPackage));
                     } else {
+                        // The current package satisfies the request:
+                        // 1) Caller wanted a pending, and there is a pending update
+                        // 2) Caller wanted the running update, and there isn't a pending
+                        // 3) Caller wants the latest update, regardless if it's pending or not
                         if (mCodePush.isRunningBinaryVersion()) {
+                            // This only matters in Debug builds. Since we do not clear "outdated" updates,
+                            // we need to indicate to the JS side that somehow we have a current update on
+                            // disk that is not actually running.
                             CodePushUtils.setJSONValueForKey(currentPackage, "_isDebugOnly", true);
                         }
 
+                        // Enable differentiating pending vs. non-pending updates
                         CodePushUtils.setJSONValueForKey(currentPackage, "isPending", currentUpdateIsPending);
                         promise.resolve(CodePushUtils.convertJsonObjectToWritable(currentPackage));
                     }
                 } catch (CodePushMalformedDataException e) {
+                    // We need to recover the app in case 'codepush.json' is corrupted
                     CodePushUtils.log(e.getMessage());
                     clearUpdates();
                     promise.resolve(null);
@@ -542,11 +555,18 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                     }
 
                     if (installMode == CodePushInstallMode.ON_NEXT_RESUME.getValue()
+                            // We also add the resume listener if the installMode is IMMEDIATE, because
+                            // if the current activity is backgrounded, we want to reload the bundle when
+                            // it comes back into the foreground.
                             || installMode == CodePushInstallMode.IMMEDIATE.getValue()
                             || installMode == CodePushInstallMode.ON_NEXT_SUSPEND.getValue()) {
+                        // Store the minimum duration on the native module as an instance
+                        // variable instead of relying on a closure below, so that any
+                        // subsequent resume-based installs could override it.
                         CodePushNativeModule.this.mMinimumBackgroundDuration = minimumBackgroundDuration;
 
                         if (mLifecycleEventListener == null) {
+                            // Ensure we do not add the listener twice.
                             mLifecycleEventListener = new LifecycleEventListener() {
                                 private Date lastPausedDate = null;
                                 private Handler appSuspendHandler = new Handler(Looper.getMainLooper());
@@ -561,6 +581,8 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                                 @Override
                                 public void onHostResume() {
                                     appSuspendHandler.removeCallbacks(loadBundleRunnable);
+                                    // As of RN 36, the resume handler fires immediately if the app is in
+                                    // the foreground, so explicitly wait for it to be backgrounded first
                                     if (lastPausedDate != null) {
                                         long durationInBackground = (new Date().getTime() - lastPausedDate.getTime()) / 1000;
                                         if (installMode == CodePushInstallMode.IMMEDIATE.getValue()
@@ -573,6 +595,8 @@ public class CodePushNativeModule extends NativeCodePushSpec {
 
                                 @Override
                                 public void onHostPause() {
+                                    // Save the current time so that when the app is later
+                                    // resumed, we can detect how long it was in the background.
                                     lastPausedDate = new Date();
 
                                     if (installMode == CodePushInstallMode.ON_NEXT_SUSPEND.getValue() && mSettingsManager.isPendingUpdate(null)) {

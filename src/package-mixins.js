@@ -11,6 +11,7 @@ module.exports = (NativeCodePush) => {
 
         let downloadProgressSubscription;
         if (downloadProgressCallback) {
+          // Use event subscription to obtain download progress.
           downloadProgressSubscription = NativeCodePush.addDownloadProgressListener(
             downloadProgressCallback
           );
