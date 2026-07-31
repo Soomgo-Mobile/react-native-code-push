@@ -27,4 +27,8 @@ class DownloadProgress {
     public boolean isCompleted() {
         return mTotalBytes == mReceivedBytes;
     }
+
+    long getReceivedBytes() {
+        return mReceivedBytes;
+    }
 }
