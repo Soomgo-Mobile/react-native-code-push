@@ -341,19 +341,28 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                 try {
                     JSONObject mutableUpdatePackage = CodePushUtils.convertReadableToJsonObject(updatePackage);
                     mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
-                        private boolean hasScheduledNextFrame = false;
-                        private DownloadProgress latestDownloadProgress = null;
+                        private volatile boolean hasScheduledNextFrame = false;
+                        private volatile DownloadProgress latestDownloadProgress = null;
+                        private final DownloadProgressEventDispatcher progressEventDispatcher = new DownloadProgressEventDispatcher(
+                                new DownloadProgressEventDispatcher.EventEmitter() {
+                                    @Override
+                                    public void emit(DownloadProgress downloadProgress) {
+                                        getReactApplicationContext()
+                                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                                                .emit(CodePushConstants.DOWNLOAD_PROGRESS_EVENT_NAME, downloadProgress.createWritableMap());
+                                    }
+                                });
 
                         @Override
                         public void call(DownloadProgress downloadProgress) {
-                            if (!notifyProgress) {
+                            if (!notifyProgress || downloadProgress == null) {
                                 return;
                             }
 
                             latestDownloadProgress = downloadProgress;
                             // If the download is completed, synchronously send the last event.
-                            if (latestDownloadProgress.isCompleted()) {
-                                dispatchDownloadProgressEvent();
+                            if (downloadProgress.isCompleted()) {
+                                progressEventDispatcher.dispatch(downloadProgress);
                                 return;
                             }
 
@@ -368,21 +377,15 @@ public class CodePushNativeModule extends ReactContextBaseJavaModule {
                                     ReactChoreographer.getInstance().postFrameCallback(ReactChoreographer.CallbackType.TIMERS_EVENTS, new Choreographer.FrameCallback() {
                                         @Override
                                         public void doFrame(long frameTimeNanos) {
-                                            if (!latestDownloadProgress.isCompleted()) {
-                                                dispatchDownloadProgressEvent();
+                                            try {
+                                                progressEventDispatcher.dispatch(latestDownloadProgress);
+                                            } finally {
+                                                hasScheduledNextFrame = false;
                                             }
-
-                                            hasScheduledNextFrame = false;
                                         }
                                     });
                                 }
                             });
-                        }
-
-                        public void dispatchDownloadProgressEvent() {
-                            getReactApplicationContext()
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit(CodePushConstants.DOWNLOAD_PROGRESS_EVENT_NAME, latestDownloadProgress.createWritableMap());
                         }
                     });
 
