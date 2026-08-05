@@ -66,10 +66,14 @@ npx code-push bundle [options]
 | `-b, --bundle-name <string>` | Bundle file name | `main.jsbundle` (iOS) / `index.android.bundle` (Android) |
 | `--output-bundle-dir <string>` | Directory name for the bundle output | `bundleOutput` |
 | `--output-metro-dir <string>` | Directory to copy Metro JS bundle and sourcemap before Hermes compilation | — |
+| `--binary-bundle-path <string>` | JS bundle of the target binary. Aligns the Hermes compilation with it and records it as the binary patch base | — |
 
 ```bash
 # Bundle for Android with a custom entry file
 npx code-push bundle -p android -e index.js
+
+# Bundle aligned with the JS bundle shipped in the binary
+npx code-push bundle -p android --binary-bundle-path ./binary/index.android.bundle
 ```
 
 ---
@@ -101,6 +105,14 @@ npx code-push release [options]
 | `--skip-cleanup <bool>` | Skip output directory cleanup | `false` |
 | `--output-bundle-dir <string>` | Bundle output directory name | `bundleOutput` |
 | `--output-metro-dir <string>` | Directory to copy Metro JS bundle and sourcemap before Hermes compilation | — |
+| `--binary-bundle-path <string>` | JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it | — |
+
+With `--binary-bundle-path`, the release uploads two artifacts per platform: the full
+bundle named after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip`
+that carries only the difference from the bundle inside the binary. The patch bundle
+holds a `codepush-binary-patch.json` manifest describing how to rebuild the update, so
+applying it yields the same `packageHash` as the full bundle. Both sizes and the saving
+are printed before either artifact is uploaded.
 
 ```bash
 # Standard iOS release
@@ -117,6 +129,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -i staging
 
 # Reuse an existing bundle
 npx code-push release -b 1.0.0 -v 1.0.2 --skip-bundle true --hash-calc true
+
+# Release a full bundle and a binary patch against the bundle in the binary
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle
 ```
 
 ---

@@ -9,6 +9,12 @@ import { createRequire } from "node:module";
 import shell from "shelljs";
 
 /**
+ * Tells Hermes to lay the compiled bytecode out like an existing bundle's, which keeps
+ * the binary patch between the two small. Older compilers do not have the flag.
+ */
+const BASE_BYTECODE_FLAG = '-base-bytecode';
+
+/**
  * Run Hermes compile CLI command
  *
  * @param bundleName {string} JS bundle file name
@@ -43,7 +49,16 @@ export async function runHermesEmitBinaryCommand(
             const hermesCommand = getHermesCommand(projectRoot);
 
             const disableAllWarningsArg = '-w';
-            shell.exec(`${hermesCommand} ${hermesArgs.join(' ')} ${disableAllWarningsArg}`);
+            const compileResult = shell.exec(`${hermesCommand} ${hermesArgs.join(' ')} ${disableAllWarningsArg}`);
+            if (compileResult.code !== 0) {
+                // Reported here rather than left to the missing .hbc file, so a rejected
+                // flag - a base bundle that is not Hermes bytecode, for instance - fails
+                // the release instead of silently producing an unaligned bundle.
+                const extraFlagsHint = extraHermesFlags.length > 0
+                    ? ` Additional options: ${extraHermesFlags.join(' ')}`
+                    : '';
+                throw new Error(`"hermesc" command failed (exitCode=${compileResult.code}).${extraFlagsHint}`);
+            }
 
             // Copy HBC bundle to overwrite JS bundle
             const source = path.join(outputPath, bundleName + '.hbc');
@@ -107,6 +122,47 @@ export async function runHermesEmitBinaryCommand(
             });
         });
     });
+}
+
+/**
+ * Builds the flags that align a compilation with the bundle already inside the app
+ * binary, so the binary patch between them stays small.
+ *
+ * When the app's Hermes compiler predates the flag the release still goes ahead
+ * without it: the patch is then computed against unaligned bytecode and is larger, but
+ * it is still a valid patch. A compiler that does accept the flag and fails is a
+ * different matter and fails the release, because the base input is then wrong.
+ *
+ * @param baseBundlePath {string} JS bundle from the target binary to align against
+ * @param projectRoot {string} Root directory of the target app project, used to locate its Hermes compiler
+ * @return {string[]} Flags to pass to `runHermesEmitBinaryCommand` as `extraHermesFlags`
+ */
+export function resolveBaseBytecodeHermesFlags(baseBundlePath: string, projectRoot: string = process.cwd()): string[] {
+    if (!hermesSupportsBaseBytecode(projectRoot)) {
+        console.warn(
+            `warn: The Hermes compiler of this app does not support "${BASE_BYTECODE_FLAG}". ` +
+                'Compiling without it, which makes the binary patch larger.',
+        );
+        return [];
+    }
+
+    return [BASE_BYTECODE_FLAG, baseBundlePath];
+}
+
+/** Whether a `hermesc --help` output advertises the base bytecode flag. */
+export function helpOutputSupportsBaseBytecode(helpOutput: string): boolean {
+    return helpOutput.includes(BASE_BYTECODE_FLAG);
+}
+
+function hermesSupportsBaseBytecode(projectRoot: string): boolean {
+    const hermesCommand = getHermesCommand(projectRoot);
+    const result = childProcess.spawnSync(hermesCommand, ['--help'], { encoding: 'utf8' });
+
+    if (result.error) {
+        throw new Error(`failed to run "${hermesCommand} --help": ${result.error.message}`);
+    }
+
+    return helpOutputSupportsBaseBytecode(`${result.stdout ?? ''}${result.stderr ?? ''}`);
 }
 
 function getHermesCommand(projectRoot: string): string {

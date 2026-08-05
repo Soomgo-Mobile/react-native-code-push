@@ -4,12 +4,32 @@ import { prepareToBundleJS } from "../../functions/prepareToBundleJS.js";
 import { runReactNativeBundleCommand } from "../../functions/runReactNativeBundleCommand.js";
 import { runExpoBundleCommand } from "../../functions/runExpoBundleCommand.js";
 import { getReactTempDir } from "../../functions/getReactTempDir.js";
-import { runHermesEmitBinaryCommand } from "../../functions/runHermesEmitBinaryCommand.js";
+import { resolveBaseBytecodeHermesFlags, runHermesEmitBinaryCommand } from "../../functions/runHermesEmitBinaryCommand.js";
 import { makeCodePushBundle } from "../../functions/makeCodePushBundle.js";
+import { hashBundleFile, writeBinaryPatchBaseRecord } from "../../functions/makeBinaryPatchBundle.js";
 import { ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
 
+export type CodePushBundleResult = {
+  /** CodePush bundle file name (equals to packageHash) */
+  bundleFileName: string;
+  /** Directory holding the files that were packed into the CodePush bundle file */
+  contentsPath: string;
+  /** JS bundle file name inside the contents directory */
+  jsBundleName: string;
+};
+
 /**
- * @return {Promise<string>} CodePush bundle file name (equals to packageHash)
+ * JS bundle file name react-native writes, which is also the name the app looks for
+ * inside an update, so it has to be decided the same way everywhere.
+ */
+export function resolveJsBundleName(platform: 'ios' | 'android', jsBundleName?: string): string {
+  const DEFAULT_JS_BUNDLE_NAME = platform === 'ios' ? 'main.jsbundle' : 'index.android.bundle';
+  return jsBundleName || DEFAULT_JS_BUNDLE_NAME;
+}
+
+/**
+ * @param baseBundlePath {string} JS bundle from the target binary. When given, the compilation is aligned with it and the base is recorded for a later `release`.
+ * @return {Promise<CodePushBundleResult>} CodePush bundle file name (equals to packageHash) and the contents it was made of
  */
 export async function bundleCodePush(
   framework: 'expo' | undefined,
@@ -19,14 +39,14 @@ export async function bundleCodePush(
   jsBundleName: string, // JS bundle file name (not CodePush bundle file)
   bundleDirectory: string, // CodePush bundle output directory
   outputMetroDir?: string,
-): Promise<string> {
+  baseBundlePath?: string,
+): Promise<CodePushBundleResult> {
     if (fs.existsSync(outputRootPath)) {
         fs.rmSync(outputRootPath, { recursive: true });
     }
 
     const OUTPUT_CONTENT_PATH = `${outputRootPath}/CodePush`;
-    const DEFAULT_JS_BUNDLE_NAME = platform === 'ios' ? 'main.jsbundle' : 'index.android.bundle';
-    const _jsBundleName = jsBundleName || DEFAULT_JS_BUNDLE_NAME; // react-native JS bundle output name
+    const _jsBundleName = resolveJsBundleName(platform, jsBundleName); // react-native JS bundle output name
     const SOURCEMAP_OUTPUT = `${outputRootPath}/${_jsBundleName}.map`;
 
     prepareToBundleJS({ deleteDirs: [outputRootPath, getReactTempDir()], makeDir: OUTPUT_CONTENT_PATH });
@@ -57,13 +77,25 @@ export async function bundleCodePush(
       _jsBundleName,
       OUTPUT_CONTENT_PATH,
       SOURCEMAP_OUTPUT,
+      baseBundlePath ? resolveBaseBytecodeHermesFlags(baseBundlePath) : [],
     );
     console.log('log: Hermes compilation complete');
 
     const { bundleFileName: codePushBundleFileName } = await makeCodePushBundle(OUTPUT_CONTENT_PATH, bundleDirectory);
     console.log(`log: CodePush bundle created (file path: ./${bundleDirectory}/${codePushBundleFileName})`);
 
-    return codePushBundleFileName;
+    if (baseBundlePath) {
+      // Written after the bundle file, and to the output root instead of the update
+      // contents, so recording the base cannot change what was just packed or its hash.
+      const recordPath = writeBinaryPatchBaseRecord(outputRootPath, hashBundleFile(baseBundlePath));
+      console.log(`log: Binary patch base recorded (file path: ${recordPath})`);
+    }
+
+    return {
+      bundleFileName: codePushBundleFileName,
+      contentsPath: OUTPUT_CONTENT_PATH,
+      jsBundleName: _jsBundleName,
+    };
 }
 
 function copyMetroOutputsIfNeeded(

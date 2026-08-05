@@ -1,6 +1,7 @@
 import { program, Option } from "commander";
 import { findAndReadConfigFile } from "../../utils/fsUtils.js";
 import { release } from "./release.js";
+import { resolveBinaryBundlePathOption } from "../../functions/makeBinaryPatchBundle.js";
 import { OUTPUT_BUNDLE_DIR, CONFIG_FILE_NAME, ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
 
 type Options = {
@@ -21,6 +22,7 @@ type Options = {
     outputBundleDir: string;
     outputMetroDir?: string;
     hashCalc?: boolean;
+    binaryBundlePath?: string;
 }
 
 program.command('release')
@@ -42,6 +44,7 @@ program.command('release')
     .option('--skip-cleanup <bool>', 'skip cleanup process', parseBoolean, false)
     .option('--output-metro-dir <string>', 'name of directory to copy the Metro JS bundle and sourcemap before Hermes compilation')
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
+    .option('--binary-bundle-path <string>', 'path to the JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it.')
     .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
@@ -54,6 +57,9 @@ program.command('release')
             console.error('--hash-calc option can be used only when --skip-bundle is set to true.');
             process.exit(1);
         }
+
+        // Resolved before bundling so a wrong path fails now rather than after a build.
+        const baseBundlePath = resolveBinaryBundlePathOption(options.binaryBundlePath);
 
         await release(
             config.bundleUploader,
@@ -75,6 +81,7 @@ program.command('release')
             `${options.outputPath}/${options.outputBundleDir}`,
             options.outputMetroDir,
             options.hashCalc,
+            baseBundlePath,
         )
 
         console.log('🚀 Release completed.')

@@ -66,12 +66,16 @@ npx code-push bundle [options]
 | `-b, --bundle-name <string>` | 번들 파일 이름 | `main.jsbundle` (iOS) / `index.android.bundle` (Android) |
 | `--output-bundle-dir <string>` | 번들 출력 디렉토리 이름 | `bundleOutput` |
 | `--output-metro-dir <string>` | Hermes 컴파일 전 Metro JS 번들과 소스맵을 복사할 디렉토리 | — |
+| `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. Hermes 컴파일을 이 번들에 정렬하고, binary patch base로 기록합니다 | — |
 
 **예시:**
 
 ```bash
 # Android용 번들 생성 (커스텀 엔트리 파일)
 npx code-push bundle -p android -e index.js
+
+# 바이너리에 포함된 JS 번들에 정렬하여 번들 생성
+npx code-push bundle -p android --binary-bundle-path ./binary/index.android.bundle
 ```
 
 ---
@@ -103,6 +107,13 @@ npx code-push release [options]
 | `--skip-cleanup <bool>` | 출력 디렉토리 정리 건너뛰기 | `false` |
 | `--output-bundle-dir <string>` | 번들 출력 디렉토리 이름 | `bundleOutput` |
 | `--output-metro-dir <string>` | Hermes 컴파일 전 Metro JS 번들과 소스맵을 복사할 디렉토리 | — |
+| `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. 이 번들에 대한 binary patch 번들을 함께 배포하고, Hermes 컴파일을 이 번들에 정렬합니다 | — |
+
+`--binary-bundle-path`를 사용하면 플랫폼별로 두 개의 artifact를 업로드합니다. `packageHash`
+이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은 `<packageHash>-patch.zip` patch
+번들입니다. patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가
+포함되어, patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와
+절감량은 업로드 전에 출력됩니다.
 
 **예시:**
 
@@ -121,6 +132,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -i staging
 
 # 번들링 건너뛰기 (기존 번들 재사용)
 npx code-push release -b 1.0.0 -v 1.0.2 --skip-bundle true --hash-calc true
+
+# full 번들과 바이너리 번들에 대한 binary patch를 함께 배포
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle
 ```
 
 ---
