@@ -13,7 +13,8 @@ type Options = {
     config: string;
     outputPath: string;
     entryFile: string;
-    bundleName: string;
+    // Commander derives this from the "-j, --js-bundle-name" flag.
+    jsBundleName?: string;
     mandatory: boolean;
     enable: boolean;
     rollout?: number;
@@ -72,7 +73,7 @@ program.command('release')
             options.identifier,
             options.outputPath,
             options.entryFile,
-            options.bundleName,
+            options.jsBundleName,
             options.mandatory,
             options.enable,
             options.rollout,

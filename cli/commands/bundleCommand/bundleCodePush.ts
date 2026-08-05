@@ -36,7 +36,7 @@ export async function bundleCodePush(
   platform: 'ios' | 'android' = 'ios',
   outputRootPath: string = ROOT_OUTPUT_DIR,
   entryFile: string = ENTRY_FILE,
-  jsBundleName: string, // JS bundle file name (not CodePush bundle file)
+  jsBundleName: string | undefined, // JS bundle file name (not CodePush bundle file)
   bundleDirectory: string, // CodePush bundle output directory
   outputMetroDir?: string,
   baseBundlePath?: string,

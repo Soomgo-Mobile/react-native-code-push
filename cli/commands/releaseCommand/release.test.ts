@@ -139,7 +139,8 @@ async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}
         undefined,
         staged.outputPath,
         'index.ts',
-        overrides.jsBundleName ?? '',
+        // Left unset unless the case is about -j, the way commander leaves it.
+        overrides.jsBundleName,
         false,
         true,
         undefined,
@@ -240,6 +241,43 @@ describe("release --skip-bundle --binary-bundle-path", () => {
         await runRelease(staged, { binaryBundlePath: baseFixture, platform: 'android' });
 
         expect(logs.some((line) => line.startsWith('Binary patch summary (android)'))).toBe(true);
+    });
+
+    it("patches a bundle that was built with a custom JS bundle name", async () => {
+        const staged = await stageBundleOutput("custom-name", {
+            'custom.jsbundle': fs.readFileSync(targetFixture),
+        });
+
+        const { uploads } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            jsBundleName: 'custom.jsbundle',
+        });
+
+        expect(uploads.map(({ filePath }) => path.basename(filePath))).toEqual([
+            staged.bundleFileName,
+            `${staged.bundleFileName}${BINARY_PATCH_ARCHIVE_SUFFIX}`,
+        ]);
+
+        const extractRoot = path.join(staged.outputPath, 'extracted');
+        fs.mkdirSync(extractRoot, { recursive: true });
+        await unzip(path.join(staged.bundleDirectory, `${staged.bundleFileName}${BINARY_PATCH_ARCHIVE_SUFFIX}`), extractRoot);
+        const manifest = JSON.parse(
+            fs.readFileSync(path.join(extractRoot, CONTENTS_DIR_NAME, BINARY_PATCH_MANIFEST_NAME), 'utf8'),
+        ) as { bundlePath: string, patchFile: string };
+
+        expect(manifest.bundlePath).toBe('custom.jsbundle');
+        expect(manifest.patchFile).toBe('custom.jsbundle.patch');
+    });
+
+    it("fails without -j when the released bundle uses a custom JS bundle name", async () => {
+        const staged = await stageBundleOutput("custom-name-without-option", {
+            'custom.jsbundle': fs.readFileSync(targetFixture),
+        });
+
+        // The error names -j because passing it is what makes this release work.
+        await expect(runRelease(staged, { binaryBundlePath: baseFixture })).rejects.toThrow(
+            /main\.jsbundle.*--js-bundle-name/s,
+        );
     });
 
     it("fails with an actionable error when the released bundle holds no matching JS bundle", async () => {

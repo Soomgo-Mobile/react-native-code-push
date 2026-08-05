@@ -26,7 +26,7 @@ export async function release(
     identifier: string | undefined,
     outputPath: string,
     entryFile: string,
-    jsBundleName: string,
+    jsBundleName: string | undefined,
     mandatory: boolean,
     enable: boolean,
     rollout: number | undefined,

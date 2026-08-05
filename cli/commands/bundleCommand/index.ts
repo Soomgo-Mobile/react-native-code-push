@@ -8,7 +8,8 @@ type Options = {
     platform: 'ios' | 'android';
     outputPath: string;
     entryFile: string;
-    bundleName: string;
+    // Commander derives this from the "-b, --bundle-name" flag.
+    bundleName?: string;
     outputBundleDir: string;
     outputMetroDir?: string;
     binaryBundlePath?: string;
