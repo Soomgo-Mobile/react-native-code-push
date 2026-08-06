@@ -74,10 +74,12 @@
     "typecheck": "npm run type:src && npm run type:cli && npm run type:scripts && npm run type:e2e",
     "build:cli": "npm run --workspace cli clean && npm run --workspace cli build",
     "prepack": "npm run build:cli",
-    "publish": "npm publish --access=public",
     "eslint": "eslint --quiet .",
     "jest": "jest src/versioning/* expo/* && npm run --workspace cli test",
     "e2e": "ts-node --project e2e/tsconfig.json e2e/run.ts"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "repository": {
     "type": "git",
