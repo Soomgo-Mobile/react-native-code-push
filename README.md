@@ -13,6 +13,9 @@ Supports React Native 0.77 ~ 0.86.
 > [!NOTE]
 > If you are using React Native 0.76 or lower, please use version `12.0.2` of this library.
 
+> [!IMPORTANT]
+> `13.0.0` migrates the native module to TurboModule. A `13.0.0` binary only runs OTA bundles built with `13.0.0` or later, so ship a new binary version and start its release history fresh when you upgrade.
+
 (Tested on the React Native CLI template apps)
 
 ### ✅ Requirements
