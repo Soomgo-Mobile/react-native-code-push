@@ -1,9 +1,9 @@
 # @bravemobile/react-native-code-push
 
-### Seamless Transition from AppCenter to a Fully Self-Hosted CodePush
+### CodePush without an update server
 
 - **No API Server Needed** – Use static hosting solutions (e.g., AWS S3) without maintaining additional API servers.
-- **Familiar API** – Built on `microsoft/react-native-code-push`, ensuring compatibility and stability.
+- **Familiar API** – Built on `microsoft/react-native-code-push`, with the native module migrated to TurboModule.
 - **Flexible Deployment** – Implement your own release workflow, giving you complete control over the deployment process.
 
 ### 🚀 New Architecture support
@@ -36,7 +36,7 @@ npm install @bravemobile/react-native-code-push
 1. Edit `android/app/build.gradle` file to remove the `apply from: "../../node_modules/..../codepush.gradle"` line.
 
 2. The following changes are optional but recommended for cleaning up the old configuration:
-   - Since the deployment key is no longer needed due to the retirement of AppCenter, it is recommended to remove it from your `Info.plist`, `strings.xml`, or JavaScript code.
+   - Since the deployment key is no longer used, it is recommended to remove it from your `Info.plist`, `strings.xml`, or JavaScript code.
    - Thanks to Auto Linking, you can remove the `react-native-code-push` module settings from `settings.gradle`.
 
 3. Follow the installation guide starting from **'4. "CodePush-ify" your app'**.
