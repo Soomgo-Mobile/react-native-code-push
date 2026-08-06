@@ -1,4 +1,3 @@
-import { spawnSync } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import os from "os";
@@ -16,7 +15,7 @@ import {
     writeBinaryPatchBaseRecord,
 } from "./makeBinaryPatchBundle.js";
 import { makeCodePushBundle } from "./makeCodePushBundle.js";
-import { applyPatch, BINARY_PATCH_ALGORITHM, BINARY_PATCH_FORMAT_VERSION, resolveBinaryPatchTool } from "../utils/binaryPatch.js";
+import { applyPatch, BINARY_PATCH_ALGORITHM, BINARY_PATCH_FORMAT_VERSION } from "../utils/binaryPatch.js";
 import { generatePackageHashFromDirectory } from "../utils/hash-utils.js";
 import { unzip } from "../utils/unzip.js";
 
@@ -25,9 +24,6 @@ import { unzip } from "../utils/unzip.js";
  * hashes: the artifact only has value if a client can rebuild the exact contents of
  * the full archive from it, and only real bytes prove that.
  */
-
-/** Cloning and building hdiffz/hpatchz from source takes a while on a cold machine. */
-const BUILD_TOOLS_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** The directory a CodePush archive keeps its contents in, for legacy reasons. */
 const CONTENTS_DIR_NAME = 'CodePush';
@@ -52,25 +48,6 @@ const baseFixture = path.join(fixtureDir, "base.bundle");
 const targetFixture = path.join(fixtureDir, "target.bundle");
 
 let workDir: string;
-
-/**
- * Builds hdiffz/hpatchz when they are missing so a clean checkout - and CI - can run
- * this suite without a manual setup step, the same way the codec suite does.
- */
-function ensureBinaryPatchTools(): void {
-    try {
-        resolveBinaryPatchTool("hdiffz");
-        resolveBinaryPatchTool("hpatchz");
-        return;
-    } catch {
-        // Not built yet; build them once below.
-    }
-    const script = path.join(repoRoot, "scripts", "binary-patch", "build-hdiffpatch.sh");
-    const result = spawnSync(script, { encoding: "utf8", timeout: BUILD_TOOLS_TIMEOUT_MS });
-    if (result.status !== 0) {
-        throw new Error(`${script} failed:\n${result.stdout ?? ""}${result.stderr ?? ""}`);
-    }
-}
 
 function sha256(filePath: string): string {
     return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
@@ -110,9 +87,9 @@ async function unzipTo(archivePath: string, destination: string): Promise<string
 }
 
 beforeAll(() => {
+    // hdiffz/hpatchz are provisioned for the whole run by the jest global setup.
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), "codepush-patch-bundle-"));
-    ensureBinaryPatchTools();
-}, BUILD_TOOLS_TIMEOUT_MS);
+});
 
 afterAll(() => {
     fs.rmSync(workDir, { recursive: true, force: true });
