@@ -9,6 +9,7 @@ import {
     BINARY_PATCH_MANIFEST_NAME,
     extractCodePushBundleContents,
     formatBinaryPatchSummary,
+    isPatchArchiveOversized,
     makeBinaryPatchBundle,
     readBinaryPatchBaseRecord,
     resolveBaseBundlePath,
@@ -339,6 +340,20 @@ describe("extractCodePushBundleContents", () => {
     });
 });
 
+describe("isPatchArchiveOversized", () => {
+    it("keeps a patch that is smaller than the full archive", () => {
+        expect(isPatchArchiveOversized(100, 99)).toBe(false);
+    });
+
+    it("rejects a patch of exactly the same size, which saves a client nothing", () => {
+        expect(isPatchArchiveOversized(100, 100)).toBe(true);
+    });
+
+    it("rejects a patch that is larger than the full archive", () => {
+        expect(isPatchArchiveOversized(100, 101)).toBe(true);
+    });
+});
+
 describe("formatBinaryPatchSummary", () => {
     it("reports both archive sizes and what the patch saves", () => {
         const baseBundleHash = 'a'.repeat(64);
@@ -375,5 +390,21 @@ describe("formatBinaryPatchSummary", () => {
 
         expect(summary).toContain('Binary patch summary (android)');
         expect(summary).toContain('Saved:                 -500 B (-50.0%)');
+        expect(summary).not.toContain('Patch skipped:');
+    });
+
+    it("states that the patch was skipped, and why, when it is not being released", () => {
+        const summary = formatBinaryPatchSummary({
+            platform: 'android',
+            baseBundleHash: 'a'.repeat(64),
+            targetBundleHash: 'b'.repeat(64),
+            fullArchiveSize: 1_000,
+            patchArchiveSize: 1_500,
+            patchSkipped: true,
+        });
+
+        expect(summary.split('\n').at(-1)).toBe(
+            'Patch skipped:         not smaller than the full archive; releasing the full bundle only (--on-oversized-patch skip)',
+        );
     });
 });

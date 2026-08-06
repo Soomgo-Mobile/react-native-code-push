@@ -108,12 +108,18 @@ npx code-push release [options]
 | `--output-bundle-dir <string>` | 번들 출력 디렉토리 이름 | `bundleOutput` |
 | `--output-metro-dir <string>` | Hermes 컴파일 전 Metro JS 번들과 소스맵을 복사할 디렉토리 | — |
 | `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. 이 번들에 대한 binary patch 번들을 함께 배포하고, Hermes 컴파일을 이 번들에 정렬합니다 | — |
+| `--on-oversized-patch <policy>` | patch 번들이 full 번들보다 작지 않을 때의 동작: `skip`은 full 번들만 배포하고, `fail`은 업로드 전에 릴리스를 중단합니다 | `skip` |
 
 `--binary-bundle-path`를 사용하면 플랫폼별로 두 개의 artifact를 업로드합니다. `packageHash`
 이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은 `<packageHash>-patch.zip` patch
 번들입니다. patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가
 포함되어, patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와
 절감량은 업로드 전에 출력됩니다.
+
+patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습니다. CLI는 사용자에게 묻지
+않으므로, patch 크기가 full 이상일 때의 동작을 `--on-oversized-patch`로 미리 정합니다.
+기본값 `skip`은 경고를 남기고 요약에 skip 사실을 명시한 뒤 full 번들만 배포하며, `fail`은
+어떤 업로드도 시작하기 전에 릴리스를 실패시키고 릴리스 히스토리를 변경하지 않습니다.
 
 **예시:**
 
@@ -135,6 +141,9 @@ npx code-push release -b 1.0.0 -v 1.0.2 --skip-bundle true --hash-calc true
 
 # full 번들과 바이너리 번들에 대한 binary patch를 함께 배포
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle
+
+# 동일하지만, patch가 더 작지 않으면 릴리스를 실패시킴
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --on-oversized-patch fail
 ```
 
 ---

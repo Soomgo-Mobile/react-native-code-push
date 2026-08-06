@@ -9,6 +9,7 @@ import {
     BINARY_PATCH_MANIFEST_NAME,
     hashBundleFile,
     writeBinaryPatchBaseRecord,
+    type OversizedPatchPolicy,
 } from "../../functions/makeBinaryPatchBundle.js";
 import { applyPatch } from "../../utils/binaryPatch.js";
 import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
@@ -122,6 +123,7 @@ type ReleaseOverrides = {
     jsBundleName?: string;
     skipCleanup?: boolean;
     uploadFailsFor?: (filePath: string) => boolean;
+    onOversizedPatch?: OversizedPatchPolicy;
 };
 
 async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}) {
@@ -150,6 +152,7 @@ async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}
         undefined,
         undefined,
         overrides.binaryBundlePath,
+        overrides.onOversizedPatch,
     );
 
     return { uploads, releaseHistories: history.saved };
@@ -365,6 +368,16 @@ describe("release --skip-bundle --binary-bundle-path", () => {
         expect(path.basename(uploads[0].filePath)).toBe(staged.bundleFileName);
     });
 
+    it("uploads the patch when it is smaller than the full bundle, without warning about its size", async () => {
+        const staged = await stageBundleOutput("worthwhile-patch");
+
+        const { uploads } = await runRelease(staged, { binaryBundlePath: baseFixture });
+
+        expect(uploads).toHaveLength(2);
+        expect(logs.filter((line) => line.startsWith('warn:'))).toEqual([]);
+        expect(logs.join('\n')).not.toContain('Patch skipped:');
+    });
+
     it("ships a patch archive a client can turn back into the released bundle", async () => {
         const staged = await stageBundleOutput("manifest", {
             'main.jsbundle': fs.readFileSync(targetFixture),
@@ -389,5 +402,76 @@ describe("release --skip-bundle --binary-bundle-path", () => {
         fs.rmSync(path.join(contents, BINARY_PATCH_MANIFEST_NAME));
 
         expect(await generatePackageHashFromDirectory(contents, extractRoot)).toBe(staged.bundleFileName);
+    });
+});
+
+/**
+ * A patch is only worth publishing when it is smaller than the archive it replaces. The
+ * CLI runs unattended, so `--on-oversized-patch` decides what happens when it is not.
+ *
+ * An update whose bundle is a few bytes long produces one: the patch container and the
+ * manifest that describes it together outweigh the whole full archive.
+ */
+describe("release --on-oversized-patch", () => {
+    const tinyContents = () => ({ 'main.jsbundle': Buffer.from('tiny') });
+
+    it("skips the patch by default and releases the full bundle alone", async () => {
+        const staged = await stageBundleOutput("oversized-skip", tinyContents());
+
+        const { uploads, releaseHistories } = await runRelease(staged, { binaryBundlePath: baseFixture });
+
+        expect(uploads.map(({ filePath }) => path.basename(filePath))).toEqual([staged.bundleFileName]);
+        expect(logs.filter((line) => line.startsWith('warn:')).join('\n')).toMatch(/not smaller than the full archive/);
+        expect(logs.join('\n')).toContain('Patch skipped:');
+        expect(releaseHistories[0][APP_VERSION].downloadUrl).toBe(uploads[0].downloadUrl);
+    });
+
+    it("fails before any upload when the policy is fail", async () => {
+        const staged = await stageBundleOutput("oversized-fail", tinyContents());
+
+        const uploads: Uploads = [];
+        const history = historyStore();
+
+        await expect(
+            release(
+                recordingUploader(uploads),
+                history.getReleaseHistory,
+                history.setReleaseHistory,
+                BINARY_VERSION,
+                APP_VERSION,
+                undefined,
+                'ios',
+                undefined,
+                staged.outputPath,
+                'index.ts',
+                undefined,
+                false,
+                true,
+                undefined,
+                true,
+                true,
+                staged.bundleDirectory,
+                undefined,
+                undefined,
+                baseFixture,
+                'fail',
+            ),
+        ).rejects.toThrow(/not smaller than the full archive/);
+
+        expect(uploads).toEqual([]);
+        expect(history.saved).toEqual([]);
+        // The temp directories are still cleaned up on the way out.
+        expect(fs.readdirSync(staged.outputPath)).toEqual([BUNDLE_OUTPUT_DIR_NAME]);
+    });
+
+    it("uploads a worthwhile patch even when the policy is fail", async () => {
+        const staged = await stageBundleOutput("worthwhile-under-fail");
+
+        const { uploads } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            onOversizedPatch: 'fail',
+        });
+
+        expect(uploads).toHaveLength(2);
     });
 });

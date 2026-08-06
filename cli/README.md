@@ -106,6 +106,7 @@ npx code-push release [options]
 | `--output-bundle-dir <string>` | Bundle output directory name | `bundleOutput` |
 | `--output-metro-dir <string>` | Directory to copy Metro JS bundle and sourcemap before Hermes compilation | — |
 | `--binary-bundle-path <string>` | JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it | — |
+| `--on-oversized-patch <policy>` | What to do when the patch bundle is not smaller than the full bundle: `skip` releases the full bundle only, `fail` stops the release before any upload | `skip` |
 
 With `--binary-bundle-path`, the release uploads two artifacts per platform: the full
 bundle named after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip`
@@ -113,6 +114,12 @@ that carries only the difference from the bundle inside the binary. The patch bu
 holds a `codepush-binary-patch.json` manifest describing how to rebuild the update, so
 applying it yields the same `packageHash` as the full bundle. Both sizes and the saving
 are printed before either artifact is uploaded.
+
+A patch is only worth publishing when it is smaller than the archive it replaces. The CLI
+never prompts, so `--on-oversized-patch` decides in advance what happens when the patch
+comes out the same size or larger: `skip` (the default) logs a warning, notes the skip in
+the summary and releases the full bundle alone, while `fail` stops the release before
+anything is uploaded and leaves the release history untouched.
 
 ```bash
 # Standard iOS release
@@ -132,6 +139,9 @@ npx code-push release -b 1.0.0 -v 1.0.2 --skip-bundle true --hash-calc true
 
 # Release a full bundle and a binary patch against the bundle in the binary
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle
+
+# Same, but fail the release if the patch does not come out smaller
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --on-oversized-patch fail
 ```
 
 ---

@@ -28,14 +28,29 @@ const ARG_INDEX = {
     skipBundle: 14,
     bundleDirectory: 16,
     baseBundlePath: 19,
+    onOversizedPatch: 20,
 } as const;
 
-async function runReleaseCommand(args: string[]): Promise<unknown[]> {
-    const { release } = await import("./release.js");
+/**
+ * Parses a `release` invocation against the real command definition. Commander is asked
+ * to throw instead of exiting, and to keep its diagnostics to itself, so a rejected
+ * option can be asserted on without ending the worker or the output.
+ */
+async function parseReleaseCommand(args: string[]): Promise<void> {
     const { program } = await import("commander");
     await import("./index.js");
 
+    const releaseCommand = program.commands.find((command) => command.name() === 'release');
+    releaseCommand?.exitOverride();
+    releaseCommand?.configureOutput({ writeErr: () => {} });
+
     await program.parseAsync(['release', ...args], { from: 'user' });
+}
+
+async function runReleaseCommand(args: string[]): Promise<unknown[]> {
+    const { release } = await import("./release.js");
+
+    await parseReleaseCommand(args);
 
     const releaseMock = jest.mocked(release);
     expect(releaseMock).toHaveBeenCalledTimes(1);
@@ -79,5 +94,25 @@ describe("release command options", () => {
         expect(args[ARG_INDEX.outputPath]).toBe('build');
         expect(args[ARG_INDEX.entryFile]).toBe('index.ts');
         expect(args[ARG_INDEX.bundleDirectory]).toBe('build/bundleOutput');
+    });
+
+    it("defaults the oversized patch policy to skipping the patch", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1']);
+
+        expect(args[ARG_INDEX.onOversizedPatch]).toBe('skip');
+    });
+
+    it("passes the chosen oversized patch policy through to the release", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--on-oversized-patch', 'fail']);
+
+        expect(args[ARG_INDEX.onOversizedPatch]).toBe('fail');
+    });
+
+    it("rejects an oversized patch policy it does not know", async () => {
+        await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--on-oversized-patch', 'ask']))
+            .rejects.toThrow(/--on-oversized-patch.*'ask'.*skip, fail/s);
+
+        const { release } = await import("./release.js");
+        expect(jest.mocked(release)).not.toHaveBeenCalled();
     });
 });

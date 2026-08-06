@@ -253,10 +253,32 @@ export function readBinaryPatchBaseRecord(outputRootPath: string): BinaryPatchBa
 }
 
 /**
- * The operator-facing summary, printed before the artifacts are uploaded so the size
- * of what is about to be published is visible while it can still be stopped. A patch
- * larger than the full archive is reported as a negative saving and left in place;
- * whether that is worth shipping is a judgement call.
+ * What a release does with a patch archive that did not turn out smaller than the full
+ * archive. The CLI runs unattended in CI, so the answer is a policy chosen up front
+ * rather than a decision the summary invites someone to make.
+ */
+export type OversizedPatchPolicy = 'skip' | 'fail';
+
+/** Accepted `--on-oversized-patch` values, in the order the help text lists them. */
+export const OVERSIZED_PATCH_POLICIES: OversizedPatchPolicy[] = ['skip', 'fail'];
+
+export const DEFAULT_OVERSIZED_PATCH_POLICY: OversizedPatchPolicy = 'skip';
+
+/**
+ * Whether the patch archive is worth publishing next to the full archive.
+ *
+ * Equal sizes count as oversized: a patch that saves nothing still costs a client the
+ * download plus an apply step, so it is never the better artifact of the two.
+ */
+export function isPatchArchiveOversized(fullArchiveSize: number, patchArchiveSize: number): boolean {
+    return patchArchiveSize >= fullArchiveSize;
+}
+
+/**
+ * The operator-facing summary, printed before the artifacts are uploaded so the size of
+ * what is about to be published is on the record. When the patch is not smaller than the
+ * full archive and the release is going ahead without it, the summary says so rather
+ * than leaving a negative saving to be interpreted.
  */
 export function formatBinaryPatchSummary({
     platform,
@@ -264,12 +286,14 @@ export function formatBinaryPatchSummary({
     targetBundleHash,
     fullArchiveSize,
     patchArchiveSize,
+    patchSkipped = false,
 }: {
     platform: 'ios' | 'android';
     baseBundleHash: string;
     targetBundleHash: string;
     fullArchiveSize: number;
     patchArchiveSize: number;
+    patchSkipped?: boolean;
 }): string {
     const savedBytes = fullArchiveSize - patchArchiveSize;
     const savedRatio = fullArchiveSize > 0 ? savedBytes / fullArchiveSize : 0;
@@ -280,14 +304,22 @@ export function formatBinaryPatchSummary({
 
     const label = (text: string) => text.padEnd(23);
 
-    return [
+    const lines = [
         `Binary patch summary (${platform})`,
         `${label('Base bundle SHA-256:')}${baseBundleHash}`,
         `${label('Target bundle SHA-256:')}${targetBundleHash}`,
         `${label('Full archive:')}${fullSize}`,
         `${label('Patch archive:')}${patchSize}`,
         `${label('Saved:')}${savedSize} (${(savedRatio * 100).toFixed(1)}%)`,
-    ].join('\n');
+    ];
+
+    if (patchSkipped) {
+        lines.push(
+            `${label('Patch skipped:')}not smaller than the full archive; releasing the full bundle only (--on-oversized-patch skip)`,
+        );
+    }
+
+    return lines.join('\n');
 }
 
 function formatBytes(bytes: number): string {

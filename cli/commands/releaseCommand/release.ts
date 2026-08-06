@@ -7,12 +7,15 @@ import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
 import { unzip } from "../../utils/unzip.js";
 import {
     BINARY_PATCH_ARCHIVE_SUFFIX,
+    DEFAULT_OVERSIZED_PATCH_POLICY,
     extractCodePushBundleContents,
     formatBinaryPatchSummary,
     hashBundleFile,
+    isPatchArchiveOversized,
     makeBinaryPatchBundle,
     readBinaryPatchBaseRecord,
     type BinaryPatchBundle,
+    type OversizedPatchPolicy,
 } from "../../functions/makeBinaryPatchBundle.js";
 
 export async function release(
@@ -36,6 +39,7 @@ export async function release(
     outputMetroDir?: string,
     hashCalc?: boolean,
     baseBundlePath?: string,
+    onOversizedPatch: OversizedPatchPolicy = DEFAULT_OVERSIZED_PATCH_POLICY,
 ): Promise<void> {
     const codePushBundle = skipBundle
         ? null
@@ -61,6 +65,7 @@ export async function release(
             packageHash,
             outputPath,
             platform,
+            onOversizedPatch,
         })
         : null;
 
@@ -127,10 +132,16 @@ async function calcHashFromBundleFile(bundleFilePath: string): Promise<string> {
 }
 
 /**
- * Builds the binary patch artifact of this release and reports what it saves before
- * anything is uploaded, so an unexpectedly large patch can still be stopped.
+ * Builds the binary patch artifact of this release and reports what it saves, before
+ * anything is uploaded.
+ *
+ * A patch that is not smaller than the full archive is not worth publishing, and the
+ * CLI cannot ask: it runs unattended. `onOversizedPatch` decides instead - `skip`
+ * releases the full bundle alone, `fail` stops the release while nothing has been
+ * uploaded yet.
  *
  * @param contentsPath {string | undefined} Update contents of a bundle that was just built. Absent with `--skip-bundle`, where the bundle file being released is unpacked instead, so the patch describes exactly the bytes that go out.
+ * @return {Promise<BinaryPatchBundle | null>} The artifact to upload, or `null` when the patch was skipped.
  */
 async function makeBinaryPatchArtifact({
     baseBundlePath,
@@ -141,6 +152,7 @@ async function makeBinaryPatchArtifact({
     packageHash,
     outputPath,
     platform,
+    onOversizedPatch,
 }: {
     baseBundlePath: string;
     contentsPath: string | undefined;
@@ -150,7 +162,8 @@ async function makeBinaryPatchArtifact({
     packageHash: string;
     outputPath: string;
     platform: 'ios' | 'android';
-}): Promise<BinaryPatchBundle> {
+    onOversizedPatch: OversizedPatchPolicy;
+}): Promise<BinaryPatchBundle | null> {
     warnOnBaseBundleMismatch(outputPath, baseBundlePath);
 
     let patchContentsPath = contentsPath;
@@ -170,13 +183,33 @@ async function makeBinaryPatchArtifact({
             packageHash,
         });
 
+        const fullArchiveSize = fs.statSync(bundleFilePath).size;
+        const patchArchiveSize = fs.statSync(binaryPatch.patchBundleFilePath).size;
+        const oversized = isPatchArchiveOversized(fullArchiveSize, patchArchiveSize);
+
         console.log(formatBinaryPatchSummary({
             platform,
             baseBundleHash: binaryPatch.manifest.baseBundleHash,
             targetBundleHash: binaryPatch.manifest.targetBundleHash,
-            fullArchiveSize: fs.statSync(bundleFilePath).size,
-            patchArchiveSize: fs.statSync(binaryPatch.patchBundleFilePath).size,
+            fullArchiveSize,
+            patchArchiveSize,
+            patchSkipped: oversized && onOversizedPatch === 'skip',
         }));
+
+        if (oversized) {
+            if (onOversizedPatch === 'fail') {
+                throw new Error(
+                    `The binary patch archive (${patchArchiveSize} bytes) is not smaller than the full archive (${fullArchiveSize} bytes), ` +
+                        'and --on-oversized-patch is set to "fail". Nothing was uploaded.',
+                );
+            }
+
+            console.warn(
+                `warn: The binary patch archive (${patchArchiveSize} bytes) is not smaller than the full archive (${fullArchiveSize} bytes). ` +
+                    'Releasing the full bundle only, without a binary patch.',
+            );
+            return null;
+        }
 
         return binaryPatch;
     } finally {

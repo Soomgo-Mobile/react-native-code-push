@@ -1,7 +1,12 @@
 import { program, Option } from "commander";
 import { findAndReadConfigFile } from "../../utils/fsUtils.js";
 import { release } from "./release.js";
-import { resolveBinaryBundlePathOption } from "../../functions/makeBinaryPatchBundle.js";
+import {
+    DEFAULT_OVERSIZED_PATCH_POLICY,
+    OVERSIZED_PATCH_POLICIES,
+    resolveBinaryBundlePathOption,
+    type OversizedPatchPolicy,
+} from "../../functions/makeBinaryPatchBundle.js";
 import { OUTPUT_BUNDLE_DIR, CONFIG_FILE_NAME, ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
 
 type Options = {
@@ -24,6 +29,7 @@ type Options = {
     outputMetroDir?: string;
     hashCalc?: boolean;
     binaryBundlePath?: string;
+    onOversizedPatch: OversizedPatchPolicy;
 }
 
 program.command('release')
@@ -46,6 +52,9 @@ program.command('release')
     .option('--output-metro-dir <string>', 'name of directory to copy the Metro JS bundle and sourcemap before Hermes compilation')
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
     .option('--binary-bundle-path <string>', 'path to the JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it.')
+    .addOption(new Option('--on-oversized-patch <policy>', 'what to do when the binary patch bundle is not smaller than the full bundle: "skip" releases the full bundle only, "fail" stops the release before any upload')
+        .choices(OVERSIZED_PATCH_POLICIES)
+        .default(DEFAULT_OVERSIZED_PATCH_POLICY))
     .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
@@ -83,6 +92,7 @@ program.command('release')
             options.outputMetroDir,
             options.hashCalc,
             baseBundlePath,
+            options.onOversizedPatch,
         )
 
         console.log('🚀 Release completed.')
