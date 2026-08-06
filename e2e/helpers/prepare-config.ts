@@ -5,6 +5,11 @@ import { getMockServerHost } from "../config";
 const BACKUP_SUFFIX = ".e2e-backup";
 const RESUME_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (20s)";
 const SUSPEND_SYNC_BUTTON_TITLE = "Sync ON_NEXT_SUSPEND (20s)";
+const ALERT_SYNC_BUTTON_TITLE = "Sync with updateDialog";
+const ALERT_DIALOG_TITLE = "E2E Update Dialog";
+const ALERT_DIALOG_MESSAGE = "Install the E2E update now?";
+const ALERT_DIALOG_IGNORE_BUTTON = "Ignore update";
+const ALERT_DIALOG_INSTALL_BUTTON = "Install update";
 const HANDLE_SYNC_PATTERN = /const handleSync = useCallback\(\(\) => \{\n[\s\S]*?\n {2}\}, \[\]\);/;
 const DEFAULT_SYNC_BUTTON_PATTERN = /^(\s*)<Button title="Check for updates" onPress={handleSync} \/>$/m;
 
@@ -77,6 +82,7 @@ function injectResumeSyncSupport(content: string): string {
   if (
     content.includes(RESUME_SYNC_BUTTON_TITLE)
     && content.includes(SUSPEND_SYNC_BUTTON_TITLE)
+    && content.includes(ALERT_SYNC_BUTTON_TITLE)
   ) {
     return content;
   }
@@ -88,6 +94,31 @@ function injectResumeSyncSupport(content: string): string {
     "        installMode: CodePush.InstallMode.ON_NEXT_RESUME,",
     "        mandatoryInstallMode: CodePush.InstallMode.ON_NEXT_RESUME,",
     "        minimumBackgroundDuration: 20,",
+    "      },",
+    "      status => {",
+    "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",
+    "      },",
+    "      ({ receivedBytes, totalBytes }) => {",
+    "        setProgress(Math.round((receivedBytes / totalBytes) * 100));",
+    "      },",
+    "      mismatch => {",
+    "        console.log('CodePush mismatch', JSON.stringify(mismatch, null, 2));",
+    "      },",
+    "    ).catch(error => {",
+    "      console.error(error);",
+    "      console.log('Sync failed', error.message ?? 'Unknown error');",
+    "    });",
+    "  }, []);",
+    "",
+    "  const handleSyncWithUpdateDialog = useCallback(() => {",
+    "    CodePush.sync(",
+    "      {",
+    "        updateDialog: {",
+    `          title: '${ALERT_DIALOG_TITLE}',`,
+    `          optionalUpdateMessage: '${ALERT_DIALOG_MESSAGE}',`,
+    `          optionalIgnoreButtonLabel: '${ALERT_DIALOG_IGNORE_BUTTON}',`,
+    `          optionalInstallButtonLabel: '${ALERT_DIALOG_INSTALL_BUTTON}',`,
+    "        },",
     "      },",
     "      status => {",
     "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",
@@ -142,6 +173,7 @@ function injectResumeSyncSupport(content: string): string {
     buttonInserted = true;
     return [
       `${indent}<Button title="Check for updates" onPress={handleSync} />`,
+      `${indent}<Button title="${ALERT_SYNC_BUTTON_TITLE}" onPress={handleSyncWithUpdateDialog} />`,
       `${indent}<Button title="${RESUME_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextResume} />`,
       `${indent}<Button title="${SUSPEND_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextSuspend} />`,
     ].join("\n");

@@ -1,0 +1,30 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "React Native.*"
+
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
+- tapOn: "(?i)^Sync with updateDialog"
+- assertVisible: "(?i)^E2E Update Dialog$"
+- assertVisible: "(?i)^Install the E2E update now\\?$"
+- tapOn: "(?i)^Install update$"
+
+- assertVisible: "Result: UPDATE_INSTALLED"
+- assertNotVisible: "UPDATED!"
+
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "React Native.*"
+- assertVisible: "UPDATED!"
+
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_V1.2.2"

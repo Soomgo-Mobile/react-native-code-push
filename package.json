@@ -6,6 +6,19 @@
   "react-native": "src/CodePush.js",
   "source": "src/CodePush.js",
   "types": "typings/react-native-code-push.d.ts",
+  "codegenConfig": {
+    "name": "RNCodePushSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/specs",
+    "android": {
+      "javaPackageName": "com.microsoft.codepush.react"
+    },
+    "ios": {
+      "modulesProvider": {
+        "CodePush": "CodePush"
+      }
+    }
+  },
   "homepage": "https://microsoft.github.io/code-push",
   "keywords": [
     "react-native",
@@ -54,10 +67,11 @@
     "setup": "npm install --quiet --no-progress",
     "setup-example-app": "ts-node --project scripts/setupExampleApp/tsconfig.json scripts/setupExampleApp/runSetupExampleApp.ts",
     "setup-expo-example-app": "ts-node --project scripts/setupExampleApp/tsconfig.json scripts/setupExpoExampleApp/runSetupExpoExampleApp.ts",
+    "type:src": "tsc --project tsconfig.json --noEmit",
     "type:cli": "npm run --workspace cli typecheck",
     "type:scripts": "tsc --project scripts/tsconfig.json --noEmit",
     "type:e2e": "tsc --project e2e/tsconfig.json --noEmit",
-    "typecheck": "npm run type:cli && npm run type:scripts && npm run type:e2e",
+    "typecheck": "npm run type:src && npm run type:cli && npm run type:scripts && npm run type:e2e",
     "build:cli": "npm run --workspace cli clean && npm run --workspace cli build",
     "prepack": "npm run build:cli",
     "publish": "npm publish --access=public",
@@ -94,6 +108,7 @@
     "@eslint/js": "^9.13.0",
     "@types/express": "^5.0.6",
     "@types/node": "^18.19.129",
+    "@types/react": "19.2.14",
     "@types/semver": "^7.5.8",
     "@types/shelljs": "^0.8.15",
     "@types/yauzl": "^2.10.3",
@@ -103,6 +118,8 @@
     "express": "latest",
     "globals": "^15.11.0",
     "jest": "^29.7.0",
+    "react": "19.2.3",
+    "react-native": "0.84.1",
     "ts-node": "^10.9.2",
     "typescript": "5.0.4",
     "typescript-eslint": "^8.11.0"

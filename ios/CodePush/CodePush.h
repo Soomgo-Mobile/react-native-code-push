@@ -1,14 +1,40 @@
-#if __has_include(<React/RCTEventEmitter.h>)
-#import <React/RCTEventEmitter.h>
-#elif __has_include("RCTEventEmitter.h")
-#import "RCTEventEmitter.h"
-#else
-#import "React/RCTEventEmitter.h"   // Required when used as a Pod in a Swift project
-#endif
-
 #import <Foundation/Foundation.h>
 
+#ifdef RCT_NEW_ARCH_ENABLED
+  #if defined(__cplusplus)
+    #if __has_include(<RNCodePushSpec/RNCodePushSpec.h>)
+      #import <RNCodePushSpec/RNCodePushSpec.h>
+    #elif __has_include("RNCodePushSpec.h")
+      #import "RNCodePushSpec.h"
+    #endif
+  #else
+    #if __has_include(<React/RCTBridgeModule.h>)
+      #import <React/RCTBridgeModule.h>
+    #elif __has_include("RCTBridgeModule.h")
+      #import "RCTBridgeModule.h"
+    #else
+      #import "React/RCTBridgeModule.h"
+    #endif
+  #endif
+#else
+  #if __has_include(<React/RCTEventEmitter.h>)
+    #import <React/RCTEventEmitter.h>
+  #elif __has_include("RCTEventEmitter.h")
+    #import "RCTEventEmitter.h"
+  #else
+    #import "React/RCTEventEmitter.h"   // Required when used as a Pod in a Swift project
+  #endif
+#endif
+
+#ifdef RCT_NEW_ARCH_ENABLED
+  #if defined(__cplusplus)
+@interface CodePush : NativeCodePushSpecBase
+  #else
+@interface CodePush : NSObject <RCTBridgeModule>
+  #endif
+#else
 @interface CodePush : RCTEventEmitter
+#endif
 
 + (NSURL *)binaryBundleURL;
 /*
@@ -68,7 +94,7 @@
  * This information will be used to decide whether the application
  * should ignore the update or not.
  */
-+ (NSDictionary*)getRollbackInfo;
++ (NSDictionary*)getLatestRollbackInfo;
 /*
  * This method is used to save information about the latest rollback.
  * This information will be used to decide whether the application
@@ -203,7 +229,13 @@ failCallback:(void (^)(NSError *err))failCallback;
 
 @end
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
 void CPLog(NSString *formatString, ...);
+#if defined(__cplusplus)
+}
+#endif
 
 typedef NS_ENUM(NSInteger, CodePushInstallMode) {
     CodePushInstallModeImmediate,
