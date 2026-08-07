@@ -72,8 +72,9 @@ export async function release(
     // Every artifact is uploaded before the release history is touched, so a failed
     // upload leaves the history describing only updates that can actually be downloaded.
     const downloadUrl = await uploadArtifact(bundleUploader, bundleFilePath, platform, identifier, 'bundle');
+    let patchDownloadUrl: string | undefined;
     if (binaryPatch) {
-        const patchDownloadUrl = await uploadArtifact(bundleUploader, binaryPatch.patchBundleFilePath, platform, identifier, 'binary patch bundle');
+        patchDownloadUrl = await uploadArtifact(bundleUploader, binaryPatch.patchBundleFilePath, platform, identifier, 'binary patch bundle');
         console.log(`log: Binary patch archive uploaded (download url: ${patchDownloadUrl})`);
     }
 
@@ -81,6 +82,7 @@ export async function release(
         appVersion,
         binaryVersion,
         downloadUrl,
+        patchDownloadUrl,
         packageHash,
         getReleaseHistory,
         setReleaseHistory,

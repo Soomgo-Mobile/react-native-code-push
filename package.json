@@ -78,7 +78,7 @@
     "build:cli": "npm run --workspace cli clean && npm run --workspace cli build",
     "prepack": "npm run build:cli",
     "eslint": "eslint --quiet .",
-    "jest": "jest src/versioning/* expo/* && npm run --workspace cli test",
+    "jest": "jest src/CodePush.test.js src/versioning/* expo/* && npm run --workspace cli test",
     "e2e": "ts-node --project e2e/tsconfig.json e2e/run.ts"
   },
   "publishConfig": {

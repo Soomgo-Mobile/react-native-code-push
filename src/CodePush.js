@@ -181,6 +181,11 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
          */
         const updateInfo = {
           download_url: latestReleaseInfo.downloadUrl,
+          /**
+           * Only released updates that were published with a binary patch carry this.
+           * When it is missing, the update is downloaded in full from `download_url`.
+           */
+          binary_patch_download_url: latestReleaseInfo.binaryPatchDownloadUrl,
           // (`enabled` will always be true in the release information obtained from the previous process.)
           is_available: latestReleaseInfo.enabled,
           package_hash: latestReleaseInfo.packageHash,
@@ -281,6 +286,11 @@ function mapToRemotePackageMetadata(updateInfo) {
     packageHash: updateInfo.package_hash ?? '',
     packageSize: updateInfo.package_size ?? 0,
     downloadUrl: updateInfo.download_url ?? '',
+    // The field stays out of the package unless the update really has a binary patch,
+    // so that the native side sees exactly what it saw before patches existed.
+    ...(updateInfo.binary_patch_download_url
+      ? { binaryPatchDownloadUrl: updateInfo.binary_patch_download_url }
+      : {}),
   };
 }
 

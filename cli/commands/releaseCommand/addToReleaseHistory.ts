@@ -6,6 +6,7 @@ export async function addToReleaseHistory(
     appVersion: string,
     binaryVersion: string,
     bundleDownloadUrl: string,
+    binaryPatchDownloadUrl: string | undefined,
     packageHash: string,
     getReleaseHistory: CliConfigInterface['getReleaseHistory'],
     setReleaseHistory: CliConfigInterface['setReleaseHistory'],
@@ -31,6 +32,12 @@ export async function addToReleaseHistory(
         downloadUrl: bundleDownloadUrl,
         packageHash: packageHash,
     };
+
+    // A release without a binary patch says nothing about one, so that a client reading
+    // this history downloads the full bundle exactly as it did before patches existed.
+    if (binaryPatchDownloadUrl) {
+        newReleaseHistory[appVersion].binaryPatchDownloadUrl = binaryPatchDownloadUrl;
+    }
 
     if (typeof rollout === 'number') {
         newReleaseHistory[appVersion].rollout = rollout;
