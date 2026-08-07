@@ -114,7 +114,8 @@ npx code-push release [options]
 이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은 `<packageHash>-patch.zip` patch
 번들입니다. patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가
 포함되어, patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와
-절감량은 업로드 전에 출력됩니다.
+절감량은 업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
+내려받을 수 있는 URL이 기록됩니다.
 
 patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습니다. CLI는 사용자에게 묻지
 않으므로, patch 크기가 full 이상일 때의 동작을 `--on-oversized-patch`로 미리 정합니다.
@@ -248,10 +249,14 @@ npx code-push show-history -b 1.0.0 -p ios
     "enabled": true,
     "mandatory": true,
     "downloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...",
-    "packageHash": "d4e5f6..."
+    "packageHash": "d4e5f6...",
+    "binaryPatchDownloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...-patch.zip"
   }
 }
 ```
+
+`binaryPatchDownloadUrl`은 `--binary-bundle-path`로 배포한 릴리스에만 기록됩니다. 그 외의
+릴리스에는 이 필드가 없으며, binary patch 이전에 작성된 히스토리도 그대로 유효합니다.
 
 ## 일반적인 워크플로우
 

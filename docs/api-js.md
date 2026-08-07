@@ -533,9 +533,10 @@ Contains details about an update that is available for download from the CodePus
 
 ###### Properties
 
-The `RemotePackage` inherits all of the same properties as the `LocalPackage`, but includes one additional one:
+The `RemotePackage` inherits all of the same properties as the `LocalPackage`, but includes the following additional ones:
 
 - __downloadUrl__: The URL at which the package is available for download. This property is only needed for advanced usage, since the `download` method will automatically handle the acquisition of updates for you. *(String)*
+- __binaryPatchDownloadUrl__: The URL at which a binary patch archive of the package is available for download. It is only present when the release was published together with such a patch, and the package is downloaded in full from `downloadUrl` otherwise. *(String, optional)*
 
 ###### Methods
 
