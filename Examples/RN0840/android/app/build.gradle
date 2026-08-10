@@ -55,6 +55,12 @@ react {
 }
 
 /**
+ * Exports the JS bundle each bundling variant embeds, so a CodePush release can patch
+ * against the bundle that is actually inside the binary.
+ */
+apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"
+
+/**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
 def enableProguardInReleaseBuilds = true
