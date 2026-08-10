@@ -23,6 +23,7 @@ Supports React Native 0.77 ~ 0.86.
 - **React Native**: 0.77 or higher
 - **iOS**: 15.5 or higher
 - **Android**: API level 16 or higher
+- **Android NDK and CMake**: the Android library compiles the applier that installs binary patch updates from C sources, so building an app that depends on it needs both. A React Native project already builds native code, and the Android Gradle Plugin installs the NDK and CMake versions it is missing, so this is usually nothing to set up.
 
 ## 🚗 Migration Guide
 

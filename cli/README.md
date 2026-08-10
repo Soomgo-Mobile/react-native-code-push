@@ -116,6 +116,12 @@ applying it yields the same `packageHash` as the full bundle. Both sizes and the
 are printed before either artifact is uploaded. The release history entry records where
 the patch bundle can be downloaded, next to the full bundle URL.
 
+An Android client installs the update from the patch bundle when the release has one, and
+downloads the full bundle instead whenever the patch cannot be applied, so a release is
+never left uninstallable by a patch. Applying a patch is native code, which the Android
+library builds from source: an app that depends on it needs the NDK and CMake, both of
+which a React Native project normally already has.
+
 A patch is only worth publishing when it is smaller than the archive it replaces. The CLI
 never prompts, so `--on-oversized-patch` decides in advance what happens when the patch
 comes out the same size or larger: `skip` (the default) logs a warning, notes the skip in

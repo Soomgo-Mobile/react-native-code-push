@@ -239,8 +239,9 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
    * 4) The server said there is an update, but the update's hash is the same as that
    *    of the binary's currently running version. This should only happen in Android -
    *    unlike iOS, we don't attach the binary's hash to the updateCheck request
-   *    because we want to avoid having to install diff updates against the binary's
-   *    version, which we can't do yet on Android.
+   *    because an update built against the binary's version does not need one: a
+   *    release published with a binary patch carries the patch archive next to the
+   *    full one, and the client decides for itself which of the two to install.
    */
   if (!update || update.updateAppVersion ||
       localPackage && (update.packageHash === localPackage.packageHash) ||

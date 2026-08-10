@@ -117,6 +117,12 @@ npx code-push release [options]
 절감량은 업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
 내려받을 수 있는 URL이 기록됩니다.
 
+Android 클라이언트는 patch 번들이 있는 릴리스라면 patch로 업데이트를 설치하고, patch를
+적용할 수 없으면 full 번들을 대신 내려받으므로 patch 때문에 설치가 실패하지는 않습니다.
+patch 적용은 네이티브 코드이며 Android 라이브러리가 소스에서 직접 빌드하므로, 이 라이브러리를
+사용하는 앱을 빌드하려면 NDK와 CMake가 필요합니다. React Native 프로젝트라면 대개 이미
+갖추고 있습니다.
+
 patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습니다. CLI는 사용자에게 묻지
 않으므로, patch 크기가 full 이상일 때의 동작을 `--on-oversized-patch`로 미리 정합니다.
 기본값 `skip`은 경고를 남기고 요약에 skip 사실을 명시한 뒤 full 번들만 배포하며, `fail`은
