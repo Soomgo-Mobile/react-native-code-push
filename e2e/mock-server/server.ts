@@ -4,12 +4,38 @@ import type { Server } from "http";
 
 let server: Server | null = null;
 
+/** One request the app made to the mock server, in the order it arrived. */
+export interface MockServerRequest {
+  method: string;
+  url: string;
+  receivedAt: number;
+}
+
+const requestLog: MockServerRequest[] = [];
+
+/**
+ * Every request the server has answered since the log was last cleared.
+ *
+ * The order matters more than the count: an update that is published as both a full and
+ * a patch archive installs to the same contents either way, so which archives were asked
+ * for, and in which order, is what tells a patch install apart from a fallback to the
+ * full archive.
+ */
+export function getRequestLog(): MockServerRequest[] {
+  return [...requestLog];
+}
+
+export function clearRequestLog(): void {
+  requestLog.length = 0;
+}
+
 export function startMockServer(): Promise<Server> {
   return new Promise((resolve, reject) => {
     const app = express();
 
     app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
       console.log(`[mock-server] ${req.method} ${req.url}`);
+      requestLog.push({ method: req.method, url: req.url, receivedAt: Date.now() });
       next();
     });
 

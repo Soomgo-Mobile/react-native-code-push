@@ -78,6 +78,22 @@ The test runner (`e2e/run.ts`) executes these phases in order:
    - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs unless `--exclude-timing-sensitive` is passed.
    - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs unless `--exclude-timing-sensitive` is passed.
 
+### Phase 6 — Binary Patch Updates (`flows-binary-patch/`)
+
+14. **Extract the base bundle** — Copies the JS bundle out of the app that is installed on the device (the APK's `assets/` on Android, the `.app` on iOS). A binary patch only applies to the exact bytes that shipped in the binary, so nothing else can stand in for it.
+15. **Publish and install one release per scenario** — Each scenario releases with `--binary-bundle-path`, breaks the published patch where it wants it broken, and installs the update with `01-install-update`, which verifies the app shows `UPDATED!` and `METADATA_V<version>`:
+   - `1.3.1` — Patch update installs on top of the app binary.
+   - `1.3.2` — Patch update carrying an image asset installs.
+   - `1.3.3` — Patch computed against a stale base bundle falls back to the full update.
+   - `1.3.4` — Patch whose compressed body is corrupt falls back.
+   - `1.3.9` — Patch that restores a bundle its manifest does not describe falls back.
+   - `1.3.5` — Patch whose header is corrupt falls back.
+   - `1.3.6` — Patch archive built for the other platform falls back.
+   - `1.3.7` — One pre-built bundle (`bundle` once, `release --skip-bundle` twice, with the base bundle passed to only one of the two) installs as a patch from the history that carries a patch URL, and in full from the history that does not.
+   - `1.3.8` — `02-ui-responsive-during-install`: the app answers taps while the patch is being downloaded and applied. Runs unless `--exclude-timing-sensitive` is passed.
+
+A patch install and a fallback to the full archive install the same contents, so they look identical on screen. What tells them apart is which archives the app asked the mock server for, which every scenario asserts: `[patch]` for a patch install, `[patch, full]` for a fallback, `[full]` for a release published without a patch.
+
 ## Architecture
 
 ```
@@ -86,17 +102,22 @@ e2e/
 ├── config.ts               # Paths, ports, host configuration
 ├── tsconfig.json
 ├── mock-server/
-│   └── server.ts           # Express static file server (port 18081)
+│   └── server.ts           # Express static file server (port 18081), records every request
 ├── templates/
 │   └── code-push.config.local.ts  # Filesystem-based CodePush config
 ├── helpers/
 │   ├── prepare-config.ts   # Patches App.tsx (host + temporary E2E buttons), copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
-│   └── build-app.ts        # Builds iOS/Android in Release mode
+│   ├── build-app.ts        # Builds iOS/Android in Release mode
+│   ├── artifact-storage.ts # Asserts where the CLI stored bundles and release histories
+│   ├── download-order.ts   # Turns the server's request log into the archives the app downloaded
+│   ├── binary-patch-fixtures.ts  # Base bundle extraction and broken patch archives
+│   └── binary-patch-phase.ts     # Binary patch scenario matrix
 ├── flows/                  # Phase 1: basic flows
 ├── flows-rollback/         # Phase 2: rollback to binary
 ├── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
 ├── flows-optional/         # Phase 4: optional install mode verification
+├── flows-binary-patch/     # Phase 6: binary patch install and fallback
 └── scripts/
     └── sleep.js            # Maestro runScript helper for deterministic waits
 ```
@@ -107,7 +128,11 @@ Instead of a real CodePush server, tests use a local Express server that serves:
 - **Bundles**: `mock-server/data/bundles/{platform}/{identifier}/`
 - **Release history**: `mock-server/data/histories/{platform}/{identifier}/{version}.json`
 
-The `code-push.config.local.ts` template routes all CLI operations (upload, history read/write) to this local filesystem, and the app's `CODEPUSH_HOST` is patched to point at the mock server.
+The `code-push.config.local.ts` template routes all CLI operations (upload, history read/write) to this local filesystem, and the app's `CODEPUSH_HOST` is patched to point at the mock server. A release published with a binary patch stores a second archive next to the full one, named `{packageHash}-patch.zip`.
+
+The server records every request it answers. Reading that log back is how the runner tells apart cases the screen cannot: which update archives the app downloaded, and in which order.
+
+When the config template is given `E2E_ARTIFACT_LOG_PATH`, it also records every artifact it stores (outside the served directory), which the runner reads back to assert that bundles and release histories keep landing under `{platform}/{identifier}`.
 
 ### Release Markers
 
@@ -117,5 +142,5 @@ When creating multiple releases with identical source code (e.g. v1.0.1 and v1.0
 
 - **Build fails with signing error (iOS)**: The setup script sets `SUPPORTED_PLATFORMS = iphonesimulator` and disables code signing. Make sure the example app was set up with `scripts/setupExampleApp`.
 - **Maestro/maestro-runner can't find the app**: Ensure the simulator/emulator is booted before running. For iOS, the script auto-detects the booted simulator.
-- **Android network error**: Android emulators use `10.0.2.2` to reach the host machine's localhost. This is handled automatically by the config.
+- **Android network error**: Android emulators use `10.0.2.2` to reach the host machine's localhost. This is handled automatically by the config. A phone connected over adb has no such alias, so the runner forwards the mock server port onto the device (`adb reverse`) and points the app at its own localhost instead. Set `E2E_ANDROID_MOCK_SERVER_HOST` to override either default.
 - **Update not applying**: Check that the mock server is running (port 18081) and that `mock-server/data/` contains the expected bundle and history files.

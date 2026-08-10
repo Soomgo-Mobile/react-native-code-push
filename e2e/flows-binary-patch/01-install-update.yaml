@@ -1,0 +1,49 @@
+appId: ${APP_ID}
+---
+- launchApp
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
+- assertVisible: "React Native.*"
+
+# Start from the app binary, so the update is downloaded and installed from scratch.
+# A binary patch is computed against the bundle inside the binary, so this is also the
+# only state in which it can be applied.
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 15000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+
+# Mandatory update: downloaded, installed and applied without asking
+- tapOn: "Check for updates"
+- waitForAnimationToEnd:
+    timeout: 30000
+# An update that cannot be installed from its patch is downloaded again in full, which
+# takes a second pass over the network before the app restarts.
+- runScript:
+    file: ../scripts/sleep.js
+    env:
+      WAIT_MS: "5000"
+
+- launchApp:
+    stopApp: false
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
+- assertVisible: "React Native.*"
+- assertVisible: "UPDATED!"
+
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "METADATA_V${RELEASE_LABEL}"

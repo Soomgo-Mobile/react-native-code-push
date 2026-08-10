@@ -170,6 +170,9 @@ bin/*
 # E2E mock server data
 e2e/mock-server/data/
 
+# E2E scratch files (extracted binary bundles, artifact records)
+e2e/.work/
+
 # maestro-runner report directory
 e2e/reports/
 

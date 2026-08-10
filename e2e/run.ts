@@ -1,12 +1,16 @@
 import { Command } from "commander";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import path from "path";
 import fs from "fs";
-import { getAppPath, MOCK_DATA_DIR } from "./config";
+import { getAppPath, MOCK_DATA_DIR, MOCK_SERVER_PORT, WORK_DIR } from "./config";
 import { prepareConfig, restoreConfig } from "./helpers/prepare-config";
 import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker, clearReleaseMarker, getCodePushReleaseArgs } from "./helpers/prepare-bundle";
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
+import { assertArtifactStorageLayout, clearArtifactLog } from "./helpers/artifact-storage";
+import { assertNoPatchDownloads, startRecordingDownloads } from "./helpers/download-order";
+import { assertReleaseOffersNoPatch } from "./helpers/binary-patch-fixtures";
+import { runBinaryPatchPhase } from "./helpers/binary-patch-phase";
 
 interface CliOptions {
   app: string;
@@ -96,6 +100,7 @@ async function main() {
   try {
     // 1. Prepare config
     console.log("\n=== [prepare] ===");
+    prepareAndroidMockServerAccess(options.platform);
     prepareConfig(appPath, options.platform);
 
     // 2. Build (unless --maestro-only)
@@ -115,12 +120,20 @@ async function main() {
     await startMockServer();
     await resetAppStateBeforeFlows(options.platform, appId);
 
+    // A release published without a base bundle says nothing about a binary patch, and
+    // has to keep being downloaded in full exactly as it was before patches existed.
+    const fullOnlyRelease = "release without a binary patch";
+    assertArtifactStorageLayout(fullOnlyRelease);
+    assertReleaseOffersNoPatch(fullOnlyRelease, options.platform, releaseIdentifier, "1.0.0", "1.0.1");
+
     // 5. Run Maestro — Phase 1: main flows
     console.log("\n=== [run-maestro: phase 1] ===");
     const flowsDir = path.resolve(__dirname, "flows");
-    await withRetry("run-maestro: phase 1", options.retryCount, retryDelayMs, () =>
-      runMaestro(flowsDir, options.platform, appId),
-    );
+    await withRetry("run-maestro: phase 1", options.retryCount, retryDelayMs, async () => {
+      startRecordingDownloads();
+      await runMaestro(flowsDir, options.platform, appId);
+      assertNoPatchDownloads(fullOnlyRelease);
+    });
 
     // 6. Disable release for rollback test
     console.log("\n=== [disable-release] ===");
@@ -316,6 +329,20 @@ async function main() {
       );
     }
 
+    // 13. Run Maestro — Phase 6: binary patch updates
+    console.log("\n=== [run-maestro: phase 6 (binary patch updates)] ===");
+    await runBinaryPatchPhase({
+      appPath,
+      platform: options.platform,
+      framework: options.framework,
+      releaseIdentifier,
+      appId,
+      excludeTimingSensitive: options.excludeTimingSensitive ?? false,
+      cleanMockData,
+      runMaestro: (flowPath, flowEnv) => runMaestro(flowPath, options.platform, appId, flowEnv),
+      withRetry: (label, action) => withRetry(label, options.retryCount, retryDelayMs, action),
+    });
+
     console.log("\n=== E2E tests passed ===");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -335,6 +362,49 @@ function cleanMockData(): void {
     fs.rmSync(MOCK_DATA_DIR, { recursive: true });
   }
   fs.mkdirSync(MOCK_DATA_DIR, { recursive: true });
+  // The record of what was stored describes the data that was just thrown away, so it is
+  // cleared with it and every assertion over it is scoped to one scenario.
+  clearArtifactLog();
+  fs.mkdirSync(WORK_DIR, { recursive: true });
+}
+
+/**
+ * Points an Android device at the mock server.
+ *
+ * An emulator reaches the host through a loopback alias, which is what the mock server
+ * host defaults to. A phone connected over adb has no such alias, so the server port is
+ * forwarded onto the device and the app is pointed at the device's own localhost.
+ */
+function prepareAndroidMockServerAccess(platform: "ios" | "android"): void {
+  if (platform !== "android" || process.env.E2E_ANDROID_MOCK_SERVER_HOST) {
+    return;
+  }
+
+  const listed = spawnSync("adb", ["devices"], { encoding: "utf8" });
+  if (listed.status !== 0) {
+    return;
+  }
+
+  const serials = listed.stdout
+    .split("\n")
+    .slice(1)
+    .map((line) => line.split("\t"))
+    .filter((columns) => columns.length === 2 && columns[1].trim() === "device")
+    .map((columns) => columns[0].trim());
+
+  if (serials.length === 0 || serials.some((serial) => serial.startsWith("emulator-"))) {
+    return;
+  }
+
+  const port = String(MOCK_SERVER_PORT);
+  console.log(`[command] adb reverse tcp:${port} tcp:${port}`);
+  const forwarded = spawnSync("adb", ["reverse", `tcp:${port}`, `tcp:${port}`], { stdio: "inherit" });
+  if (forwarded.status !== 0) {
+    throw new Error(`adb reverse tcp:${port} failed; the device cannot reach the mock server`);
+  }
+
+  process.env.E2E_ANDROID_MOCK_SERVER_HOST = "localhost";
+  console.log(`[android] physical device detected (${serials.join(", ")}); mock server forwarded to its localhost`);
 }
 
 // npx code-push release/create-history must use the same identifier that the app uses when fetching history.
@@ -449,12 +519,20 @@ function runMaestro(
   flowsDir: string,
   platform: "ios" | "android",
   appId: string,
+  flowEnv: Record<string, string> = {},
 ): Promise<void> {
+  // Scenarios that differ only in what the installed update should say reuse one flow and
+  // are told the difference through the flow environment. maestro-runner refuses a mix of
+  // the long and the short flag, so each runner is passed the form it is already given.
+  const flowEnvArgs = (flag: string) =>
+    Object.entries(flowEnv).flatMap(([name, value]) => [flag, `${name}=${value}`]);
+
   if (platform === "ios") {
     const args = [
       "test",
       "--platform", "ios",
       "-e", `APP_ID=${appId}`,
+      ...flowEnvArgs("-e"),
       flowsDir,
     ];
     console.log(`[command] maestro ${args.join(" ")}`);
@@ -473,7 +551,7 @@ function runMaestro(
   const reportRootDir = path.resolve(__dirname, "reports");
   fs.mkdirSync(reportRootDir, { recursive: true });
   const args = ["--platform", "android"];
-  args.push("test", "--output", reportRootDir, "--env", `APP_ID=${appId}`, flowsDir);
+  args.push("test", "--output", reportRootDir, "--env", `APP_ID=${appId}`, ...flowEnvArgs("--env"), flowsDir);
 
   console.log(`[command] maestro-runner ${args.join(" ")}`);
 
