@@ -86,6 +86,19 @@ public class CodePushUpdateUtils {
         return String.format("%064x", new java.math.BigInteger(1, hash));
     }
 
+    /**
+     * SHA-256 of a single file's bytes, as lowercase hex - the way a binary patch manifest
+     * records the bundle it was computed against and the bundle it produces.
+     */
+    public static String computeHashForFile(File file) throws IOException {
+        return computeHash(new FileInputStream(file));
+    }
+
+    /** SHA-256 of the bytes in memory, in the same form as {@link #computeHashForFile}. */
+    public static String computeHashForBytes(byte[] data) {
+        return computeHash(new ByteArrayInputStream(data));
+    }
+
     public static void copyNecessaryFilesFromCurrentPackage(String diffManifestFilePath, String currentPackageFolderPath, String newPackageFolderPath) throws IOException {
         if (currentPackageFolderPath == null || !new File(currentPackageFolderPath).exists()) {
             CodePushUtils.log("Unable to copy files from current package during diff update, because currentPackageFolderPath is invalid.");

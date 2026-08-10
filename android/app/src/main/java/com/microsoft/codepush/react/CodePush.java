@@ -61,7 +61,7 @@ public class CodePush extends TurboReactPackage {
     private CodePush(Context context, boolean isDebugMode) {
         mContext = context.getApplicationContext();
 
-        mUpdateManager = new CodePushUpdateManager(context.getFilesDir().getAbsolutePath());
+        mUpdateManager = new CodePushUpdateManager(context.getFilesDir().getAbsolutePath(), mContext);
         mTelemetryManager = new CodePushTelemetryManager(mContext);
         mDeploymentKey = "deprecated_deployment_key";
         mIsDebugMode = isDebugMode;

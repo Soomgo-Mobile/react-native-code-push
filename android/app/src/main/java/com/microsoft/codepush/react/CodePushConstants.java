@@ -2,6 +2,25 @@ package com.microsoft.codepush.react;
 
 public class CodePushConstants {
     public static final String ASSETS_BUNDLE_PREFIX = "assets://";
+    // The binary patch values below are the client half of the contract the CLI writes
+    // into a patch archive. The CLI is TypeScript, so its constants cannot be imported
+    // here: any change to the manifest it produces has to be repeated in this file.
+    public static final String BINARY_PATCH_ALGORITHM = "hdiffpatch-m-zstd";
+    public static final String BINARY_PATCH_ALGORITHM_KEY = "algorithm";
+    public static final String BINARY_PATCH_BASE_BUNDLE_HASH_KEY = "baseBundleHash";
+    public static final String BINARY_PATCH_BUNDLE_PATH_KEY = "bundlePath";
+    public static final String BINARY_PATCH_DOWNLOAD_URL_KEY = "binaryPatchDownloadUrl";
+    public static final String BINARY_PATCH_FILE_KEY = "patchFile";
+    public static final String BINARY_PATCH_FOLDER_NAME = "binary-patch";
+    public static final int BINARY_PATCH_FORMAT_VERSION = 1;
+    public static final String BINARY_PATCH_FORMAT_VERSION_KEY = "formatVersion";
+    public static final String BINARY_PATCH_MANIFEST_FILE_NAME = "codepush-binary-patch.json";
+    // A manifest asking for a bundle larger than this is treated as malformed rather than
+    // as a reason to reserve that much memory and disk.
+    public static final long BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE = 512L * 1024 * 1024;
+    public static final String BINARY_PATCH_TARGET_BUNDLE_HASH_KEY = "targetBundleHash";
+    public static final String BINARY_PATCH_TARGET_BUNDLE_SIZE_KEY = "targetBundleSize";
+    public static final String BINARY_PATCH_TARGET_FILE_NAME = "target.bundle";
     public static final String CODE_PUSH_FOLDER_PREFIX = "CodePush";
     public static final String CODE_PUSH_HASH_FILE_NAME = "CodePushHash";
     public static final String CODE_PUSH_OLD_HASH_FILE_NAME = "CodePushHash.json";
