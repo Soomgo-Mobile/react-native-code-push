@@ -69,13 +69,13 @@ public class CodePushBinaryPatch {
     /**
      * Turns the contents of a downloaded patch archive into the contents of the full one.
      *
-     * @param contentsFolderPath   the unzipped archive, which is modified in place
+     * @param unzippedFolderPath   the unzipped archive, which is modified in place
      * @param workingFolderPath    scratch directory for the restored bundle, emptied before
      *                             and after the attempt so an interrupted run leaves nothing
      * @param baseBundleFileName   name of the JS bundle inside the app binary
      */
-    public BinaryPatchResult restoreBundle(String contentsFolderPath, String workingFolderPath, String baseBundleFileName) {
-        File contentsFolder = new File(contentsFolderPath);
+    public BinaryPatchResult restoreBundle(String unzippedFolderPath, String workingFolderPath, String baseBundleFileName) {
+        File contentsFolder = resolveContentsFolder(new File(unzippedFolderPath));
         File manifestFile = new File(contentsFolder, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME);
         if (!manifestFile.isFile()) {
             return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
@@ -173,6 +173,23 @@ public class CodePushBinaryPatch {
         } finally {
             FileUtils.deleteDirectoryAtPath(workingFolderPath);
         }
+    }
+
+    /**
+     * Finds the contents root inside an unzipped archive.
+     *
+     * An archive wraps its files in a single directory, and the manifest's paths are
+     * relative to that directory rather than to the archive. An archive whose files are at
+     * the top level is its own contents root, which is how the tooling that unpacks one
+     * reads it too.
+     */
+    private static File resolveContentsFolder(File unzippedFolder) {
+        File[] entries = unzippedFolder.listFiles();
+        if (entries != null && entries.length == 1 && entries[0].isDirectory()) {
+            return entries[0];
+        }
+
+        return unzippedFolder;
     }
 
     /**

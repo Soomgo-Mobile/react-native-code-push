@@ -123,7 +123,8 @@ public class CodePushUpdateManagerBinaryPatchTest {
 
     /**
      * Records which archive each download went to instead of downloading and installing it.
-     * The base bundle provider the manager builds is never reached, so it has no context.
+     * Downloading is what these cover, so the manager is built without the collaborator that
+     * applies a patch - nothing here reaches it.
      */
     private static class RecordingUpdateManager extends CodePushUpdateManager {
 
@@ -134,7 +135,7 @@ public class CodePushUpdateManagerBinaryPatchTest {
 
         /** @param patchOutcome what the patch download ends in, or null when it cannot be downloaded */
         RecordingUpdateManager(String documentsDirectory, BinaryPatchResult patchOutcome) {
-            super(documentsDirectory, null);
+            super(documentsDirectory, (CodePushBinaryPatch) null);
             mPatchOutcome = patchOutcome;
         }
 

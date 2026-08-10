@@ -68,6 +68,26 @@ public class CodePushBinaryPatchTest {
     }
 
     @Test
+    public void appliesAPatchThatSitsInTheArchivesOwnRootDirectory() throws IOException {
+        // An archive wraps its files in one directory, and the manifest's paths are relative
+        // to that directory rather than to the unzipped archive.
+        File unzippedFolder = mTemporaryFolder.newFolder("archive");
+        File archiveRoot = new File(unzippedFolder, "CodePush");
+        assertTrue(archiveRoot.mkdirs());
+        assertTrue(mManifestFile.renameTo(new File(archiveRoot, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME)));
+        assertTrue(mPatchFile.renameTo(new File(archiveRoot, PATCH_FILE_NAME)));
+
+        BinaryPatchResult result = new CodePushBinaryPatch(providerOf(BASE_BUNDLE), succeedingApplier())
+                .restoreBundle(unzippedFolder.getAbsolutePath(), mWorkingFolder.getAbsolutePath(), BUNDLE_FILE_NAME);
+
+        assertTrue(result.succeeded());
+        assertArrayEquals(TARGET_BUNDLE, readFile(new File(archiveRoot, BUNDLE_FILE_NAME)));
+        assertFalse(new File(archiveRoot, PATCH_FILE_NAME).exists());
+        assertFalse(new File(archiveRoot, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME).exists());
+        assertNoTemporaryFilesLeft();
+    }
+
+    @Test
     public void removesWhatAnInterruptedAttemptLeftInTheWorkingDirectory() throws IOException {
         assertTrue(mWorkingFolder.mkdirs());
         writeFile(new File(mWorkingFolder, CodePushConstants.BINARY_PATCH_TARGET_FILE_NAME), bytes("half a bundle"));

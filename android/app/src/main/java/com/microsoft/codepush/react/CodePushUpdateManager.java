@@ -25,8 +25,12 @@ public class CodePushUpdateManager {
     private final CodePushBinaryPatch mBinaryPatch;
 
     public CodePushUpdateManager(String documentsDirectory, Context context) {
+        this(documentsDirectory, new CodePushBinaryPatch(new AssetsBaseBundleProvider(context), new HDiffPatchNative()));
+    }
+
+    CodePushUpdateManager(String documentsDirectory, CodePushBinaryPatch binaryPatch) {
         mDocumentsDirectory = documentsDirectory;
-        mBinaryPatch = new CodePushBinaryPatch(new AssetsBaseBundleProvider(context), new HDiffPatchNative());
+        mBinaryPatch = binaryPatch;
     }
 
     private String getDownloadFilePath() {
@@ -191,9 +195,13 @@ public class CodePushUpdateManager {
 
             CodePushUtils.log("Binary patch update failed (" + patchResult.getFailureReason()
                     + "). Downloading the full update instead.");
-        } catch (Exception e) {
+        } catch (Exception | OutOfMemoryError e) {
+            // Applying a patch is the one path that holds a whole bundle in memory, so
+            // running out of it is a failure this has to absorb like any other: by the time
+            // it lands here the arrays are unreachable, and the full archive is downloaded
+            // to disk in chunks rather than held.
             CodePushUtils.log(e);
-            CodePushUtils.log("The binary patch update could not be downloaded. Downloading the full update instead.");
+            CodePushUtils.log("The binary patch update could not be completed. Downloading the full update instead.");
         } finally {
             FileUtils.deleteDirectoryAtPath(getBinaryPatchFolderPath());
         }
@@ -352,6 +360,14 @@ public class CodePushUpdateManager {
                 CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.RELATIVE_BUNDLE_PATH_KEY, relativeBundlePath);
             }
         } else {
+            if (isBinaryPatchUpdate) {
+                // Whatever the patch URL served, it is not a patch archive - an error page
+                // answered with a 200 looks like this too. Moving it into place would
+                // install bytes no hash has ever been checked against, so the full archive
+                // is downloaded instead.
+                return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
+            }
+
             // File is a jsbundle, move it to a folder with the packageHash as its name
             FileUtils.moveFile(downloadFile, newUpdateFolderPath, expectedBundleFileName);
         }
@@ -452,7 +468,11 @@ public class CodePushUpdateManager {
             // bundle needs.
             InputStream assetStream = mContext.getAssets().open(bundleFileName);
             try {
-                ByteArrayOutputStream bundleBytes = new ByteArrayOutputStream();
+                // An uncompressed asset knows its whole length up front, so the buffer is
+                // sized for it: growing one would repeatedly hold two copies of a bundle
+                // that is already the largest allocation on this path.
+                ByteArrayOutputStream bundleBytes = new ByteArrayOutputStream(
+                        Math.max(assetStream.available(), CodePushConstants.DOWNLOAD_BUFFER_SIZE));
                 byte[] buffer = new byte[CodePushConstants.DOWNLOAD_BUFFER_SIZE];
                 int bytesRead;
                 while ((bytesRead = assetStream.read(buffer)) > 0) {
