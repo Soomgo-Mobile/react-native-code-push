@@ -206,6 +206,18 @@ failCallback:(void (^)(NSError *err))failCallback;
 
 @interface CodePushUpdateUtils : NSObject
 
+/*
+ * The SHA-256 of some bytes, written the way every hash of an update's
+ * contents is: lower case hex.
+ */
++ (NSString *)computeHashForData:(NSData *)inputData;
+
+/*
+ * The same hash, of the contents of a file. Returns nil when the file
+ * cannot be read.
+ */
++ (NSString *)computeHashForFileAtPath:(NSString *)filePath;
+
 + (BOOL)copyEntriesInFolder:(NSString *)sourceFolder
                  destFolder:(NSString *)destFolder
                       error:(NSError **)error;

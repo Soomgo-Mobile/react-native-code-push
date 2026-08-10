@@ -1,4 +1,5 @@
 #import "CodePush.h"
+#import "CodePushBinaryPatch.h"
 #if __has_include(<SSZipArchive/SSZipArchive.h>)
 #import <SSZipArchive/SSZipArchive.h>
 #else
@@ -9,8 +10,11 @@
 
 #pragma mark - Private constants
 
+static NSString *const BinaryPatchDownloadUrlKey = @"binaryPatchDownloadUrl";
+static NSString *const BinaryPatchFolderName = @"binary-patch";
 static NSString *const DiffManifestFileName = @"hotcodepush.json";
 static NSString *const DownloadFileName = @"download.zip";
+static NSString *const DownloadUrlKey = @"downloadUrl";
 static NSString *const RelativeBundlePathKey = @"bundlePath";
 static NSString *const StatusFile = @"codepush.json";
 static NSString *const UpdateBundleFileName = @"app.jsbundle";
@@ -49,6 +53,75 @@ static NSString *const UnzippedFolderName = @"unzipped";
        progressCallback:(void (^)(long long, long long))progressCallback
            doneCallback:(void (^)())doneCallback
            failCallback:(void (^)(NSError *err))failCallback
+{
+    void (^downloadFullPackage)(void) = ^{
+        [self downloadAndInstallPackage:updatePackage
+                 expectedBundleFileName:expectedBundleFileName
+                         operationQueue:operationQueue
+                            downloadUrl:updatePackage[DownloadUrlKey]
+                    isBinaryPatchUpdate:NO
+                       progressCallback:progressCallback
+                           doneCallback:doneCallback
+                           failCallback:failCallback
+                  patchFallbackCallback:nil];
+    };
+
+    // A release that was published with a binary patch offers two archives of the same
+    // update. The patch is worth trying because it is a fraction of the size, and the
+    // full archive is always there when it does not work out.
+    NSString *binaryPatchDownloadUrl = updatePackage[BinaryPatchDownloadUrlKey];
+    if (![binaryPatchDownloadUrl isKindOfClass:[NSString class]] || [binaryPatchDownloadUrl length] == 0) {
+        return downloadFullPackage();
+    }
+
+    // Every way the patch can fail ends the same way, with the update being downloaded in
+    // full instead, so none of them reaches the caller as an error. The fallback happens
+    // exactly once without anything having to count it: the full archive is downloaded by
+    // a call that is not allowed to take the patch path, so it has no failure of its own
+    // to fall back from.
+    [self downloadAndInstallPackage:updatePackage
+             expectedBundleFileName:expectedBundleFileName
+                     operationQueue:operationQueue
+                        downloadUrl:binaryPatchDownloadUrl
+                isBinaryPatchUpdate:YES
+                   progressCallback:progressCallback
+                       doneCallback:^{
+                           [self deleteBinaryPatchFolder];
+                           doneCallback();
+                       }
+                       failCallback:^(NSError *err) {
+                           [self deleteBinaryPatchFolder];
+                           CPLog(@"The binary patch update could not be completed (%@). Downloading the full update instead.", err.localizedDescription);
+                           downloadFullPackage();
+                       }
+              patchFallbackCallback:^(NSString *failureReason) {
+                  [self deleteBinaryPatchFolder];
+                  CPLog(@"Binary patch update failed (%@). Downloading the full update instead.", failureReason);
+                  downloadFullPackage();
+              }];
+}
+
+/*
+ * Downloads an update from one of its archives and installs it.
+ *
+ * isBinaryPatchUpdate says whether the archive holds a binary patch of the JS bundle,
+ * which has to be applied before the contents are the update. Only an archive downloaded
+ * from the binary patch URL is treated that way, so an update being downloaded in full
+ * can never end up on the patch path.
+ *
+ * patchFallbackCallback is called instead of doneCallback when the patch cannot be
+ * applied: the update was not installed, and the caller has to download the full archive.
+ * It is nil for a full download, which has nothing to fall back to.
+ */
++ (void)downloadAndInstallPackage:(NSDictionary *)updatePackage
+           expectedBundleFileName:(NSString *)expectedBundleFileName
+                   operationQueue:(dispatch_queue_t)operationQueue
+                      downloadUrl:(NSString *)downloadUrl
+              isBinaryPatchUpdate:(BOOL)isBinaryPatchUpdate
+                 progressCallback:(void (^)(long long, long long))progressCallback
+                     doneCallback:(void (^)(void))doneCallback
+                     failCallback:(void (^)(NSError *err))failCallback
+            patchFallbackCallback:(void (^)(NSString *failureReason))patchFallbackCallback
 {
     NSString *newUpdateHash = updatePackage[@"packageHash"];
     NSString *newUpdateFolderPath = [self getPackageFolderPath:newUpdateHash];
@@ -109,6 +182,23 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                             nonFailingError = nil;
                                                         }
                                                         
+                                                        // Rebuild the JS bundle the archive only carries a patch of, which leaves the
+                                                        // contents identical to the ones the full archive would have delivered.
+                                                        if (isBinaryPatchUpdate) {
+                                                            NSDate *patchStartTime = [NSDate date];
+                                                            NSString *patchFailureReason = nil;
+                                                            if (![CodePushBinaryPatch restoreBundleInUnzippedFolder:unzippedFolderPath
+                                                                                                     workingFolder:[self getBinaryPatchFolderPath]
+                                                                                                     baseBundleURL:[CodePush binaryBundleURL]
+                                                                                                     failureReason:&patchFailureReason]) {
+                                                                patchFallbackCallback(patchFailureReason);
+                                                                return;
+                                                            }
+
+                                                            CPLog(@"Restored the update from its binary patch in %.0f ms.",
+                                                                  [[NSDate date] timeIntervalSinceDate:patchStartTime] * 1000);
+                                                        }
+
                                                         NSString *diffManifestFilePath = [unzippedFolderPath stringByAppendingPathComponent:DiffManifestFileName];
                                                         BOOL isDiffUpdate = [[NSFileManager defaultManager] fileExistsAtPath:diffManifestFilePath];
                                                         
@@ -252,6 +342,15 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                         }
 
                                                     } else {
+                                                        if (isBinaryPatchUpdate) {
+                                                            // Whatever the patch URL served, it is not a patch archive - an error page
+                                                            // answered with a 200 looks like this too. Moving it into place would
+                                                            // install bytes no hash has ever been checked against, so the full archive
+                                                            // is downloaded instead.
+                                                            patchFallbackCallback(CodePushBinaryPatchReasonInvalidManifest);
+                                                            return;
+                                                        }
+
                                                         [[NSFileManager defaultManager] createDirectoryAtPath:newUpdateFolderPath
                                                                                   withIntermediateDirectories:YES
                                                                                                    attributes:nil
@@ -284,7 +383,22 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                 
                                                 failCallback:failCallback];
     
-    [downloadHandler download:updatePackage[@"downloadUrl"]];
+    [downloadHandler download:downloadUrl];
+}
+
+/*
+ * Removes what a patch attempt works in, whichever way the attempt ended - and whatever
+ * an attempt that was killed halfway through left there.
+ */
++ (void)deleteBinaryPatchFolder
+{
+    [[NSFileManager defaultManager] removeItemAtPath:[self getBinaryPatchFolderPath]
+                                               error:nil];
+}
+
++ (NSString *)getBinaryPatchFolderPath
+{
+    return [[self getCodePushPath] stringByAppendingPathComponent:BinaryPatchFolderName];
 }
 
 + (NSString *)getCodePushPath
