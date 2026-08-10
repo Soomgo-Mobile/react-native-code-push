@@ -401,6 +401,83 @@ module.exports = Config;
 ```
 
 
+### 6. Export the Embedded Bundle (Optional)
+
+Only needed if you want to release **binary patch updates** (`release --binary-bundle-path`).
+A binary patch is the difference between the update and the JS bundle that is already
+inside the installed app, so releasing one means holding on to that bundle: the exact
+bytes the build you shipped to the store embedded.
+
+The library ships a hook for each platform that copies the freshly compiled bundle out of
+the build, together with a `binary-patch-base.json` record describing it (bundle SHA-256,
+binary version, build number, and the commit when the build can work it out). Builds that
+embed no bundle - a debuggable Android variant, a Debug iOS build, or any build run with
+`SKIP_BUNDLING` - export nothing and are left untouched.
+
+**Android** - apply the Gradle script in your app module's `android/app/build.gradle`:
+
+```groovy
+apply plugin: "com.android.application"
+apply plugin: "com.facebook.react"
+
+react {
+    // ...
+}
+
+apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"
+```
+
+Every variant that bundles JS then exports to `android/app/build/codepush/embedded-bundle/<variant>/`
+after it is bundled. Pass `-PcodePushExportDir=<path>` (or set `ext.codePushExportDir`) to
+export somewhere else; the `<variant>` directory is appended either way.
+
+**iOS** - in Xcode, add a **Run Script** phase to your app target, **below** "Bundle React
+Native code and images", with:
+
+```bash
+"$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"
+```
+
+The export lands in `$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/`.
+Set the `CODEPUSH_EXPORT_DIR` environment variable to export somewhere else; the
+`$CONFIGURATION-$PLATFORM_NAME` directory is appended either way.
+
+**Keep the export with the binary.** Whatever builds your store binary should archive the
+export next to it, keyed by the binary version, so that later releases can find it:
+
+```bash
+# Android, after ./gradlew :app:assembleRelease
+aws s3 cp --recursive \
+  android/app/build/codepush/embedded-bundle/release \
+  "s3://your-bucket/binaries/android/$BINARY_VERSION/"
+
+# iOS - point the export at a path the pipeline knows, since $BUILD_DIR only exists
+# inside the build
+export CODEPUSH_EXPORT_DIR="$PWD/codepush-export"
+xcodebuild -workspace ios/YourApp.xcworkspace -scheme YourApp -configuration Release archive # ...
+aws s3 cp --recursive \
+  "$CODEPUSH_EXPORT_DIR/Release-iphoneos" \
+  "s3://your-bucket/binaries/ios/$BINARY_VERSION/"
+```
+
+Releasing later is then a download and a path:
+
+```bash
+aws s3 cp --recursive "s3://your-bucket/binaries/android/1.0.0/" ./binary/
+npx code-push release -b 1.0.0 -v 1.0.1 -p android \
+                      --binary-bundle-path ./binary/index.android.bundle
+```
+
+Because the record travels next to the bundle, `release` re-checks it: a base bundle that
+no longer hashes to what the record describes, or one exported from a binary version other
+than `--binary-version`, fails the release before anything is built or uploaded. A base
+bundle with no record beside it releases exactly as it did before.
+
+> [!NOTE]
+> Applying these hooks automatically through the Expo config plugin (`app.plugin.js`) is
+> not implemented yet; Expo projects with a `android`/`ios` directory can wire them up as above.
+
+
 ## 🚀 CLI Tool Usage
 
 > [!TIP]

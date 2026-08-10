@@ -46,6 +46,7 @@
     "cli/dist",
     "cli/**/*.ts",
     "!cli/node_modules",
+    "scripts/export-embedded-bundle.sh",
     "expo",
     "typings",
     "*.podspec",
