@@ -6,6 +6,7 @@ import { release } from "./release.js";
 import { makeCodePushBundle } from "../../functions/makeCodePushBundle.js";
 import {
     BINARY_PATCH_ARCHIVE_SUFFIX,
+    BINARY_PATCH_BASE_RECORD_NAME,
     BINARY_PATCH_MANIFEST_NAME,
     hashBundleFile,
     writeBinaryPatchBaseRecord,
@@ -124,10 +125,12 @@ type ReleaseOverrides = {
     skipCleanup?: boolean;
     uploadFailsFor?: (filePath: string) => boolean;
     onOversizedPatch?: OversizedPatchPolicy;
+    /** Passed in when the case has to read the uploads of a release that threw. */
+    uploads?: Uploads;
 };
 
 async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}) {
-    const uploads: Uploads = [];
+    const uploads: Uploads = overrides.uploads ?? [];
     const history = historyStore();
 
     await release(
@@ -406,6 +409,102 @@ describe("release --skip-bundle --binary-bundle-path", () => {
         fs.rmSync(path.join(contents, BINARY_PATCH_MANIFEST_NAME));
 
         expect(await generatePackageHashFromDirectory(contents, extractRoot)).toBe(staged.bundleFileName);
+    });
+});
+
+/**
+ * The build hooks export the bundle of a native build with a record describing it, so the
+ * base bundle a release is handed can be checked against the build it came out of.
+ */
+describe("release --binary-bundle-path with an exported base bundle record", () => {
+    /** A base bundle laid out the way a build hook leaves it: the bundle, and its record beside it. */
+    function stageExportedBaseBundle(caseName: string, record?: string): string {
+        const exportDir = fs.mkdtempSync(path.join(workDir, `${caseName}-export-`));
+        const baseBundlePath = path.join(exportDir, 'main.jsbundle');
+        fs.copyFileSync(baseFixture, baseBundlePath);
+
+        if (record !== undefined) {
+            fs.writeFileSync(path.join(exportDir, BINARY_PATCH_BASE_RECORD_NAME), record);
+        }
+
+        return baseBundlePath;
+    }
+
+    function exportedRecord(overrides: Record<string, unknown> = {}): string {
+        return JSON.stringify({
+            baseBundleHash: hashBundleFile(baseFixture),
+            binaryVersion: BINARY_VERSION,
+            buildNumber: '42',
+            gitSha: 'a'.repeat(40),
+            ...overrides,
+        }, null, 2);
+    }
+
+    it("releases both artifacts when the record describes this bundle and this binary version", async () => {
+        const staged = await stageBundleOutput("record-match");
+        const baseBundlePath = stageExportedBaseBundle("record-match", exportedRecord());
+
+        const { uploads } = await runRelease(staged, { binaryBundlePath: baseBundlePath });
+
+        expect(uploads).toHaveLength(2);
+        expect(logs.filter((line) => line.startsWith('warn:'))).toEqual([]);
+    });
+
+    it("fails before anything is built when the base bundle is not the file the record describes", async () => {
+        const staged = await stageBundleOutput("record-hash-mismatch");
+        const baseBundlePath = stageExportedBaseBundle("record-hash-mismatch", exportedRecord({ baseBundleHash: 'f'.repeat(64) }));
+
+        const uploads: Uploads = [];
+        await expect(runRelease(staged, { binaryBundlePath: baseBundlePath, uploads })).rejects.toThrow(
+            /does not match the record exported next to it/,
+        );
+
+        expect(uploads).toEqual([]);
+    });
+
+    it("fails when the base bundle was exported from a different binary version", async () => {
+        const staged = await stageBundleOutput("record-version-mismatch");
+        const baseBundlePath = stageExportedBaseBundle("record-version-mismatch", exportedRecord({ binaryVersion: '1.0.0' }));
+
+        const uploads: Uploads = [];
+        await expect(runRelease(staged, { binaryBundlePath: baseBundlePath, uploads })).rejects.toThrow(
+            new RegExp(`exported from binary version 1\\.0\\.0, but this release targets ${BINARY_VERSION}`),
+        );
+
+        expect(uploads).toEqual([]);
+    });
+
+    it.each([
+        ['is not JSON at all', 'not json at all'],
+        ['holds nothing to read a record out of', 'null'],
+    ])("warns and releases when the record %s", async (caseName, contents) => {
+        const staged = await stageBundleOutput("record-unreadable");
+        const baseBundlePath = stageExportedBaseBundle(`record-unreadable-${caseName.replace(/\W+/g, '-')}`, contents);
+
+        const { uploads } = await runRelease(staged, { binaryBundlePath: baseBundlePath });
+
+        expect(logs.filter((line) => line.startsWith('warn:')).join('\n')).toMatch(/not a readable binary patch base record/);
+        expect(uploads).toHaveLength(2);
+    });
+
+    it("warns and releases when the record leaves out the hash it is checked against", async () => {
+        const staged = await stageBundleOutput("record-no-hash");
+        const baseBundlePath = stageExportedBaseBundle("record-no-hash", JSON.stringify({ binaryVersion: '1.0.0' }));
+
+        const { uploads } = await runRelease(staged, { binaryBundlePath: baseBundlePath });
+
+        expect(logs.filter((line) => line.startsWith('warn:')).join('\n')).toMatch(/not a readable binary patch base record/);
+        expect(uploads).toHaveLength(2);
+    });
+
+    it("releases exactly as before when the base bundle has no record beside it", async () => {
+        const staged = await stageBundleOutput("record-absent");
+        const baseBundlePath = stageExportedBaseBundle("record-absent");
+
+        const { uploads } = await runRelease(staged, { binaryBundlePath: baseBundlePath });
+
+        expect(uploads).toHaveLength(2);
+        expect(logs.filter((line) => line.startsWith('warn:'))).toEqual([]);
     });
 });
 
