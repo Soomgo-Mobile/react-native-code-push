@@ -82,6 +82,10 @@ Run `cd ios && pod install && cd ..`
 
 (`npx pod-install`, `bundle exec pod install --project-directory=./ios`, ..)
 
+The pod compiles the applier that installs binary patch updates from the C sources it
+carries, so there is nothing else to install: CocoaPods builds them along with the rest
+of the pod.
+
 
 #### (2) Edit `AppDelegate` Code
 
