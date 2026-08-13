@@ -129,6 +129,8 @@ comes out the same size or larger: `skip` (the default) logs a warning, notes th
 the summary and releases the full bundle alone, while `fail` stops the release before
 anything is uploaded and leaves the release history untouched.
 
+#### Verifying the base bundle
+
 The bundle `--binary-bundle-path` points at is the one input a release cannot verify on
 its own, so the [build hooks](../README.md#6-export-the-embedded-bundle-optional) leave a
 `binary-patch-base.json` record next to every bundle they export. When that record is
