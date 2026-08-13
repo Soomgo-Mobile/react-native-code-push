@@ -103,7 +103,10 @@ project.afterEvaluate {
                 }
 
                 new File(exportDir, exportRecordName).write(JsonOutput.prettyPrint(JsonOutput.toJson(baseRecord)), 'UTF-8')
-                logger.lifecycle("CodePush: exported the embedded ${variantName} bundle to ${exportedBundle}")
+                // A bare `logger` here resolves against the enclosing script, so it is the
+                // Project's logger and drags the Project into the task action, which the
+                // configuration cache refuses. The action's own task carries one.
+                task.logger.lifecycle("CodePush: exported the embedded ${variantName} bundle to ${exportedBundle}")
             }
         }
 
