@@ -299,6 +299,13 @@ Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-nat
 - **onDownloadStart:** Triggered when the bundle download begins.
 - **onDownloadSuccess:** Triggered when the bundle download completes successfully.
 - **onSyncError:** Triggered when an unknown error occurs during the update process. (`CodePush.SyncStatus.UNKNOWN_ERROR` status)
+- **onBinaryPatchResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the patch went.
+
+`onBinaryPatchResult` is called with `{ status: "applied" | "fallback", fallbackReason?: string, applyDurationMs: number }`.
+A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
+is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
+its telemetry sends it itself. Registering no callback leaves the update exactly as it was, and a callback that throws
+is logged rather than allowed to cost the app its update.
 
 
 ### 5. Configure the CLI Tool

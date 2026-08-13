@@ -12,6 +12,13 @@
 
 static NSString *const BinaryPatchDownloadUrlKey = @"binaryPatchDownloadUrl";
 static NSString *const BinaryPatchFolderName = @"binary-patch";
+// The fields of what a download that tried a patch reports back with. They are read by the
+// app that asked for the download and by nothing else, so they never reach a file.
+static NSString *const BinaryPatchResultApplyDurationMsKey = @"applyDurationMs";
+static NSString *const BinaryPatchResultFallbackReasonKey = @"fallbackReason";
+static NSString *const BinaryPatchResultStatusKey = @"status";
+static NSString *const BinaryPatchResultStatusApplied = @"applied";
+static NSString *const BinaryPatchResultStatusFallback = @"fallback";
 static NSString *const DiffManifestFileName = @"hotcodepush.json";
 static NSString *const DownloadFileName = @"download.zip";
 static NSString *const DownloadUrlKey = @"downloadUrl";
@@ -51,18 +58,21 @@ static NSString *const UnzippedFolderName = @"unzipped";
  expectedBundleFileName:(NSString *)expectedBundleFileName
          operationQueue:(dispatch_queue_t)operationQueue
        progressCallback:(void (^)(long long, long long))progressCallback
-           doneCallback:(void (^)())doneCallback
+           doneCallback:(void (^)(NSDictionary *binaryPatchResult))doneCallback
            failCallback:(void (^)(NSError *err))failCallback
 {
-    void (^downloadFullPackage)(void) = ^{
+    void (^downloadFullPackage)(NSDictionary *) = ^(NSDictionary *binaryPatchResult) {
         [self downloadAndInstallPackage:updatePackage
                  expectedBundleFileName:expectedBundleFileName
                          operationQueue:operationQueue
                             downloadUrl:updatePackage[DownloadUrlKey]
                     isBinaryPatchUpdate:NO
                        progressCallback:progressCallback
-                           doneCallback:doneCallback
+                           doneCallback:^{
+                               doneCallback(binaryPatchResult);
+                           }
                            failCallback:failCallback
+                   patchAppliedCallback:nil
                   patchFallbackCallback:nil];
     };
 
@@ -71,7 +81,8 @@ static NSString *const UnzippedFolderName = @"unzipped";
     // full archive is always there when it does not work out.
     NSString *binaryPatchDownloadUrl = updatePackage[BinaryPatchDownloadUrlKey];
     if (![binaryPatchDownloadUrl isKindOfClass:[NSString class]] || [binaryPatchDownloadUrl length] == 0) {
-        return downloadFullPackage();
+        // A download that never had a patch to try has nothing to report about one.
+        return downloadFullPackage(nil);
     }
 
     // Every way the patch can fail ends the same way, with the update being downloaded in
@@ -79,6 +90,10 @@ static NSString *const UnzippedFolderName = @"unzipped";
     // exactly once without anything having to count it: the full archive is downloaded by
     // a call that is not allowed to take the patch path, so it has no failure of its own
     // to fall back from.
+    NSDate *patchAttemptStartTime = [NSDate date];
+    // Set once the applier has restored the bundle, which is also what tells a failure
+    // that follows apart from one that came before.
+    __block NSNumber *applyDurationMs = nil;
     [self downloadAndInstallPackage:updatePackage
              expectedBundleFileName:expectedBundleFileName
                      operationQueue:operationQueue
@@ -87,18 +102,64 @@ static NSString *const UnzippedFolderName = @"unzipped";
                    progressCallback:progressCallback
                        doneCallback:^{
                            [self deleteBinaryPatchFolder];
-                           doneCallback();
+                           doneCallback([self appliedBinaryPatchResult:applyDurationMs]);
                        }
                        failCallback:^(NSError *err) {
                            [self deleteBinaryPatchFolder];
                            CPLog(@"The binary patch update could not be completed (%@). Downloading the full update instead.", err.localizedDescription);
-                           downloadFullPackage();
+                           // An error raised after the bundle was restored is the restored
+                           // update failing the checks every update passes before it is
+                           // installed. Before that point the appliers have no word for what
+                           // happened - the patch archive not being downloadable, say - and
+                           // inventing one here would put a value on the wire that no
+                           // platform reports, so the fallback is reported without a reason.
+                           NSString *failureReason = applyDurationMs == nil
+                               ? nil
+                               : CodePushBinaryPatchReasonPackageVerificationFailed;
+                           downloadFullPackage([self binaryPatchFallbackResult:failureReason
+                                                              attemptStartTime:patchAttemptStartTime]);
                        }
+               patchAppliedCallback:^(double durationMs) {
+                   applyDurationMs = @(durationMs);
+               }
               patchFallbackCallback:^(NSString *failureReason) {
                   [self deleteBinaryPatchFolder];
                   CPLog(@"Binary patch update failed (%@). Downloading the full update instead.", failureReason);
-                  downloadFullPackage();
+                  downloadFullPackage([self binaryPatchFallbackResult:failureReason
+                                                     attemptStartTime:patchAttemptStartTime]);
               }];
+}
+
+/*
+ * The result of a patch attempt the update was installed from, timed over the apply itself.
+ */
++ (NSDictionary *)appliedBinaryPatchResult:(NSNumber *)applyDurationMs
+{
+    return @{
+        BinaryPatchResultStatusKey: BinaryPatchResultStatusApplied,
+        BinaryPatchResultApplyDurationMsKey: applyDurationMs ?: @0,
+    };
+}
+
+/*
+ * The result of a patch attempt the update had to be downloaded in full after.
+ *
+ * There is no completed apply to time here, so the attempt itself is what is timed: from the
+ * patch archive being asked for to the moment the attempt was given up on. The reason is left
+ * out when the attempt ended in an error none of the appliers has a word for.
+ */
++ (NSDictionary *)binaryPatchFallbackResult:(NSString *)failureReason
+                           attemptStartTime:(NSDate *)attemptStartTime
+{
+    NSMutableDictionary *result = [NSMutableDictionary dictionaryWithDictionary:@{
+        BinaryPatchResultStatusKey: BinaryPatchResultStatusFallback,
+        BinaryPatchResultApplyDurationMsKey: @(round([[NSDate date] timeIntervalSinceDate:attemptStartTime] * 1000)),
+    }];
+    if (failureReason) {
+        result[BinaryPatchResultFallbackReasonKey] = failureReason;
+    }
+
+    return result;
 }
 
 /*
@@ -108,6 +169,10 @@ static NSString *const UnzippedFolderName = @"unzipped";
  * which has to be applied before the contents are the update. Only an archive downloaded
  * from the binary patch URL is treated that way, so an update being downloaded in full
  * can never end up on the patch path.
+ *
+ * patchAppliedCallback is called with how long the apply took the moment the bundle has
+ * been restored, which is before the update is known to install. It is nil for a full
+ * download, which has no patch to apply.
  *
  * patchFallbackCallback is called instead of doneCallback when the patch cannot be
  * applied: the update was not installed, and the caller has to download the full archive.
@@ -121,6 +186,7 @@ static NSString *const UnzippedFolderName = @"unzipped";
                  progressCallback:(void (^)(long long, long long))progressCallback
                      doneCallback:(void (^)(void))doneCallback
                      failCallback:(void (^)(NSError *err))failCallback
+             patchAppliedCallback:(void (^)(double applyDurationMs))patchAppliedCallback
             patchFallbackCallback:(void (^)(NSString *failureReason))patchFallbackCallback
 {
     NSString *newUpdateHash = updatePackage[@"packageHash"];
@@ -195,8 +261,9 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                                 return;
                                                             }
 
-                                                            CPLog(@"Restored the update from its binary patch in %.0f ms.",
-                                                                  [[NSDate date] timeIntervalSinceDate:patchStartTime] * 1000);
+                                                            double applyDurationMs = round([[NSDate date] timeIntervalSinceDate:patchStartTime] * 1000);
+                                                            CPLog(@"Restored the update from its binary patch in %.0f ms.", applyDurationMs);
+                                                            patchAppliedCallback(applyDurationMs);
                                                         }
 
                                                         NSString *diffManifestFilePath = [unzippedFolderPath stringByAppendingPathComponent:DiffManifestFileName];

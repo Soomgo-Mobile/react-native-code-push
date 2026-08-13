@@ -20,6 +20,7 @@ NSString *const CodePushBinaryPatchReasonInvalidManifest = @"invalid_manifest";
 NSString *const CodePushBinaryPatchReasonUnsupportedFormat = @"unsupported_format";
 NSString *const CodePushBinaryPatchReasonPatchApplyFailed = @"patch_apply_failed";
 NSString *const CodePushBinaryPatchReasonTargetVerificationFailed = @"target_verification_failed";
+NSString *const CodePushBinaryPatchReasonPackageVerificationFailed = @"package_verification_failed";
 
 #pragma mark - Private constants
 

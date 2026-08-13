@@ -336,7 +336,7 @@ public class CodePushNativeModule extends NativeCodePushSpec {
             public void run() {
                 try {
                     JSONObject mutableUpdatePackage = CodePushUtils.convertReadableToJsonObject(updatePackage);
-                    mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
+                    JSONObject binaryPatchResult = mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
                         private volatile boolean hasScheduledNextFrame = false;
                         private volatile DownloadProgress latestDownloadProgress = null;
                         private final DownloadProgressEventDispatcher progressEventDispatcher = new DownloadProgressEventDispatcher(
@@ -384,7 +384,17 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                     });
 
                     JSONObject newPackage = mUpdateManager.getPackage(CodePushUtils.tryGetString(updatePackage, CodePushConstants.PACKAGE_HASH_KEY));
-                    promise.resolve(CodePushUtils.convertJsonObjectToWritable(newPackage));
+                    WritableMap downloadedPackage = CodePushUtils.convertJsonObjectToWritable(newPackage);
+                    if (binaryPatchResult != null) {
+                        // The result describes this download rather than the update, so it is
+                        // put on what this call resolves with and nowhere else: the metadata
+                        // the update manager has already written knows nothing about it, and
+                        // whoever asked for the download decides what the result is worth.
+                        downloadedPackage.putMap(CodePushConstants.BINARY_PATCH_RESULT_KEY,
+                                CodePushUtils.convertJsonObjectToWritable(binaryPatchResult));
+                    }
+
+                    promise.resolve(downloadedPackage);
                 } catch (CodePushInvalidUpdateException e) {
                     CodePushUtils.log(e);
                     mSettingsManager.saveFailedUpdate(CodePushUtils.convertReadableToJsonObject(updatePackage));

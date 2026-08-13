@@ -543,8 +543,25 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     mandatoryInstallMode: CodePush.InstallMode.IMMEDIATE,
     minimumBackgroundDuration: 0,
     updateDialog: null,
+    onBinaryPatchResult: null,
     ...options,
   };
+
+  /*
+   * A callback an app registered to observe how a binary patch went must not be able to
+   * cost it an update, so it is isolated the way the other sync callbacks are: whatever it
+   * throws is logged and the install carries on. An app that registered none leaves the
+   * download exactly as it was before this option existed.
+   */
+  const onBinaryPatchResult = typeof syncOptions.onBinaryPatchResult === "function"
+    ? (label, result) => {
+      try {
+        syncOptions.onBinaryPatchResult(label, result);
+      } catch (error) {
+        log(`An error has occurred : ${error.stack}`);
+      }
+    }
+    : null;
 
   syncStatusChangeCallback = typeof syncStatusChangeCallback === "function"
     ? syncStatusChangeCallback
@@ -597,7 +614,10 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
       syncStatusChangeCallback(CodePush.SyncStatus.DOWNLOADING_PACKAGE);
       sharedCodePushOptions.onDownloadStart?.(remotePackageLabel);
 
-      const localPackage = await remotePackage.download(downloadProgressCallback);
+      const localPackage = await remotePackage.download(
+        downloadProgressCallback,
+        onBinaryPatchResult && ((result) => onBinaryPatchResult(remotePackageLabel, result)),
+      );
 
       sharedCodePushOptions.onDownloadSuccess?.(remotePackageLabel);
 

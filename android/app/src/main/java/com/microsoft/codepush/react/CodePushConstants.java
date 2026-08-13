@@ -18,6 +18,9 @@ public class CodePushConstants {
     // A manifest asking for a bundle larger than this is treated as malformed rather than
     // as a reason to reserve that much memory and disk.
     public static final long BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE = 512L * 1024 * 1024;
+    // Not part of the CLI's contract: the field a download that tried a patch reports its
+    // outcome under, on the package it resolves with and on no package it stores.
+    public static final String BINARY_PATCH_RESULT_KEY = "binaryPatchResult";
     public static final String BINARY_PATCH_TARGET_BUNDLE_HASH_KEY = "targetBundleHash";
     public static final String BINARY_PATCH_TARGET_BUNDLE_SIZE_KEY = "targetBundleSize";
     public static final String BINARY_PATCH_TARGET_FILE_NAME = "target.bundle";

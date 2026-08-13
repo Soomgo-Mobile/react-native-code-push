@@ -59,6 +59,50 @@ export interface UpdateCheckResponse {
     is_mandatory?: boolean;
 }
 
+/**
+ * Why an update that was published with a binary patch had to be downloaded in full
+ * instead. These are the words every platform's applier reports, so a rollout can be
+ * judged by them whichever platform it is running on.
+ */
+export type BinaryPatchFallbackReason =
+    /** The bundle inside the app binary could not be opened or read. */
+    | "base_bundle_unavailable"
+    /** The bundle inside the app binary is not the one the patch was computed against. */
+    | "base_hash_mismatch"
+    /** The manifest is missing, malformed, points outside the archive, or asks for too much. */
+    | "invalid_manifest"
+    /** The patch was produced by a format or a codec this client cannot apply. */
+    | "unsupported_format"
+    /** The applier refused the patch, or the restored bundle could not be written. */
+    | "patch_apply_failed"
+    /** The restored bundle is not the one the manifest promised. */
+    | "target_verification_failed"
+    /** The update restored from the patch did not pass the checks that follow the restore. */
+    | "package_verification_failed";
+
+/**
+ * How installing an update from its binary patch archive went.
+ */
+export interface BinaryPatchResult {
+    /**
+     * Whether the update was installed from its patch archive, or had to be downloaded in
+     * full instead. A fallback is not an error: the update is installed either way.
+     */
+    status: "applied" | "fallback";
+
+    /**
+     * Why the full archive had to be downloaded. Absent when the patch was applied, and
+     * also when the attempt ended in an error none of the appliers has a word for.
+     */
+    fallbackReason?: BinaryPatchFallbackReason;
+
+    /**
+     * How long the patch work took, in milliseconds: applying the patch when it was
+     * applied, and the whole attempt when it was given up on.
+     */
+    applyDurationMs: number;
+}
+
 export interface CodePushOptions extends SyncOptions {
     /**
      * The `ignoreFailedUpdates` option is only available as an option for `CodePush.sync()`.
@@ -258,6 +302,19 @@ export interface SyncOptions {
      * one or more of the default values.
      */
     rollbackRetryOptions?: RollbackRetryOptions;
+
+    /**
+     * An optional callback for observing how an update published with a binary patch was
+     * installed: whether it came from the patch archive, why it did not when it did not, and
+     * how long the patch work took. It is called once per download that had a patch to try,
+     * with the label of the release being installed.
+     *
+     * Purely for observation. The library neither stores the result nor sends it anywhere -
+     * an app that wants it in its telemetry sends it itself - and nothing about the update
+     * depends on the callback: registering none changes nothing, and one that throws is
+     * logged and does not fail the install.
+     */
+    onBinaryPatchResult?: (label: string, result: BinaryPatchResult) => void;
 
     /**
      * Specifies whether to ignore the update if the installation fails.
