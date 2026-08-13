@@ -301,9 +301,13 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
     // Applying a patch is the one step that needs a whole bundle at once, and the base
     // bundle is a read-only file inside the app binary: mapping it hands the applier the
     // random access it needs without the update ever holding a copy of it.
-    NSData *baseBundle = [NSData dataWithContentsOfFile:baseBundlePath
-                                                options:NSDataReadingMappedIfSafe
-                                                  error:&error];
+    // The apply below reads `.bytes` for its whole duration, which is not a use of the
+    // NSData itself, so ARC is free to release these two right after their last mention -
+    // unmapping the base bundle out from under the applier. Both must stay alive until
+    // the scope ends.
+    __attribute__((objc_precise_lifetime)) NSData *baseBundle = [NSData dataWithContentsOfFile:baseBundlePath
+                                                                                       options:NSDataReadingMappedIfSafe
+                                                                                         error:&error];
     if (baseBundle == nil) {
         CPLog(@"Unable to read the JS bundle inside the app binary: %@", error);
         return CodePushBinaryPatchReasonBaseBundleUnavailable;
@@ -312,9 +316,9 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
         return CodePushBinaryPatchReasonBaseHashMismatch;
     }
 
-    NSData *patch = [NSData dataWithContentsOfFile:patchFilePath
-                                           options:0
-                                             error:&error];
+    __attribute__((objc_precise_lifetime)) NSData *patch = [NSData dataWithContentsOfFile:patchFilePath
+                                                                                 options:0
+                                                                                   error:&error];
     if (patch == nil) {
         CPLog(@"Unable to read the binary patch: %@", error);
         return CodePushBinaryPatchReasonPatchApplyFailed;
