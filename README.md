@@ -299,13 +299,29 @@ Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-nat
 - **onDownloadStart:** Triggered when the bundle download begins.
 - **onDownloadSuccess:** Triggered when the bundle download completes successfully.
 - **onSyncError:** Triggered when an unknown error occurs during the update process. (`CodePush.SyncStatus.UNKNOWN_ERROR` status)
-- **onBinaryPatchResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the patch went.
+- **onBinaryPatchResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the patch went. Unlike the callbacks above, this one is an option of the `sync()` call itself - see below.
 
 `onBinaryPatchResult` is called with `{ status: "applied" | "fallback", fallbackReason?: string, applyDurationMs: number }`.
 A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
 is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
 its telemetry sends it itself. Registering no callback leaves the update exactly as it was, and a callback that throws
 is logged rather than allowed to cost the app its update.
+
+The callbacks above are registered once for the whole app and fire for every sync. `onBinaryPatchResult` is different:
+it is read from the options of the `sync()` call that performs the download, so it has to be passed to that call.
+
+```typescript
+CodePush.sync({
+  onBinaryPatchResult: (label, result) => {
+    // Send it to your own telemetry, if you want it there.
+  },
+});
+```
+
+Passing it to `CodePush({ ... })` instead only works when the decorator is what syncs - `checkFrequency` of
+`ON_APP_START` or `ON_APP_RESUME`, where the decorator hands its own options to `sync()`. With
+`CheckFrequency.MANUAL` the decorator never syncs, so a callback registered there is never called: pass it to
+your own `CodePush.sync()` call.
 
 
 ### 5. Configure the CLI Tool
