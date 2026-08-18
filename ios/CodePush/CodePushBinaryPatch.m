@@ -43,9 +43,12 @@ static const NSInteger BinaryPatchFormatVersion = 1;
 /*
  * The largest bundle a patch is allowed to promise. A manifest is untrusted input, and
  * the size in it decides how much disk the restore asks for before a single byte of the
- * patch has been read.
+ * patch has been read. A large Hermes bundle stays under 50 MB, and a release that somehow
+ * exceeds the bound still installs from its full archive, so the headroom below is generous
+ * enough for the limit to only ever catch a manifest that is wrong. The other platform's
+ * applier holds the same value.
  */
-static const long long BinaryPatchMaxTargetBundleSize = 512LL * 1024 * 1024;
+static const long long BinaryPatchMaxTargetBundleSize = 128LL * 1024 * 1024;
 
 /** Name the restored bundle is written under, inside the working directory. */
 static NSString *const BinaryPatchTargetFileName = @"target.bundle";
@@ -302,9 +305,13 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
     // Applying a patch is the one step that needs a whole bundle at once, and the base
     // bundle is a read-only file inside the app binary: mapping it hands the applier the
     // random access it needs without the update ever holding a copy of it.
-    NSData *baseBundle = [NSData dataWithContentsOfFile:baseBundlePath
-                                                options:NSDataReadingMappedIfSafe
-                                                  error:&error];
+    // The apply below reads `.bytes` for its whole duration, which is not a use of the
+    // NSData itself, so ARC is free to release these two right after their last mention -
+    // unmapping the base bundle out from under the applier. Both must stay alive until
+    // the scope ends.
+    __attribute__((objc_precise_lifetime)) NSData *baseBundle = [NSData dataWithContentsOfFile:baseBundlePath
+                                                                                       options:NSDataReadingMappedIfSafe
+                                                                                         error:&error];
     if (baseBundle == nil) {
         CPLog(@"Unable to read the JS bundle inside the app binary: %@", error);
         return CodePushBinaryPatchReasonBaseBundleUnavailable;
@@ -313,9 +320,9 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
         return CodePushBinaryPatchReasonBaseHashMismatch;
     }
 
-    NSData *patch = [NSData dataWithContentsOfFile:patchFilePath
-                                           options:0
-                                             error:&error];
+    __attribute__((objc_precise_lifetime)) NSData *patch = [NSData dataWithContentsOfFile:patchFilePath
+                                                                                 options:0
+                                                                                   error:&error];
     if (patch == nil) {
         CPLog(@"Unable to read the binary patch: %@", error);
         return CodePushBinaryPatchReasonPatchApplyFailed;

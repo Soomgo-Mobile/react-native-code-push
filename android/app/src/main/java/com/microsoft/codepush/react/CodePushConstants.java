@@ -16,8 +16,11 @@ public class CodePushConstants {
     public static final String BINARY_PATCH_FORMAT_VERSION_KEY = "formatVersion";
     public static final String BINARY_PATCH_MANIFEST_FILE_NAME = "codepush-binary-patch.json";
     // A manifest asking for a bundle larger than this is treated as malformed rather than
-    // as a reason to reserve that much memory and disk.
-    public static final long BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE = 512L * 1024 * 1024;
+    // as a reason to reserve that much memory and disk. A large Hermes bundle stays under
+    // 50 MB, and a release that somehow exceeds the bound still installs from its full
+    // archive, so the headroom below is generous enough for the limit to only ever catch
+    // a manifest that is wrong. The other platform's applier holds the same value.
+    public static final long BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE = 128L * 1024 * 1024;
     // Not part of the CLI's contract: the field a download that tried a patch reports its
     // outcome under, on the package it resolves with and on no package it stores.
     public static final String BINARY_PATCH_RESULT_KEY = "binaryPatchResult";

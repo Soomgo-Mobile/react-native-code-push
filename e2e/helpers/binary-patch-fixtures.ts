@@ -311,10 +311,13 @@ function writeManifestFile(contentsDir: string, manifest: BinaryPatchManifest): 
 /**
  * Corrupts the compressed data of the patch, leaving its header intact.
  *
- * This is the fault nothing else catches: the header still describes a patch this client
- * supports, and neither the diff format nor its compressed streams carry a checksum of
- * what they produce, so the applier can report success over wrong bytes. Only the hash
- * of the restored bundle stands between this archive and a broken update.
+ * Whether body corruption is reported depends on where it lands: these last bytes are the
+ * tail of the zstd stream, so the decoder rejects them and the apply fails outright, while
+ * a flip inside a literals block would decode to different bytes with no error at all.
+ * What the scenario pins down is what holds in both cases - an archive whose patch data is
+ * not the data that was published never installs an update. The defence for the half the
+ * codec cannot see, the hash of the restored bundle, is exercised by the "restored bundle
+ * that the manifest does not describe" scenario instead.
  */
 export function corruptPatchBody(archivePath: string): void {
   rewriteArchive(archivePath, (contentsDir) => {
@@ -360,8 +363,14 @@ export function corruptPatchHeader(archivePath: string): void {
 
 /**
  * Turns a patch archive into the archive the other platform's release would have
- * published: it rebuilds the other platform's JS bundle, out of the bundle that shipped
- * in the other platform's binary.
+ * published: the patch entry is renamed to the other platform's bundle path and the
+ * manifest is restamped to describe that bundle, against a base hash the running binary
+ * does not carry - the caller passes the hash of a stale bundle.
+ *
+ * Leaving the patch data itself untouched still models a crossed artifact faithfully,
+ * because the client compares the base hash against the bundle inside its own binary
+ * before it ever uses the path the manifest names: a genuine other-platform archive is
+ * refused at exactly that check, and nothing beyond it is ever reached.
  *
  * Serving it to this platform is the mistake a release pipeline makes when the two
  * platforms' artifacts are crossed, and the client has to refuse it and download the
