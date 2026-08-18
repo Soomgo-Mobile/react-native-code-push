@@ -117,6 +117,32 @@ npx code-push release [options]
 절감량은 업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
 내려받을 수 있는 URL이 기록됩니다.
 
+#### 사전 준비: patch 생성 도구 빌드
+
+patch 생성에는 HDiffPatch의 `hdiffz`가 필요합니다. 패키지 의존성으로 설치되지
+않으므로, 이 패키지가 함께 배포하는 스크립트로 머신마다 한 번 빌드합니다.
+
+```bash
+./node_modules/@bravemobile/react-native-code-push/scripts/binary-patch/build-hdiffpatch.sh
+```
+
+스크립트는 고정된 upstream 소스를 clone해서 컴파일하므로 `git`, C/C++ 툴체인(`make`, `cc`,
+`c++`), 네트워크 연결이 필요합니다. 이미 빌드되어 있으면 아무 일도 하지 않고, `--force`를
+주면 다시 빌드합니다. `hdiffz`와 `hpatchz`는 스크립트가 속한 패키지 루트의
+`.hdiffpatch-tools/` 디렉토리에 설치되며, CLI는 작업 디렉토리와 그 상위 디렉토리들에서
+`.hdiffpatch-tools/` 디렉토리를 찾습니다. `node_modules` 안의 설치 위치는 프로젝트보다 상위가
+아니라 하위이므로, 두 실행 파일이 있는 디렉토리를 `HDIFFPATCH_TOOLS_DIR`로 지정하세요. 미리
+빌드해 둔 CI 이미지나 프로젝트 밖의 공용 설치를 사용할 때도 같은 방법을 씁니다.
+
+```bash
+export HDIFFPATCH_TOOLS_DIR="$PWD/node_modules/@bravemobile/react-native-code-push/.hdiffpatch-tools"
+```
+
+도구가 필요한 것은 `--binary-bundle-path`를 사용하는 릴리스뿐이며, 도구를 찾지 못하면
+업로드를 시작하기 전에 빌드 명령을 안내하는 메시지와 함께 실패합니다.
+
+#### patch가 full 번들보다 작지 않을 때
+
 patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습니다. CLI는 사용자에게 묻지
 않으므로, patch 크기가 full 이상일 때의 동작을 `--on-oversized-patch`로 미리 정합니다.
 기본값 `skip`은 경고를 남기고 요약에 skip 사실을 명시한 뒤 full 번들만 배포하며, `fail`은

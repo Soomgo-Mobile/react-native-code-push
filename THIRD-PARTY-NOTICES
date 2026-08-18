@@ -49,11 +49,14 @@ Zstandard (zstd)
 -------------------------------------------------------------------------------
 
 Version:    1.5.7
+Commit:     68c88c7c7ad22b5e6882a5296ef96d27dc8750c4
 Source:     https://github.com/sisong/zstd
             (the fork HDiffPatch builds against, derived from
             https://github.com/facebook/zstd)
-            The files here are a snapshot of that fork's dev branch; the copies in
-            this repository are the version the appliers are built from.
+            The files here are a snapshot of that fork; the copies in this
+            repository are the version the appliers are built from, and
+            scripts/binary-patch/build-hdiffpatch.sh pins the same commit so the
+            `hdiffz` it builds compresses with the code that is vendored here.
 License:    BSD-3-Clause
 Vendored:   cpp/binarypatch/vendor/zstd/
 
