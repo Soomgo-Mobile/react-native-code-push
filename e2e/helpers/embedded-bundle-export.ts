@@ -10,6 +10,10 @@
  *
  * So the export is compared against the bundle taken out of the installed app, which is
  * the same ground truth the patch scenarios build their base bundle from.
+ *
+ * Applying the hooks is a choice each app makes, one platform at a time, and most example
+ * apps have not made it. The check therefore only holds an app to an export once that app
+ * has asked its build to write one.
  */
 
 import { execFileSync } from "child_process";
@@ -51,9 +55,16 @@ export interface EmbeddedBundleExportContext {
  * the record beside it describes that same bundle and this binary version.
  */
 export function assertExportedBundleMatchesBinary(context: EmbeddedBundleExportContext): void {
-  const { platform, appId, binaryVersion, buildSkipped } = context;
+  const { appPath, platform, appId, binaryVersion, buildSkipped } = context;
 
-  const exportDir = resolveExportDir(context.appPath, platform);
+  if (!appliesExportHook(appPath, platform)) {
+    console.log(
+      `[assert] ${SCENARIO}: skipped, "${path.basename(appPath)}" does not apply the ${platform} export hook`,
+    );
+    return;
+  }
+
+  const exportDir = resolveExportDir(appPath, platform);
   if (exportDir == null) {
     reportMissing(buildSkipped, "the export directory of this build could not be resolved");
     return;
@@ -115,6 +126,38 @@ function reportMissing(buildSkipped: boolean, reason: string): void {
   }
 
   console.log(`[assert] ${SCENARIO}: skipped, this run built nothing and ${reason}`);
+}
+
+/**
+ * Whether this app's build writes an export on this platform at all.
+ *
+ * The hooks are opt-in and each is opted into on its own: an app can apply the Gradle
+ * script without adding the Xcode build phase, or the other way round. An app that never
+ * asked for an export is not failing this check by not having one, so the app's own build
+ * files decide whether the check applies, by naming the hook they apply.
+ */
+function appliesExportHook(appPath: string, platform: Platform): boolean {
+  if (platform === "android") {
+    return fileMentions(path.join(appPath, "android", "app", "build.gradle"), "codepush-export.gradle");
+  }
+
+  return findIosProjectFiles(appPath).some((projectFile) => fileMentions(projectFile, "export-embedded-bundle.sh"));
+}
+
+/** Every `project.pbxproj` under the app's `ios` directory, whatever the project is named. */
+function findIosProjectFiles(appPath: string): string[] {
+  const iosDir = path.join(appPath, "ios");
+  if (!fs.existsSync(iosDir)) {
+    return [];
+  }
+
+  return fs.readdirSync(iosDir)
+    .filter((name) => name.endsWith(".xcodeproj"))
+    .map((name) => path.join(iosDir, name, "project.pbxproj"));
+}
+
+function fileMentions(filePath: string, needle: string): boolean {
+  return fs.existsSync(filePath) && fs.readFileSync(filePath, "utf8").includes(needle);
 }
 
 function resolveExportDir(appPath: string, platform: Platform): string | undefined {

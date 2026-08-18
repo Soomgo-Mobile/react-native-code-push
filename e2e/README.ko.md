@@ -49,7 +49,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 ### Phase 1 — 기본 플로우 (`flows/`)
 
 1. **설정 준비** — `App.tsx`를 로컬 mock 서버를 가리키도록 패치하고, `code-push.config.local.ts`를 앱 디렉토리에 복사합니다.
-2. **앱 빌드** — 예제 앱을 Release 모드로 빌드하여 시뮬레이터/에뮬레이터에 설치합니다. export 훅이 이 빌드 안에서 실행되므로, 훅이 내보낸 번들을 빌드된 앱 안의 번들과 비교하고 옆에 놓인 `binary-patch-base.json` 기록도 같은 해시와 바이너리 버전인지 확인합니다. `--maestro-only` 실행은 빌드 산출물이 없으니 export를 찾지 못하면 검사를 건너뜁니다.
+2. **앱 빌드** — 예제 앱을 Release 모드로 빌드하여 시뮬레이터/에뮬레이터에 설치합니다. export 훅이 이 빌드 안에서 실행되므로, 훅이 내보낸 번들을 빌드된 앱 안의 번들과 비교하고 옆에 놓인 `binary-patch-base.json` 기록도 같은 해시와 바이너리 버전인지 확인합니다. 이 검사는 해당 플랫폼의 훅을 적용한 앱에서만 실행합니다(`android/app/build.gradle`의 `codepush-export.gradle`, Xcode 빌드 페이즈의 `export-embedded-bundle.sh`). 지금은 `RN0840`만 적용했고 나머지 앱은 로그를 남기고 건너뜁니다. 훅을 적용한 앱에서 export가 없거나 내용이 어긋나면 실행이 실패합니다. `--maestro-only` 실행은 빌드 산출물이 없으니 export를 찾지 못하면 마찬가지로 건너뜁니다.
 3. **번들 준비** — `npx code-push release`로 릴리스 히스토리를 생성하고 v1.0.1을 번들링합니다.
 4. **Mock 서버 시작** — 번들과 릴리스 히스토리 JSON을 서빙하는 로컬 HTTP 서버(포트 18081)를 시작합니다.
 5. **테스트 플로우 실행** — iOS는 Maestro, Android는 maestro-runner 사용:

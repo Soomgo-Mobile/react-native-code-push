@@ -49,7 +49,7 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 ### Phase 1 — Basic Flows (`flows/`)
 
 1. **Prepare config** — Patches `App.tsx` to point at a local mock server, copies `code-push.config.local.ts` to the app directory.
-2. **Build app** — Builds the example app in Release mode and installs it on the simulator/emulator. The export hooks run inside that build, so the bundle they wrote out is then compared with the bundle inside the built app, and the `binary-patch-base.json` record beside it is checked against the same hash and binary version. A `--maestro-only` run builds nothing of its own, so the check is skipped when it finds no export.
+2. **Build app** — Builds the example app in Release mode and installs it on the simulator/emulator. The export hooks run inside that build, so the bundle they wrote out is then compared with the bundle inside the built app, and the `binary-patch-base.json` record beside it is checked against the same hash and binary version. The check runs only for an app that applies the hook for the platform being built (`codepush-export.gradle` in its `android/app/build.gradle`, `export-embedded-bundle.sh` as an Xcode build phase) — `RN0840` is the one that does today, and every other app is skipped with a log line. For an app that does apply it, a missing or mismatched export fails the run. A `--maestro-only` run builds nothing of its own, so it too is skipped when it finds no export.
 3. **Prepare bundle** — Creates release history and bundles v1.0.1 using `npx code-push release`.
 4. **Start mock server** — Starts a local HTTP server (port 18081) that serves bundles and release history JSON.
 5. **Run test flows** — Uses Maestro on iOS and maestro-runner on Android:
