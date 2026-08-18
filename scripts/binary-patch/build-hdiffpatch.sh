@@ -23,8 +23,11 @@ set -euo pipefail
 HDIFFPATCH_REPO="https://github.com/sisong/HDiffPatch.git"
 HDIFFPATCH_TAG="v5.1.3"
 # sisong/zstd is a fork of facebook/zstd that HDiffPatch's makefile expects as a
-# sibling directory. It has no release tags, so the default branch is used.
+# sibling directory. It publishes no release tags, so it is pinned by commit: an
+# unpinned default branch would silently change the generator on any upstream push,
+# and this SHA is the snapshot the vendored decompressor sources came from.
 ZSTD_REPO="https://github.com/sisong/zstd.git"
+ZSTD_COMMIT="68c88c7c7ad22b5e6882a5296ef96d27dc8750c4"
 
 force=0
 for arg in "$@"; do
@@ -60,8 +63,13 @@ trap cleanup EXIT
 
 echo "cloning $HDIFFPATCH_REPO @ $HDIFFPATCH_TAG"
 git clone --quiet --depth 1 --branch "$HDIFFPATCH_TAG" "$HDIFFPATCH_REPO" "$work_dir/HDiffPatch"
-echo "cloning $ZSTD_REPO"
-git clone --quiet --depth 1 "$ZSTD_REPO" "$work_dir/zstd"
+echo "cloning $ZSTD_REPO @ $ZSTD_COMMIT"
+# `git clone --branch` does not take a commit, so the pinned commit is fetched into an
+# empty repository instead - still a single-commit download.
+git init --quiet "$work_dir/zstd"
+git -C "$work_dir/zstd" remote add origin "$ZSTD_REPO"
+git -C "$work_dir/zstd" fetch --quiet --depth 1 origin "$ZSTD_COMMIT"
+git -C "$work_dir/zstd" checkout --quiet FETCH_HEAD
 
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 echo "building hdiffz/hpatchz (zstd only, $jobs jobs)"

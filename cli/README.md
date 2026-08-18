@@ -122,6 +122,33 @@ never left uninstallable by a patch. Applying a patch is native code, which the 
 library builds from source: an app that depends on it needs the NDK and CMake, both of
 which a React Native project normally already has.
 
+#### Prerequisites: building the patch generator
+
+Producing a patch needs HDiffPatch's `hdiffz`, which is not installed as
+a package dependency. Build it once per machine with the script this package ships:
+
+```bash
+./node_modules/@bravemobile/react-native-code-push/scripts/binary-patch/build-hdiffpatch.sh
+```
+
+The script clones the pinned upstream sources and compiles them, so it needs `git`, a C/C++
+toolchain (`make`, `cc`, `c++`) and network access. It does nothing when the tools are
+already in place; `--force` rebuilds them. It installs `hdiffz` and `hpatchz` into a
+`.hdiffpatch-tools/` directory at the root of the package it lives in, and the CLI looks for
+a `.hdiffpatch-tools/` directory in the working directory and every directory above it.
+Under `node_modules` that install sits below the project rather than above it, so point
+`HDIFFPATCH_TOOLS_DIR` at the directory holding the two executables - which is also how a CI
+image that builds them ahead of time, or a shared install outside the project, is used:
+
+```bash
+export HDIFFPATCH_TOOLS_DIR="$PWD/node_modules/@bravemobile/react-native-code-push/.hdiffpatch-tools"
+```
+
+Only releases that pass `--binary-bundle-path` need the tools, and one that cannot find them
+fails with the build command in the message before anything is uploaded.
+
+#### Oversized patches
+
 A patch is only worth publishing when it is smaller than the archive it replaces. The CLI
 never prompts, so `--on-oversized-patch` decides in advance what happens when the patch
 comes out the same size or larger: `skip` (the default) logs a warning, notes the skip in
