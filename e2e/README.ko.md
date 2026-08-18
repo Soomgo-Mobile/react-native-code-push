@@ -49,7 +49,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 ### Phase 1 — 기본 플로우 (`flows/`)
 
 1. **설정 준비** — `App.tsx`를 로컬 mock 서버를 가리키도록 패치하고, `code-push.config.local.ts`를 앱 디렉토리에 복사합니다.
-2. **앱 빌드** — 예제 앱을 Release 모드로 빌드하여 시뮬레이터/에뮬레이터에 설치합니다.
+2. **앱 빌드** — 예제 앱을 Release 모드로 빌드하여 시뮬레이터/에뮬레이터에 설치합니다. export 훅이 이 빌드 안에서 실행되므로, 훅이 내보낸 번들을 빌드된 앱 안의 번들과 비교하고 옆에 놓인 `binary-patch-base.json` 기록도 같은 해시와 바이너리 버전인지 확인합니다. `--maestro-only` 실행은 빌드 산출물이 없으니 export를 찾지 못하면 검사를 건너뜁니다.
 3. **번들 준비** — `npx code-push release`로 릴리스 히스토리를 생성하고 v1.0.1을 번들링합니다.
 4. **Mock 서버 시작** — 번들과 릴리스 히스토리 JSON을 서빙하는 로컬 HTTP 서버(포트 18081)를 시작합니다.
 5. **테스트 플로우 실행** — iOS는 Maestro, Android는 maestro-runner 사용:
@@ -112,7 +112,8 @@ e2e/
 │   ├── artifact-storage.ts # CLI가 번들과 릴리스 히스토리를 저장한 위치 검증
 │   ├── download-order.ts   # 서버 요청 기록을 앱이 내려받은 archive 순서로 변환
 │   ├── binary-patch-fixtures.ts  # 베이스 번들 추출과 손상된 patch archive
-│   └── binary-patch-phase.ts     # 바이너리 패치 시나리오 매트릭스
+│   ├── binary-patch-phase.ts     # 바이너리 패치 시나리오 매트릭스
+│   └── embedded-bundle-export.ts # export 훅이 바이너리에 담긴 번들을 내보냈는지 검증
 ├── flows/                  # Phase 1: 기본 플로우
 ├── flows-rollback/         # Phase 2: 바이너리로 롤백
 ├── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
