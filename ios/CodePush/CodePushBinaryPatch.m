@@ -42,9 +42,12 @@ static const NSInteger BinaryPatchFormatVersion = 1;
 /*
  * The largest bundle a patch is allowed to promise. A manifest is untrusted input, and
  * the size in it decides how much disk the restore asks for before a single byte of the
- * patch has been read.
+ * patch has been read. A large Hermes bundle stays under 50 MB, and a release that somehow
+ * exceeds the bound still installs from its full archive, so the headroom below is generous
+ * enough for the limit to only ever catch a manifest that is wrong. The other platform's
+ * applier holds the same value.
  */
-static const long long BinaryPatchMaxTargetBundleSize = 512LL * 1024 * 1024;
+static const long long BinaryPatchMaxTargetBundleSize = 128LL * 1024 * 1024;
 
 /** Name the restored bundle is written under, inside the working directory. */
 static NSString *const BinaryPatchTargetFileName = @"target.bundle";
