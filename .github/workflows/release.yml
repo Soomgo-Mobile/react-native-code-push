@@ -39,7 +39,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
-      actions: write
       contents: write
       pull-requests: write
     steps:
@@ -198,11 +197,10 @@ jobs:
               PR_URL="$(gh pr create \
                 --base master \
                 --head "$RELEASE_BRANCH" \
-                --title "chore: v${VERSION} 배포 준비" \
+                --title "Release v${VERSION}" \
                 --body-file "$RUNNER_TEMP/release-pr.md")"
             fi
 
-            gh workflow run unit-test.yml --ref "$RELEASE_BRANCH"
             echo "::notice title=Release pull request::$PR_URL"
             exit 0
           fi
@@ -217,10 +215,9 @@ jobs:
           PR_URL="$(gh pr create \
             --base master \
             --head "$RELEASE_BRANCH" \
-            --title "chore: v${VERSION} 배포 준비" \
+            --title "Release v${VERSION}" \
             --body-file "$RUNNER_TEMP/release-pr.md")"
 
-          gh workflow run unit-test.yml --ref "$RELEASE_BRANCH"
           echo "::notice title=Release pull request::$PR_URL"
 
   plan-release:
