@@ -175,3 +175,10 @@ e2e/reports/
 
 # maestro-runner iOS driver artifacts
 drivers
+
+# hdiffz/hpatchz built by scripts/binary-patch/build-hdiffpatch.sh
+.hdiffpatch-tools/
+
+# Local tool and build outputs
+cpp/binarypatch/host/build/
+.claude/
