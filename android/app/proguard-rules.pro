@@ -37,3 +37,8 @@
 
 # Can't find referenced class org.bouncycastle.**
 -dontwarn com.nimbusds.jose.**
+
+# The binary patch applier is found by name from the native library.
+-keepclasseswithmembernames class com.microsoft.codepush.react.HDiffPatchNative {
+    native <methods>;
+}

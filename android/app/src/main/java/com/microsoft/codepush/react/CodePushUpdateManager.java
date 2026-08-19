@@ -1,14 +1,17 @@
 package com.microsoft.codepush.react;
 
+import android.content.Context;
 import android.os.Build;
 
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -19,9 +22,15 @@ import javax.net.ssl.HttpsURLConnection;
 public class CodePushUpdateManager {
 
     private String mDocumentsDirectory;
+    private final CodePushBinaryPatch mBinaryPatch;
 
-    public CodePushUpdateManager(String documentsDirectory) {
+    public CodePushUpdateManager(String documentsDirectory, Context context) {
+        this(documentsDirectory, new CodePushBinaryPatch(new AssetsBaseBundleProvider(context), new HDiffPatchNative()));
+    }
+
+    CodePushUpdateManager(String documentsDirectory, CodePushBinaryPatch binaryPatch) {
         mDocumentsDirectory = documentsDirectory;
+        mBinaryPatch = binaryPatch;
     }
 
     private String getDownloadFilePath() {
@@ -30,6 +39,10 @@ public class CodePushUpdateManager {
 
     private String getUnzippedFolderPath() {
         return CodePushUtils.appendPathComponent(getCodePushPath(), CodePushConstants.UNZIPPED_FOLDER_NAME);
+    }
+
+    private String getBinaryPatchFolderPath() {
+        return CodePushUtils.appendPathComponent(getCodePushPath(), CodePushConstants.BINARY_PATCH_FOLDER_NAME);
     }
 
     private String getDocumentsDirectory() {
@@ -145,6 +158,72 @@ public class CodePushUpdateManager {
 
     public void downloadPackage(JSONObject updatePackage, String expectedBundleFileName,
                                 DownloadProgressCallback progressCallback) throws IOException {
+        // A release that was published with a binary patch offers two archives of the same
+        // update. The patch is worth trying because it is a fraction of the size, and the
+        // full archive is always there when it does not work out.
+        String binaryPatchDownloadUrl = updatePackage.optString(CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY, null);
+        if (binaryPatchDownloadUrl != null
+                && tryDownloadBinaryPatchPackage(updatePackage, expectedBundleFileName, progressCallback, binaryPatchDownloadUrl)) {
+            return;
+        }
+
+        downloadAndInstallPackage(updatePackage, expectedBundleFileName, progressCallback,
+                updatePackage.optString(CodePushConstants.DOWNLOAD_URL_KEY, null), false);
+    }
+
+    /**
+     * Installs the update from its binary patch archive.
+     *
+     * Every way this can fail ends the same way, with the update being downloaded in full
+     * instead, so none of them is reported to the caller as an error. The fallback happens
+     * exactly once without anything having to count it: the full archive is downloaded by
+     * a call that is not allowed to take the patch path, so it has no failure of its own to
+     * fall back from.
+     *
+     * @return true when the update was installed, false when the caller has to download the
+     *         full archive instead
+     */
+    private boolean tryDownloadBinaryPatchPackage(JSONObject updatePackage, String expectedBundleFileName,
+                                                  DownloadProgressCallback progressCallback,
+                                                  String binaryPatchDownloadUrl) {
+        try {
+            BinaryPatchResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
+                    progressCallback, binaryPatchDownloadUrl, true);
+            if (patchResult.succeeded()) {
+                return true;
+            }
+
+            CodePushUtils.log("Binary patch update failed (" + patchResult.getFailureReason()
+                    + "). Downloading the full update instead.");
+        } catch (Exception | OutOfMemoryError e) {
+            // Applying a patch is the one path that holds a whole bundle in memory, so
+            // running out of it is a failure this has to absorb like any other: by the time
+            // it lands here the arrays are unreachable, and the full archive is downloaded
+            // to disk in chunks rather than held.
+            CodePushUtils.log(e);
+            CodePushUtils.log("The binary patch update could not be completed. Downloading the full update instead.");
+        } finally {
+            FileUtils.deleteDirectoryAtPath(getBinaryPatchFolderPath());
+        }
+
+        return false;
+    }
+
+    /**
+     * Downloads an update from one of its archives and installs it.
+     *
+     * @param isBinaryPatchUpdate whether the archive holds a binary patch of the JS bundle,
+     *                            which has to be applied before the contents are the update.
+     *                            Only an archive downloaded from the binary patch URL is
+     *                            treated that way, so an update being downloaded in full can
+     *                            never end up on the patch path.
+     * @return the outcome of the patch: a failed result means the update was not installed
+     *         and the caller has to fall back to the full archive. Downloading the full
+     *         archive always succeeds or throws.
+     */
+    BinaryPatchResult downloadAndInstallPackage(JSONObject updatePackage, String expectedBundleFileName,
+                                                DownloadProgressCallback progressCallback,
+                                                String downloadUrlString, boolean isBinaryPatchUpdate) throws IOException {
         String newUpdateHash = updatePackage.optString(CodePushConstants.PACKAGE_HASH_KEY, null);
         String newUpdateFolderPath = getPackageFolderPath(newUpdateHash);
         String newUpdateMetadataPath = CodePushUtils.appendPathComponent(newUpdateFolderPath, CodePushConstants.PACKAGE_FILE_NAME);
@@ -154,7 +233,6 @@ public class CodePushUpdateManager {
             FileUtils.deleteDirectoryAtPath(newUpdateFolderPath);
         }
 
-        String downloadUrlString = updatePackage.optString(CodePushConstants.DOWNLOAD_URL_KEY, null);
         HttpURLConnection connection = null;
         BufferedInputStream bin = null;
         FileOutputStream fos = null;
@@ -232,6 +310,20 @@ public class CodePushUpdateManager {
             FileUtils.unzipFile(downloadFile, unzippedFolderPath);
             FileUtils.deleteFileOrFolderSilently(downloadFile);
 
+            // Rebuild the JS bundle the archive only carries a patch of, which leaves the
+            // contents identical to the ones the full archive would have delivered.
+            if (isBinaryPatchUpdate) {
+                long patchStartTime = System.currentTimeMillis();
+                BinaryPatchResult patchResult = mBinaryPatch.restoreBundle(unzippedFolderPath,
+                        getBinaryPatchFolderPath(), expectedBundleFileName);
+                if (!patchResult.succeeded()) {
+                    return patchResult;
+                }
+
+                CodePushUtils.log("Restored the update from its binary patch in "
+                        + (System.currentTimeMillis() - patchStartTime) + " ms.");
+            }
+
             // Merge contents with current update based on the manifest
             String diffManifestFilePath = CodePushUtils.appendPathComponent(unzippedFolderPath,
                     CodePushConstants.DIFF_MANIFEST_FILE_NAME);
@@ -268,12 +360,22 @@ public class CodePushUpdateManager {
                 CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.RELATIVE_BUNDLE_PATH_KEY, relativeBundlePath);
             }
         } else {
+            if (isBinaryPatchUpdate) {
+                // Whatever the patch URL served, it is not a patch archive - an error page
+                // answered with a 200 looks like this too. Moving it into place would
+                // install bytes no hash has ever been checked against, so the full archive
+                // is downloaded instead.
+                return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
+            }
+
             // File is a jsbundle, move it to a folder with the packageHash as its name
             FileUtils.moveFile(downloadFile, newUpdateFolderPath, expectedBundleFileName);
         }
 
         // Save metadata to the folder.
         CodePushUtils.writeJsonToFile(updatePackage, newUpdateMetadataPath);
+
+        return BinaryPatchResult.success();
     }
 
     public void installPackage(JSONObject updatePackage, boolean removePendingUpdate) {
@@ -348,5 +450,39 @@ public class CodePushUpdateManager {
 
     public void clearUpdates() {
         FileUtils.deleteDirectoryAtPath(getCodePushPath());
+    }
+
+    /** Reads the JS bundle that shipped inside the app binary out of the APK's assets. */
+    private static class AssetsBaseBundleProvider implements CodePushBinaryPatch.BaseBundleProvider {
+
+        private final Context mContext;
+
+        AssetsBaseBundleProvider(Context context) {
+            mContext = context;
+        }
+
+        @Override
+        public byte[] readBaseBundle(String bundleFileName) throws IOException {
+            // The bundle is stored uncompressed in the APK, so it is read straight into
+            // memory: a copy on disk would buy nothing and cost the space the restored
+            // bundle needs.
+            InputStream assetStream = mContext.getAssets().open(bundleFileName);
+            try {
+                // An uncompressed asset knows its whole length up front, so the buffer is
+                // sized for it: growing one would repeatedly hold two copies of a bundle
+                // that is already the largest allocation on this path.
+                ByteArrayOutputStream bundleBytes = new ByteArrayOutputStream(
+                        Math.max(assetStream.available(), CodePushConstants.DOWNLOAD_BUFFER_SIZE));
+                byte[] buffer = new byte[CodePushConstants.DOWNLOAD_BUFFER_SIZE];
+                int bytesRead;
+                while ((bytesRead = assetStream.read(buffer)) > 0) {
+                    bundleBytes.write(buffer, 0, bytesRead);
+                }
+
+                return bundleBytes.toByteArray();
+            } finally {
+                assetStream.close();
+            }
+        }
     }
 }

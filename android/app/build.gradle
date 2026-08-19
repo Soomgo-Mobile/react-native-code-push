@@ -32,8 +32,27 @@ android {
     defaultConfig {
         consumerProguardFiles 'proguard-rules.pro'
     }
+
+    // Builds the binary patch applier. Its sources are the shared ones at the root of the
+    // repository, which the CMake file points at; nothing is compiled twice.
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+
+    testOptions {
+        // The unit tests exercise plain logic, so the android framework classes they touch
+        // in passing (logging above all) are allowed to do nothing instead of throwing.
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {
     implementation "com.facebook.react:react-native:+"
+
+    testImplementation "junit:junit:4.13.2"
+    // org.json ships as stubs in the android framework jar, and the unit tests parse real
+    // manifests, so they need an implementation that actually parses.
+    testImplementation "org.json:json:20231013"
 }
