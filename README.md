@@ -303,8 +303,7 @@ Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-nat
 `onBinaryPatchResult` is called with `{ status: "applied" | "fallback", fallbackReason?: string, applyDurationMs: number }`.
 A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
 is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
-its telemetry sends it itself. Registering no callback leaves the update exactly as it was, and a callback that throws
-is logged rather than allowed to cost the app its update.
+its telemetry sends it itself. A callback that throws never fails the update - the error is only logged to the console.
 
 Register it on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
 and including the `CodePush.sync()` calls you make yourself.
