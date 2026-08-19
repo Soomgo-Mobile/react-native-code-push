@@ -66,12 +66,16 @@ npx code-push bundle [options]
 | `-b, --bundle-name <string>` | 번들 파일 이름 | `main.jsbundle` (iOS) / `index.android.bundle` (Android) |
 | `--output-bundle-dir <string>` | 번들 출력 디렉토리 이름 | `bundleOutput` |
 | `--output-metro-dir <string>` | Hermes 컴파일 전 Metro JS 번들과 소스맵을 복사할 디렉토리 | — |
+| `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. Hermes 컴파일을 이 번들에 정렬하고, binary patch base로 기록합니다 | — |
 
 **예시:**
 
 ```bash
 # Android용 번들 생성 (커스텀 엔트리 파일)
 npx code-push bundle -p android -e index.js
+
+# 바이너리에 포함된 JS 번들에 정렬하여 번들 생성
+npx code-push bundle -p android --binary-bundle-path ./binary/index.android.bundle
 ```
 
 ---
@@ -103,6 +107,45 @@ npx code-push release [options]
 | `--skip-cleanup <bool>` | 출력 디렉토리 정리 건너뛰기 | `false` |
 | `--output-bundle-dir <string>` | 번들 출력 디렉토리 이름 | `bundleOutput` |
 | `--output-metro-dir <string>` | Hermes 컴파일 전 Metro JS 번들과 소스맵을 복사할 디렉토리 | — |
+| `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. 이 번들에 대한 binary patch 번들을 함께 배포하고, Hermes 컴파일을 이 번들에 정렬합니다 | — |
+| `--on-oversized-patch <policy>` | patch 번들이 full 번들보다 작지 않을 때의 동작: `skip`은 full 번들만 배포하고, `fail`은 업로드 전에 릴리스를 중단합니다 | `skip` |
+
+`--binary-bundle-path`를 사용하면 플랫폼별로 두 개의 artifact를 업로드합니다. `packageHash`
+이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은 `<packageHash>-patch.zip` patch
+번들입니다. patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가
+포함되어, patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와
+절감량은 업로드 전에 출력됩니다.
+
+#### 사전 준비: patch 생성 도구 빌드
+
+patch 생성에는 HDiffPatch의 `hdiffz`가 필요합니다. 패키지 의존성으로 설치되지
+않으므로, 이 패키지가 함께 배포하는 스크립트로 머신마다 한 번 빌드합니다.
+
+```bash
+./node_modules/@bravemobile/react-native-code-push/scripts/binary-patch/build-hdiffpatch.sh
+```
+
+스크립트는 고정된 upstream 소스를 clone해서 컴파일하므로 `git`, C/C++ 툴체인(`make`, `cc`,
+`c++`), 네트워크 연결이 필요합니다. 이미 빌드되어 있으면 아무 일도 하지 않고, `--force`를
+주면 다시 빌드합니다. `hdiffz`와 `hpatchz`는 스크립트가 속한 패키지 루트의
+`.hdiffpatch-tools/` 디렉토리에 설치되며, CLI는 작업 디렉토리와 그 상위 디렉토리들에서
+`.hdiffpatch-tools/` 디렉토리를 찾습니다. `node_modules` 안의 설치 위치는 프로젝트보다 상위가
+아니라 하위이므로, 두 실행 파일이 있는 디렉토리를 `HDIFFPATCH_TOOLS_DIR`로 지정하세요. 미리
+빌드해 둔 CI 이미지나 프로젝트 밖의 공용 설치를 사용할 때도 같은 방법을 씁니다.
+
+```bash
+export HDIFFPATCH_TOOLS_DIR="$PWD/node_modules/@bravemobile/react-native-code-push/.hdiffpatch-tools"
+```
+
+도구가 필요한 것은 `--binary-bundle-path`를 사용하는 릴리스뿐이며, 도구를 찾지 못하면
+업로드를 시작하기 전에 빌드 명령을 안내하는 메시지와 함께 실패합니다.
+
+#### patch가 full 번들보다 작지 않을 때
+
+patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습니다. CLI는 사용자에게 묻지
+않으므로, patch 크기가 full 이상일 때의 동작을 `--on-oversized-patch`로 미리 정합니다.
+기본값 `skip`은 경고를 남기고 요약에 skip 사실을 명시한 뒤 full 번들만 배포하며, `fail`은
+어떤 업로드도 시작하기 전에 릴리스를 실패시키고 릴리스 히스토리를 변경하지 않습니다.
 
 **예시:**
 
@@ -121,6 +164,12 @@ npx code-push release -b 1.0.0 -v 1.0.1 -i staging
 
 # 번들링 건너뛰기 (기존 번들 재사용)
 npx code-push release -b 1.0.0 -v 1.0.2 --skip-bundle true --hash-calc true
+
+# full 번들과 바이너리 번들에 대한 binary patch를 함께 배포
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle
+
+# 동일하지만, patch가 더 작지 않으면 릴리스를 실패시킴
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --on-oversized-patch fail
 ```
 
 ---

@@ -15,8 +15,10 @@ export async function makeCodePushBundle(contentsPath: string, bundleDirectory: 
 
     const packageHash = await generatePackageHashFromDirectory(contentsPath, path.join(contentsPath, '..'));
 
-    shell.mkdir('-p', `./${bundleDirectory}`);
-    shell.mv(updateContentsZipPath, `./${bundleDirectory}/${packageHash}`);
+    // Joined rather than interpolated so an absolute bundle directory - which an
+    // absolute --output-path produces - is not turned into a path below the cwd.
+    shell.mkdir('-p', bundleDirectory);
+    shell.mv(updateContentsZipPath, path.join(bundleDirectory, packageHash));
 
     return {
         // To allow the "release" command to get the file and hash value from the result of the "bundle" command,

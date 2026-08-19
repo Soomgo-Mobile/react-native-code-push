@@ -66,10 +66,14 @@ npx code-push bundle [options]
 | `-b, --bundle-name <string>` | Bundle file name | `main.jsbundle` (iOS) / `index.android.bundle` (Android) |
 | `--output-bundle-dir <string>` | Directory name for the bundle output | `bundleOutput` |
 | `--output-metro-dir <string>` | Directory to copy Metro JS bundle and sourcemap before Hermes compilation | — |
+| `--binary-bundle-path <string>` | JS bundle of the target binary. Aligns the Hermes compilation with it and records it as the binary patch base | — |
 
 ```bash
 # Bundle for Android with a custom entry file
 npx code-push bundle -p android -e index.js
+
+# Bundle aligned with the JS bundle shipped in the binary
+npx code-push bundle -p android --binary-bundle-path ./binary/index.android.bundle
 ```
 
 ---
@@ -101,6 +105,48 @@ npx code-push release [options]
 | `--skip-cleanup <bool>` | Skip output directory cleanup | `false` |
 | `--output-bundle-dir <string>` | Bundle output directory name | `bundleOutput` |
 | `--output-metro-dir <string>` | Directory to copy Metro JS bundle and sourcemap before Hermes compilation | — |
+| `--binary-bundle-path <string>` | JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it | — |
+| `--on-oversized-patch <policy>` | What to do when the patch bundle is not smaller than the full bundle: `skip` releases the full bundle only, `fail` stops the release before any upload | `skip` |
+
+With `--binary-bundle-path`, the release uploads two artifacts per platform: the full
+bundle named after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip`
+that carries only the difference from the bundle inside the binary. The patch bundle
+holds a `codepush-binary-patch.json` manifest describing how to rebuild the update, so
+applying it yields the same `packageHash` as the full bundle. Both sizes and the saving
+are printed before either artifact is uploaded.
+
+#### Prerequisites: building the patch generator
+
+Producing a patch needs HDiffPatch's `hdiffz`, which is not installed as
+a package dependency. Build it once per machine with the script this package ships:
+
+```bash
+./node_modules/@bravemobile/react-native-code-push/scripts/binary-patch/build-hdiffpatch.sh
+```
+
+The script clones the pinned upstream sources and compiles them, so it needs `git`, a C/C++
+toolchain (`make`, `cc`, `c++`) and network access. It does nothing when the tools are
+already in place; `--force` rebuilds them. It installs `hdiffz` and `hpatchz` into a
+`.hdiffpatch-tools/` directory at the root of the package it lives in, and the CLI looks for
+a `.hdiffpatch-tools/` directory in the working directory and every directory above it.
+Under `node_modules` that install sits below the project rather than above it, so point
+`HDIFFPATCH_TOOLS_DIR` at the directory holding the two executables - which is also how a CI
+image that builds them ahead of time, or a shared install outside the project, is used:
+
+```bash
+export HDIFFPATCH_TOOLS_DIR="$PWD/node_modules/@bravemobile/react-native-code-push/.hdiffpatch-tools"
+```
+
+Only releases that pass `--binary-bundle-path` need the tools, and one that cannot find them
+fails with the build command in the message before anything is uploaded.
+
+#### Oversized patches
+
+A patch is only worth publishing when it is smaller than the archive it replaces. The CLI
+never prompts, so `--on-oversized-patch` decides in advance what happens when the patch
+comes out the same size or larger: `skip` (the default) logs a warning, notes the skip in
+the summary and releases the full bundle alone, while `fail` stops the release before
+anything is uploaded and leaves the release history untouched.
 
 ```bash
 # Standard iOS release
@@ -117,6 +163,12 @@ npx code-push release -b 1.0.0 -v 1.0.1 -i staging
 
 # Reuse an existing bundle
 npx code-push release -b 1.0.0 -v 1.0.2 --skip-bundle true --hash-calc true
+
+# Release a full bundle and a binary patch against the bundle in the binary
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle
+
+# Same, but fail the release if the patch does not come out smaller
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --on-oversized-patch fail
 ```
 
 ---

@@ -1,5 +1,6 @@
 import { program, Option } from "commander";
 import { bundleCodePush } from "./bundleCodePush.js";
+import { resolveBinaryBundlePathOption } from "../../functions/makeBinaryPatchBundle.js";
 import { OUTPUT_BUNDLE_DIR, ROOT_OUTPUT_DIR, ENTRY_FILE } from "../../constant.js";
 
 type Options = {
@@ -7,9 +8,11 @@ type Options = {
     platform: 'ios' | 'android';
     outputPath: string;
     entryFile: string;
-    bundleName: string;
+    // Commander derives this from the "-b, --bundle-name" flag.
+    bundleName?: string;
     outputBundleDir: string;
     outputMetroDir?: string;
+    binaryBundlePath?: string;
 }
 
 program.command('bundle')
@@ -21,7 +24,11 @@ program.command('bundle')
     .option('-b, --bundle-name <string>', 'bundle file name (default-ios: "main.jsbundle" / default-android: "index.android.bundle")')
     .option('--output-metro-dir <string>', 'name of directory to copy the Metro JS bundle and sourcemap before Hermes compilation')
     .option('--output-bundle-dir <string>', 'name of directory containing the bundle file created by the "bundle" command', OUTPUT_BUNDLE_DIR)
+    .option('--binary-bundle-path <string>', 'path to the JS bundle of the target binary. Aligns the Hermes compilation with it and records it as the binary patch base.')
     .action((options: Options) => {
+        // Resolved before bundling so a wrong path fails now rather than after a build.
+        const baseBundlePath = resolveBinaryBundlePathOption(options.binaryBundlePath);
+
         bundleCodePush(
             options.framework,
             options.platform,
@@ -30,5 +37,6 @@ program.command('bundle')
             options.bundleName,
             `${options.outputPath}/${options.outputBundleDir}`,
             options.outputMetroDir,
+            baseBundlePath,
         )
     });

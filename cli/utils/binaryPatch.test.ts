@@ -15,8 +15,7 @@ import { applyPatch, generatePatch, resolveBinaryPatchTool } from "./binaryPatch
  * committed patch format really is what every applier understands.
  */
 
-/** Cloning and building hdiffz/hpatchz from source takes a while on a cold machine. */
-const BUILD_TOOLS_TIMEOUT_MS = 10 * 60 * 1000;
+/** Building the applier from source takes a while on a cold machine. */
 const BUILD_APPLIER_TIMEOUT_MS = 5 * 60 * 1000;
 
 function findRepoRoot(): string {
@@ -61,25 +60,6 @@ function writeMutatedCopy(sourcePath: string, name: string, mutate: (bytes: Buff
     return destination;
 }
 
-/**
- * Builds hdiffz/hpatchz when they are missing so a clean checkout - and CI - can run
- * this suite without a manual setup step.
- */
-function ensureBinaryPatchTools(): void {
-    try {
-        resolveBinaryPatchTool("hdiffz");
-        resolveBinaryPatchTool("hpatchz");
-        return;
-    } catch {
-        // Not built yet; build them once below.
-    }
-    const script = path.join(repoRoot, "scripts", "binary-patch", "build-hdiffpatch.sh");
-    const result = spawnSync(script, { encoding: "utf8", timeout: BUILD_TOOLS_TIMEOUT_MS });
-    if (result.status !== 0) {
-        throw new Error(`${script} failed:\n${result.stdout ?? ""}${result.stderr ?? ""}`);
-    }
-}
-
 function cCompiler(): string {
     return process.env.CC || "cc";
 }
@@ -89,9 +69,9 @@ function hasCCompiler(): boolean {
 }
 
 beforeAll(() => {
+    // hdiffz/hpatchz are provisioned for the whole run by the jest global setup.
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), "codepush-binary-patch-"));
-    ensureBinaryPatchTools();
-}, BUILD_TOOLS_TIMEOUT_MS);
+});
 
 afterAll(() => {
     fs.rmSync(workDir, { recursive: true, force: true });
