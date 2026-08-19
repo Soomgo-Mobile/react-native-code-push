@@ -3,7 +3,7 @@
 # Exports the JS bundle an Xcode build embeds in the app, so a later CodePush release can
 # compute a binary patch against exactly the bytes the store binary ships.
 #
-# Add it as a "Run Script" build phase placed after "Bundle React Native code and images":
+# Call it at the end of the "Bundle React Native code and images" build phase:
 #
 #     "$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"
 #

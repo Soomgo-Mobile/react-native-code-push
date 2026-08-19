@@ -452,11 +452,13 @@ The line can go anywhere in the file (if you use `ext.codePushExportDir`, set it
 `-PcodePushExportDir=<path>` (or set `ext.codePushExportDir`) to export somewhere else; the
 `<variant>` directory is appended either way.
 
-**iOS** - in Xcode, open your app target's **Build Phases** tab, click **+** and choose
-**New Run Script Phase**, then drag the new phase so it sits **below** "Bundle React Native
-code and images". Set its script to:
+**iOS** - call the export script at the end of the **"Bundle React Native code and images"**
+build phase, the same place tools like Sentry and Datadog hook in. In Xcode, open that phase
+in your app target's **Build Phases** tab and append the last line below to its script:
 
 ```bash
+/bin/sh -c "\"$WITH_ENVIRONMENT\" \"$REACT_NATIVE_XCODE\""
+
 "$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"
 ```
 
