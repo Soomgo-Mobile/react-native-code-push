@@ -543,7 +543,9 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     mandatoryInstallMode: CodePush.InstallMode.IMMEDIATE,
     minimumBackgroundDuration: 0,
     updateDialog: null,
-    onBinaryPatchResult: null,
+    // The callback registered on the decorator is the default for every sync, including a
+    // manual one; a callback passed to this call overrides it for this call.
+    onBinaryPatchResult: sharedCodePushOptions.onBinaryPatchResult ?? null,
     ...options,
   };
 
@@ -751,6 +753,9 @@ let CodePush;
  *
  *   onRolloutSkipped: (label: string, error: Error) => void | undefined,
  *   setOnRolloutSkipped(onRolloutSkippedFunction: (label: string, error: Error) => void | undefined): void,
+ *
+ *   onBinaryPatchResult: (label: string, result: object) => void | undefined,
+ *   setOnBinaryPatchResult(onBinaryPatchResultFunction: (label: string, result: object) => void | undefined): void,
  * }}
  */
 const sharedCodePushOptions = {
@@ -801,6 +806,12 @@ const sharedCodePushOptions = {
     if (typeof onRolloutSkippedFunction !== 'function') throw new Error('Please pass a function to onRolloutSkipped');
     this.onRolloutSkipped = onRolloutSkippedFunction;
   },
+  onBinaryPatchResult: undefined,
+  setOnBinaryPatchResult(onBinaryPatchResultFunction) {
+    if (!onBinaryPatchResultFunction) return;
+    if (typeof onBinaryPatchResultFunction !== 'function') throw new Error('Please pass a function to onBinaryPatchResult');
+    this.onBinaryPatchResult = onBinaryPatchResultFunction;
+  },
 }
 
 function codePushify(options = {}) {
@@ -837,6 +848,7 @@ function codePushify(options = {}) {
   sharedCodePushOptions.setOnDownloadSuccess(options.onDownloadSuccess);
   sharedCodePushOptions.setOnSyncError(options.onSyncError);
   sharedCodePushOptions.setOnRolloutSkipped(options.onRolloutSkipped);
+  sharedCodePushOptions.setOnBinaryPatchResult(options.onBinaryPatchResult);
 
   const decorator = (RootComponent) => {
     class CodePushComponent extends React.Component {

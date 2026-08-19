@@ -76,9 +76,13 @@ function createNativeBridge({ binaryPatchResult } = {}) {
 
 /**
  * Loads a fresh copy of the module - the options passed to `codePush()` and the injected
- * native bridge live on the module itself - configured the way an app configures it.
+ * native bridge live on the module itself - configured the way an app configures it: the
+ * decorator registers the app-wide options, and every sync below is one the app asks for.
+ *
+ * @param onBinaryPatchResult a callback the app registers on the decorator, as opposed to
+ *        one it passes to a single `sync()` call.
  */
-function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult } = {}) {
+function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult, onBinaryPatchResult } = {}) {
   jest.resetModules();
   const CodePush = require('./CodePush');
   const nativeBridge = createNativeBridge({ binaryPatchResult });
@@ -89,8 +93,10 @@ function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult } 
     nativeBridge,
   );
   CodePush({
+    checkFrequency: CodePush.CheckFrequency.MANUAL,
     releaseHistoryFetcher: async () => releaseHistory,
     updateChecker,
+    onBinaryPatchResult,
   });
 
   return { CodePush, nativeBridge };
@@ -275,6 +281,39 @@ describe('the binary patch result of a sync', () => {
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
     expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, FELL_BACK);
+  });
+
+  it('tells the app that registered the callback on the decorator, even about a sync it asked for itself', async () => {
+    const onBinaryPatchResult = jest.fn();
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+      onBinaryPatchResult,
+    });
+
+    // The decorator checks nothing on its own, so this sync is the app's own call.
+    const syncStatus = await CodePush.sync();
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
+    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, APPLIED);
+  });
+
+  it('tells only the callback of the sync call when one was passed to it', async () => {
+    const registeredOnTheDecorator = jest.fn();
+    const passedToTheSyncCall = jest.fn();
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+      onBinaryPatchResult: registeredOnTheDecorator,
+    });
+
+    const syncStatus = await CodePush.sync({ onBinaryPatchResult: passedToTheSyncCall });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(passedToTheSyncCall).toHaveBeenCalledTimes(1);
+    expect(passedToTheSyncCall).toHaveBeenCalledWith(LABEL, APPLIED);
+    expect(registeredOnTheDecorator).not.toHaveBeenCalled();
   });
 
   it('says nothing about a download that had no patch to try', async () => {
