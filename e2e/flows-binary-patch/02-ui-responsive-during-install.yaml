@@ -1,0 +1,57 @@
+appId: ${APP_ID}
+---
+# Applying a binary patch reads a whole JS bundle, rebuilds it and hashes it twice. None
+# of that may happen where it can hold up the app: the screen has to keep answering taps
+# while the update is being downloaded and applied.
+#
+# This scenario is timing sensitive - it only means something while that work is still in
+# flight - so it is skipped when timing-sensitive scenarios are excluded.
+- launchApp
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
+- assertVisible: "React Native.*"
+
+- tapOn: "Clear updates"
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 15000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
+- assertVisible: "React Native.*"
+- assertNotVisible: "UPDATED!"
+- assertVisible: "METADATA_IDLE"
+
+# An optional update is installed without restarting the app, so the app stays on screen
+# for the whole download and patch apply.
+- tapOn: "Check for updates"
+
+# No wait in between: this tap has to be answered while that work is in flight, and the
+# indicator has to move off its initial state.
+- tapOn: "Get update metadata"
+- assertVisible: "METADATA_NULL"
+
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "Result: UPDATE_INSTALLED"
+- assertNotVisible: "UPDATED!"
+
+- tapOn: "Restart app"
+- waitForAnimationToEnd:
+    timeout: 15000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
+- assertVisible: "React Native.*"
+- assertVisible: "UPDATED!"
+
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "METADATA_V${RELEASE_LABEL}"

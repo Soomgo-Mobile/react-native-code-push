@@ -78,6 +78,22 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
    - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
    - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
 
+### Phase 6 — 바이너리 패치 업데이트 (`flows-binary-patch/`)
+
+14. **베이스 번들 추출** — 기기에 설치된 앱에서 JS 번들을 꺼냅니다(Android는 APK의 `assets/`, iOS는 `.app`). 바이너리 패치는 바이너리에 실린 바로 그 바이트에만 적용되므로 다른 것으로 대체할 수 없습니다.
+15. **시나리오별 릴리스와 설치** — 각 시나리오는 `--binary-bundle-path`로 릴리스한 뒤 필요한 지점만 고장 내고, `01-install-update`로 업데이트를 설치해 `UPDATED!`와 `METADATA_V<version>`을 확인합니다.
+   - `1.3.1` — 앱 바이너리 위에 patch 업데이트가 설치됩니다.
+   - `1.3.2` — 이미지 asset을 포함한 patch 업데이트가 설치됩니다.
+   - `1.3.3` — 낡은 베이스 번들로 만든 patch는 full 업데이트로 fallback합니다.
+   - `1.3.4` — 압축 본문이 손상된 patch는 fallback합니다.
+   - `1.3.9` — manifest가 설명하지 않는 번들을 복원하는 patch는 fallback합니다.
+   - `1.3.5` — 헤더가 손상된 patch는 fallback합니다.
+   - `1.3.6` — 다른 플랫폼용으로 만들어진 patch archive는 fallback합니다.
+   - `1.3.7` — 한 번 만든 번들(`bundle` 1회 + `release --skip-bundle` 2회, 한쪽에만 베이스 번들 전달)이 patch URL이 실린 히스토리에서는 patch로, 실리지 않은 히스토리에서는 full로 설치됩니다.
+   - `1.3.8` — `02-ui-responsive-during-install`: patch를 내려받아 적용하는 동안에도 앱이 탭에 반응합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
+
+patch 설치와 full archive fallback은 같은 내용을 설치하므로 화면만으로는 구분되지 않습니다. 둘을 가르는 것은 앱이 서버에 요청한 archive의 순서이며, 모든 시나리오가 이를 검증합니다: patch 설치는 `[patch]`, fallback은 `[patch, full]`, patch 없이 배포된 릴리스는 `[full]`입니다.
+
 ## 아키텍처
 
 ```
@@ -86,17 +102,22 @@ e2e/
 ├── config.ts               # 경로, 포트, 호스트 설정
 ├── tsconfig.json
 ├── mock-server/
-│   └── server.ts           # Express 정적 파일 서버 (포트 18081)
+│   └── server.ts           # Express 정적 파일 서버 (포트 18081), 모든 요청 기록
 ├── templates/
 │   └── code-push.config.local.ts  # 파일시스템 기반 CodePush 설정
 ├── helpers/
 │   ├── prepare-config.ts   # App.tsx 패치(호스트 + 임시 E2E 버튼), 설정 복사
 │   ├── prepare-bundle.ts   # code-push CLI로 번들 생성
-│   └── build-app.ts        # iOS/Android Release 빌드
+│   ├── build-app.ts        # iOS/Android Release 빌드
+│   ├── artifact-storage.ts # CLI가 번들과 릴리스 히스토리를 저장한 위치 검증
+│   ├── download-order.ts   # 서버 요청 기록을 앱이 내려받은 archive 순서로 변환
+│   ├── binary-patch-fixtures.ts  # 베이스 번들 추출과 손상된 patch archive
+│   └── binary-patch-phase.ts     # 바이너리 패치 시나리오 매트릭스
 ├── flows/                  # Phase 1: 기본 플로우
 ├── flows-rollback/         # Phase 2: 바이너리로 롤백
 ├── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
 ├── flows-optional/         # Phase 4: optional 설치 모드 검증
+├── flows-binary-patch/     # Phase 6: 바이너리 패치 설치와 fallback
 └── scripts/
     └── sleep.js            # Maestro runScript 대기 헬퍼
 ```
@@ -107,7 +128,11 @@ e2e/
 - **번들**: `mock-server/data/bundles/{platform}/{identifier}/`
 - **릴리스 히스토리**: `mock-server/data/histories/{platform}/{identifier}/{version}.json`
 
-`code-push.config.local.ts` 템플릿은 모든 CLI 작업(업로드, 히스토리 읽기/쓰기)을 로컬 파일시스템으로 라우팅하며, 앱의 `CODEPUSH_HOST`는 mock 서버를 가리키도록 패치됩니다.
+`code-push.config.local.ts` 템플릿은 모든 CLI 작업(업로드, 히스토리 읽기/쓰기)을 로컬 파일시스템으로 라우팅하며, 앱의 `CODEPUSH_HOST`는 mock 서버를 가리키도록 패치됩니다. 바이너리 패치와 함께 배포된 릴리스는 full archive 옆에 `{packageHash}-patch.zip` 이름으로 두 번째 archive를 저장합니다.
+
+서버는 응답한 모든 요청을 기록합니다. 러너는 이 기록을 되읽어, 화면으로는 구분할 수 없는 것 — 앱이 어떤 업데이트 archive를 어떤 순서로 내려받았는지 — 를 검증합니다.
+
+`E2E_ARTIFACT_LOG_PATH`가 주어지면 템플릿은 저장한 모든 artifact도 (서빙 디렉터리 바깥에) 기록하며, 러너는 이를 되읽어 번들과 릴리스 히스토리가 계속 `{platform}/{identifier}` 아래에 저장되는지 검증합니다.
 
 ### 릴리스 마커
 
@@ -117,5 +142,5 @@ e2e/
 
 - **iOS 빌드 시 서명 오류**: setup 스크립트가 `SUPPORTED_PLATFORMS = iphonesimulator`를 설정하고 코드 서명을 비활성화합니다. `scripts/setupExampleApp`으로 예제 앱이 설정되었는지 확인하세요.
 - **Maestro/maestro-runner가 앱을 찾지 못함**: 실행 전에 시뮬레이터/에뮬레이터가 부팅되어 있는지 확인하세요. iOS의 경우 스크립트가 부팅된 시뮬레이터를 자동 감지합니다.
-- **Android 네트워크 오류**: Android 에뮬레이터는 호스트 머신의 localhost에 접근하기 위해 `10.0.2.2`를 사용합니다. 설정에서 자동으로 처리됩니다.
+- **Android 네트워크 오류**: Android 에뮬레이터는 호스트 머신의 localhost에 접근하기 위해 `10.0.2.2`를 사용합니다. 설정에서 자동으로 처리됩니다. adb로 연결한 실기기에는 이 별칭이 없으므로, 러너가 mock 서버 포트를 기기로 포워딩(`adb reverse`)하고 앱이 기기 자신의 localhost를 보도록 합니다. 두 기본값 모두 `E2E_ANDROID_MOCK_SERVER_HOST`로 덮어쓸 수 있습니다.
 - **업데이트가 적용되지 않음**: Mock 서버가 실행 중인지(포트 18081), `mock-server/data/`에 예상되는 번들과 히스토리 파일이 있는지 확인하세요.

@@ -15,10 +15,23 @@ if (!MOCK_SERVER_HOST) {
   throw new Error("E2E_MOCK_SERVER_HOST environment variable is required");
 }
 
+// Optional: when set, every stored artifact is appended here as one JSON object per
+// line, so the runner can assert where the CLI asked for its artifacts to be stored
+// instead of re-deriving the paths it expects.
+const ARTIFACT_LOG_PATH = process.env.E2E_ARTIFACT_LOG_PATH;
+
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+}
+
+function recordArtifact(entry: Record<string, unknown>) {
+  if (!ARTIFACT_LOG_PATH) {
+    return;
+  }
+  ensureDir(path.dirname(ARTIFACT_LOG_PATH));
+  fs.appendFileSync(ARTIFACT_LOG_PATH, `${JSON.stringify(entry)}\n`);
 }
 
 const Config: CliConfigInterface = {
@@ -36,6 +49,14 @@ const Config: CliConfigInterface = {
     const downloadUrl = `${MOCK_SERVER_HOST}/bundles/${platform}/${identifier}/${fileName}`;
     console.log("Bundle copied to:", destPath);
     console.log("Download URL:", downloadUrl);
+    recordArtifact({
+      kind: "bundle",
+      platform,
+      identifier,
+      fileName,
+      storedPath: path.relative(MOCK_DATA_DIR, destPath),
+      downloadUrl,
+    });
     return { downloadUrl };
   },
 
@@ -65,6 +86,13 @@ const Config: CliConfigInterface = {
     const destPath = path.join(destDir, `${targetBinaryVersion}.json`);
     fs.copyFileSync(jsonFilePath, destPath);
     console.log("Release history saved to:", destPath);
+    recordArtifact({
+      kind: "history",
+      platform,
+      identifier,
+      binaryVersion: targetBinaryVersion,
+      storedPath: path.relative(MOCK_DATA_DIR, destPath),
+    });
   },
 };
 
