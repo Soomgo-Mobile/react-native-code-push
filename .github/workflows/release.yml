@@ -1,0 +1,508 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 증가시킬 버전
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+        required: true
+      beta:
+        description: beta 버전으로 배포
+        type: boolean
+        default: false
+        required: true
+  push:
+    branches:
+      - master
+    paths:
+      - package.json
+      - package-lock.json
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PACKAGE_NAME: '@bravemobile/react-native-code-push'
+
+jobs:
+  prepare-release-pr:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Verify release source
+        run: |
+          if [[ "$GITHUB_REPOSITORY" != 'Soomgo-Mobile/react-native-code-push' ]]; then
+            echo "::error::Releases can only run in the upstream repository."
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF" != 'refs/heads/master' ]]; then
+            echo "::error::Run the release workflow from the master branch."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Calculate release version
+        id: version
+        env:
+          IS_BETA: ${{ inputs.beta }}
+          VERSION_TYPE: ${{ inputs.version_type }}
+        run: |
+          PACKAGE_NAME_FROM_FILE="$(node -p "require('./package.json').name")"
+          if [[ "$PACKAGE_NAME_FROM_FILE" != "$PACKAGE_NAME" ]]; then
+            echo "::error::Unexpected package name: $PACKAGE_NAME_FROM_FILE"
+            exit 1
+          fi
+
+          LATEST_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.latest)"
+          CURRENT_BETA_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.beta 2> /dev/null || true)"
+          npm view "$PACKAGE_NAME" versions --json > "$RUNNER_TEMP/published-versions.json"
+
+          npm version "$LATEST_VERSION" \
+            --allow-same-version \
+            --ignore-scripts \
+            --no-git-tag-version
+
+          if [[ "$IS_BETA" == 'true' ]]; then
+            npm version "pre${VERSION_TYPE}" \
+              --ignore-scripts \
+              --no-git-tag-version \
+              --preid beta
+
+            VERSION="$(node -p "require('./package.json').version")"
+            while node -e '
+              const fs = require("fs");
+              const versions = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              process.exit(versions.includes(process.argv[2]) ? 0 : 1);
+            ' "$RUNNER_TEMP/published-versions.json" "$VERSION"; do
+              npm version prerelease \
+                --ignore-scripts \
+                --no-git-tag-version \
+                --preid beta
+              VERSION="$(node -p "require('./package.json').version")"
+            done
+          else
+            npm version "$VERSION_TYPE" \
+              --ignore-scripts \
+              --no-git-tag-version
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+
+          if node -e '
+            const fs = require("fs");
+            const versions = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            process.exit(versions.includes(process.argv[2]) ? 0 : 1);
+          ' "$RUNNER_TEMP/published-versions.json" "$VERSION"; then
+            echo "::error::$PACKAGE_NAME@$VERSION is already published."
+            exit 1
+          fi
+
+          if [[ "$IS_BETA" == 'true' && -n "$CURRENT_BETA_VERSION" ]]; then
+            if ! node -e '
+              const parseBeta = version => {
+                const match = /^(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$/.exec(version);
+                if (!match) {
+                  throw new Error("Unsupported beta version: " + version);
+                }
+                return match.slice(1).map(Number);
+              };
+              const [candidate, current] = process.argv.slice(1).map(parseBeta);
+              for (let index = 0; index < candidate.length; index += 1) {
+                if (candidate[index] > current[index]) process.exit(0);
+                if (candidate[index] < current[index]) process.exit(1);
+              }
+              process.exit(1);
+            ' "$VERSION" "$CURRENT_BETA_VERSION"; then
+              echo "::error::$VERSION must be newer than the current beta dist-tag $CURRENT_BETA_VERSION."
+              exit 1
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_branch=release/v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify version changes
+        run: |
+          if git diff --quiet -- package.json; then
+            echo '::error::package.json was not updated.'
+            exit 1
+          fi
+
+          if git diff --quiet -- package-lock.json; then
+            echo '::error::package-lock.json was not updated.'
+            exit 1
+          fi
+
+          CHANGED_FILE_COUNT="$(git diff --name-only | wc -l | tr -d ' ')"
+          if [[ "$CHANGED_FILE_COUNT" != '2' ]]; then
+            echo '::error::Only package.json and package-lock.json may change.'
+            git diff --name-only
+            exit 1
+          fi
+
+      - name: Create release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ steps.version.outputs.release_branch }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          printf '%s\n' \
+            "## 배포 버전" \
+            "" \
+            "- \`$PACKAGE_NAME@$VERSION\`" \
+            "" \
+            "이 PR을 병합하면 npm Trusted Publishing 배포가 시작됩니다." \
+            > "$RUNNER_TEMP/release-pr.md"
+
+          if git ls-remote --exit-code --heads origin "refs/heads/$RELEASE_BRANCH" > /dev/null 2>&1; then
+            git fetch origin "$RELEASE_BRANCH"
+            REMOTE_VERSION="$(git show FETCH_HEAD:package.json | node -p '
+              JSON.parse(require("fs").readFileSync(0, "utf8")).version
+            ')"
+            if [[ "$REMOTE_VERSION" != "$VERSION" ]]; then
+              echo "::error::$RELEASE_BRANCH contains version $REMOTE_VERSION instead of $VERSION."
+              exit 1
+            fi
+
+            PR_URL="$(gh pr list \
+              --base master \
+              --head "$RELEASE_BRANCH" \
+              --state open \
+              --json url \
+              --jq '.[0].url // empty')"
+            if [[ -z "$PR_URL" ]]; then
+              PR_URL="$(gh pr create \
+                --base master \
+                --head "$RELEASE_BRANCH" \
+                --title "chore: v${VERSION} 배포 준비" \
+                --body-file "$RUNNER_TEMP/release-pr.md")"
+            fi
+
+            gh workflow run unit-test.yml --ref "$RELEASE_BRANCH"
+            echo "::notice title=Release pull request::$PR_URL"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$RELEASE_BRANCH"
+          git add package.json package-lock.json
+          git commit -m "chore: v${VERSION} 배포 준비"
+          git push origin "$RELEASE_BRANCH"
+
+          PR_URL="$(gh pr create \
+            --base master \
+            --head "$RELEASE_BRANCH" \
+            --title "chore: v${VERSION} 배포 준비" \
+            --body-file "$RUNNER_TEMP/release-pr.md")"
+
+          gh workflow run unit-test.yml --ref "$RELEASE_BRANCH"
+          echo "::notice title=Release pull request::$PR_URL"
+
+  plan-release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      current_beta_version: ${{ steps.plan.outputs.current_beta_version }}
+      dist_tag: ${{ steps.plan.outputs.dist_tag }}
+      is_draft: ${{ steps.plan.outputs.is_draft }}
+      is_prerelease: ${{ steps.plan.outputs.is_prerelease }}
+      latest_version: ${{ steps.plan.outputs.latest_version }}
+      should_publish: ${{ steps.plan.outputs.should_publish }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Plan release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PACKAGE_NAME_FROM_FILE="$(node -p "require('./package.json').name")"
+          if [[ "$PACKAGE_NAME_FROM_FILE" != "$PACKAGE_NAME" ]]; then
+            echo "::error::Unexpected package name: $PACKAGE_NAME_FROM_FILE"
+            exit 1
+          fi
+
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
+          LATEST_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.latest)"
+          CURRENT_BETA_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.beta 2> /dev/null || true)"
+          npm view "$PACKAGE_NAME" versions --json > "$RUNNER_TEMP/published-versions.json"
+
+          SHOULD_PUBLISH=true
+          if node -e '
+            const fs = require("fs");
+            const versions = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            process.exit(versions.includes(process.argv[2]) ? 0 : 1);
+          ' "$RUNNER_TEMP/published-versions.json" "$VERSION"; then
+            SHOULD_PUBLISH=false
+          fi
+
+          case "$VERSION" in
+            *-beta.*)
+              DIST_TAG=beta
+              IS_PRERELEASE=true
+              ;;
+            *-*)
+              echo "::error::Only beta prereleases are supported: $VERSION"
+              exit 1
+              ;;
+            *)
+              DIST_TAG=latest
+              IS_PRERELEASE=false
+              ;;
+          esac
+
+          IS_DRAFT=false
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          fi
+
+          echo "current_beta_version=$CURRENT_BETA_VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "is_draft=$IS_DRAFT" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "latest_version=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build-release:
+    needs: plan-release
+    if: needs.plan-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Verify release version
+        env:
+          CURRENT_BETA_VERSION: ${{ needs.plan-release.outputs.current_beta_version }}
+          DIST_TAG: ${{ needs.plan-release.outputs.dist_tag }}
+          LATEST_VERSION: ${{ needs.plan-release.outputs.latest_version }}
+          VERSION: ${{ needs.plan-release.outputs.version }}
+        run: |
+          node -e '
+            const semver = require("semver");
+            const [version, latestVersion, currentBetaVersion, distTag] = process.argv.slice(1);
+            if (!semver.valid(version) || !semver.gt(version, latestVersion)) {
+              throw new Error(version + " must be newer than " + latestVersion);
+            }
+            if ((distTag === "beta") !== Boolean(semver.prerelease(version))) {
+              throw new Error(version + " does not match the " + distTag + " dist-tag");
+            }
+            if (distTag === "beta" && currentBetaVersion && !semver.gt(version, currentBetaVersion)) {
+              throw new Error(version + " must be newer than the current beta dist-tag " + currentBetaVersion);
+            }
+          ' "$VERSION" "$LATEST_VERSION" "$CURRENT_BETA_VERSION" "$DIST_TAG"
+
+      - name: Run type checks
+        run: npm run typecheck
+
+      - name: Run Jest
+        run: npm run jest -- --watchman=false
+
+      - name: Build and pack
+        id: pack
+        run: |
+          npm run build:cli
+          mkdir -p release
+          TARBALL="$(npm pack --ignore-scripts --pack-destination release)"
+          sha512sum "release/$TARBALL" > "release/$TARBALL.sha512"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: npm-package-${{ needs.plan-release.outputs.version }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  create-github-release:
+    needs:
+      - plan-release
+      - build-release
+    if: needs.plan-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Create release tag
+        env:
+          TAG: ${{ needs.plan-release.outputs.tag }}
+        run: |
+          git fetch origin --tags --force
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            if [[ "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "::error::$TAG points to $TAG_SHA instead of $GITHUB_SHA."
+              exit 1
+            fi
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag --annotate "$TAG" --message "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ needs.plan-release.outputs.is_prerelease }}
+          TAG: ${{ needs.plan-release.outputs.tag }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+            if [[ "$IS_DRAFT" != 'true' ]]; then
+              echo "::error::$TAG already has a published GitHub Release."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          RELEASE_ARGS=(
+            "$TAG"
+            --draft
+            --generate-notes
+            --title "$TAG"
+            --verify-tag
+          )
+          if [[ "$IS_PRERELEASE" == 'true' ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          gh release create "${RELEASE_ARGS[@]}"
+
+  publish-npm:
+    needs:
+      - plan-release
+      - build-release
+      - create-github-release
+    if: needs.plan-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: npm-release
+      url: https://www.npmjs.com/package/@bravemobile/react-native-code-push/v/${{ needs.plan-release.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: npm-package-${{ needs.plan-release.outputs.version }}
+          path: release
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm Trusted Publishing support
+        run: |
+          node -e '
+            const npmVersion = require("child_process")
+              .execFileSync("npm", ["--version"], {encoding: "utf8"})
+              .trim()
+              .split(".")
+              .map(Number);
+            const [major, minor, patch] = npmVersion;
+            if (major < 11 || (major === 11 && minor < 5) || (major === 11 && minor === 5 && patch < 1)) {
+              throw new Error("npm 11.5.1 or newer is required for Trusted Publishing");
+            }
+          '
+
+      - name: Verify release artifact
+        env:
+          TARBALL: ${{ needs.build-release.outputs.tarball }}
+        run: sha512sum --check "release/$TARBALL.sha512"
+
+      - name: Publish package to npm
+        env:
+          DIST_TAG: ${{ needs.plan-release.outputs.dist_tag }}
+          TARBALL: ${{ needs.build-release.outputs.tarball }}
+        run: npm publish "./release/$TARBALL" --ignore-scripts --tag "$DIST_TAG"
+
+  publish-github-release:
+    needs:
+      - plan-release
+      - publish-npm
+    if: >-
+      ${{
+        always() &&
+        needs.plan-release.result == 'success' &&
+        (
+          needs.publish-npm.result == 'success' ||
+          (
+            needs.plan-release.outputs.should_publish == 'false' &&
+            needs.plan-release.outputs.is_draft == 'true'
+          )
+        )
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan-release.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false
