@@ -28,6 +28,12 @@ export interface ReleaseInfo {
     enabled: boolean;
     mandatory: boolean;
     downloadUrl: string;
+    /**
+     * The URL of a binary patch archive built against the JS bundle embedded in the app binary.
+     * It is only present when the release was published together with such a patch, and a client
+     * that cannot use it downloads the full update from `downloadUrl` instead.
+     */
+    binaryPatchDownloadUrl?: string;
     packageHash: string;
     rollout?: number;
 }
@@ -35,6 +41,12 @@ export interface ReleaseInfo {
 // from code-push SDK
 export interface UpdateCheckResponse {
     download_url?: string;
+    /**
+     * The URL of a binary patch archive built against the JS bundle embedded in the app binary.
+     * It is only present when the release was published together with such a patch, and a client
+     * that cannot use it downloads the full update from `download_url` instead.
+     */
+    binary_patch_download_url?: string;
     description?: string;
     is_available: boolean;
     is_disabled?: boolean;
@@ -192,6 +204,14 @@ export interface RemotePackage extends Package {
      * The URL at which the package is available for download.
      */
     downloadUrl: string;
+
+    /**
+     * The URL at which a binary patch archive of this package is available for download.
+     * The patch is built against the JS bundle embedded in the app binary, so it is only
+     * present when the release was published together with one. When it is absent, the
+     * package is downloaded in full from `downloadUrl`.
+     */
+    binaryPatchDownloadUrl?: string;
 }
 
 export interface SyncOptions {

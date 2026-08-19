@@ -203,6 +203,9 @@ describe("release without --binary-bundle-path", () => {
             downloadUrl: uploads[0].downloadUrl,
             packageHash: staged.bundleFileName,
         });
+        // A release without a patch says nothing about one, so a client reading this
+        // history behaves exactly as it did before binary patches existed.
+        expect(releaseHistories[0][APP_VERSION]).not.toHaveProperty('binaryPatchDownloadUrl');
     });
 });
 
@@ -217,9 +220,10 @@ describe("release --skip-bundle --binary-bundle-path", () => {
         expect(uploads.map(({ filePath }) => path.basename(filePath))).toEqual([staged.bundleFileName, patchFileName]);
         expect(fs.existsSync(path.join(staged.bundleDirectory, patchFileName))).toBe(true);
 
-        // Carrying the patch URL in the release history is a separate concern; for now
-        // the history keeps describing the full bundle only.
+        // Both artifacts are described in the same entry: the full bundle every client can
+        // download, and the patch a client holding the matching binary can apply instead.
         expect(releaseHistories[0][APP_VERSION].downloadUrl).toBe(uploads[0].downloadUrl);
+        expect(releaseHistories[0][APP_VERSION].binaryPatchDownloadUrl).toBe(uploads[1].downloadUrl);
         expect(releaseHistories[0][APP_VERSION].packageHash).toBe(staged.bundleFileName);
     });
 
@@ -424,6 +428,8 @@ describe("release --on-oversized-patch", () => {
         expect(logs.filter((line) => line.startsWith('warn:')).join('\n')).toMatch(/not smaller than the full archive/);
         expect(logs.join('\n')).toContain('Patch skipped:');
         expect(releaseHistories[0][APP_VERSION].downloadUrl).toBe(uploads[0].downloadUrl);
+        // Nothing was uploaded to patch from, so the entry must not point at one.
+        expect(releaseHistories[0][APP_VERSION]).not.toHaveProperty('binaryPatchDownloadUrl');
     });
 
     it("fails before any upload when the policy is fail", async () => {

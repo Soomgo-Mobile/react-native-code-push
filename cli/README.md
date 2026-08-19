@@ -113,7 +113,8 @@ bundle named after its `packageHash`, and a patch bundle named `<packageHash>-pa
 that carries only the difference from the bundle inside the binary. The patch bundle
 holds a `codepush-binary-patch.json` manifest describing how to rebuild the update, so
 applying it yields the same `packageHash` as the full bundle. Both sizes and the saving
-are printed before either artifact is uploaded.
+are printed before either artifact is uploaded. The release history entry records where
+the patch bundle can be downloaded, next to the full bundle URL.
 
 #### Prerequisites: building the patch generator
 
@@ -267,10 +268,15 @@ The release history is a JSON object keyed by app version. For example, the hist
     "enabled": true,
     "mandatory": true,
     "downloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...",
-    "packageHash": "d4e5f6..."
+    "packageHash": "d4e5f6...",
+    "binaryPatchDownloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...-patch.zip"
   }
 }
 ```
+
+`binaryPatchDownloadUrl` is only written for a release published with
+`--binary-bundle-path`. Every other release leaves the field out, and a history written
+before binary patches existed stays valid as it is.
 
 ## Typical Workflow
 
