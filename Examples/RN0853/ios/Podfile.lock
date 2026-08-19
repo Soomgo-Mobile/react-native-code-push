@@ -1,6 +1,10 @@
 PODS:
-  - CodePush (12.4.0):
+  - CodePush (13.0.0):
+    - RCTRequired
+    - RCTTypeSafety
     - React-Core
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
     - SSZipArchive (~> 2.5.5)
   - FBLazyVector (0.85.3)
   - hermes-engine (250829098.0.10):
@@ -2101,9 +2105,9 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  CodePush: 09c317ee7c745fe235eb6ca0d902b6cf7642174d
+  CodePush: 43cb436504305ff35f9c9a0dae804d82bbe05294
   FBLazyVector: 24e62c765683b8d89006a88a2c8f5cf019f0074d
-  hermes-engine: 91fae0be9e84d93e84e3cd501ae24d198508c79d
+  hermes-engine: 13276470f6f35103caa234b2665ab7a01263a803
   RCTDeprecation: a4c521821fab57cbb125b36effe84d897d0dfa12
   RCTRequired: 9f3a7e5645d4bc3f551593de7550bb66ab6e42bc
   RCTSwiftUI: 239ed2eb9e73de5a6f518810630f0c95e01c8702
@@ -2112,7 +2116,7 @@ SPEC CHECKSUMS:
   React: e2dc35338068bbd299c66f043ae0d7f25de8499e
   React-callinvoker: 28b25d21b124c26cebaea713ba7d801b9351dc48
   React-Core: f90d375d3bab515ad00df30605ce1bf02e6db12f
-  React-Core-prebuilt: e9d802b090dde920d1af6140cf30249d46f6ad75
+  React-Core-prebuilt: 7ef1b4cc2e2e541c30eccda5c62de705860d23b1
   React-CoreModules: da4f80202ef954bdfb926ca4c9ac5f685900aa5c
   React-cxxreact: 1d1d2a28a5f10e4e2e7cf2bfd54dc9c92c68c672
   React-debug: 92944dc4d89f56d640e75498266cbde557a48189
@@ -2175,9 +2179,9 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: a54c0c9b976766e1b6d5e2bb4d1ad0d15913e9e1
   ReactCodegen: 9af5798e943781fd2318dab7b60f25337388047c
   ReactCommon: 3ec2a55999d296af90c24beb66c8a77dc660d3ef
-  ReactNativeDependencies: 159f3236ddfaa3a965bee6acae21af482009abbf
+  ReactNativeDependencies: 38a2043d7c831061a435efba816ba19baac1ac73
   SSZipArchive: c69881e8ac5521f0e622291387add5f60f30f3c4
-  Yoga: 36fee8f1fca3f54a28c3d7f80e69f66d73d3af96
+  Yoga: 77dfa8673de2874e1855002ae59c68b8be9b007b
 
 PODFILE CHECKSUM: b46c4390e9f5c0a098232e4fadea0f0e613d7306
 
