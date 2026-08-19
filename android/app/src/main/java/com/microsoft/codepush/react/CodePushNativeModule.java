@@ -338,7 +338,6 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                     JSONObject mutableUpdatePackage = CodePushUtils.convertReadableToJsonObject(updatePackage);
                     JSONObject binaryPatchResult = mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
                         private volatile boolean hasScheduledNextFrame = false;
-                        private volatile DownloadProgress latestDownloadProgress = null;
                         private final DownloadProgressEventDispatcher progressEventDispatcher = new DownloadProgressEventDispatcher(
                                 new DownloadProgressEventDispatcher.EventEmitter() {
                                     @Override
@@ -348,15 +347,20 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                                 });
 
                         @Override
+                        public void onDownloadStart() {
+                            progressEventDispatcher.reset();
+                        }
+
+                        @Override
                         public void call(DownloadProgress downloadProgress) {
                             if (!notifyProgress || downloadProgress == null) {
                                 return;
                             }
 
-                            latestDownloadProgress = downloadProgress;
+                            progressEventDispatcher.record(downloadProgress);
                             // If the download is completed, synchronously send the last event.
                             if (downloadProgress.isCompleted()) {
-                                progressEventDispatcher.dispatch(downloadProgress);
+                                progressEventDispatcher.dispatchLatest();
                                 return;
                             }
 
@@ -372,7 +376,7 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                                         @Override
                                         public void doFrame(long frameTimeNanos) {
                                             try {
-                                                progressEventDispatcher.dispatch(latestDownloadProgress);
+                                                progressEventDispatcher.dispatchLatest();
                                             } finally {
                                                 hasScheduledNextFrame = false;
                                             }

@@ -260,6 +260,7 @@ public class CodePushUpdateManager {
 
         // Download the file while checking if it is a zip and notifying client of progress.
         try {
+            progressCallback.onDownloadStart();
             URL downloadUrl = new URL(downloadUrlString);
             connection = (HttpURLConnection) (downloadUrl.openConnection());
 
@@ -277,6 +278,12 @@ public class CodePushUpdateManager {
 
             long totalBytes = connection.getContentLength();
             long receivedBytes = 0;
+
+            if (totalBytes > 0) {
+                // The zero-received event hands the listener this download's total up front,
+                // so a fallback download shows as restarting rather than running backwards.
+                progressCallback.call(new DownloadProgress(totalBytes, 0));
+            }
 
             File downloadFolder = new File(getCodePushPath());
             downloadFolder.mkdirs();

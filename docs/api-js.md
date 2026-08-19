@@ -168,6 +168,8 @@ Called periodically when an available update is being downloaded from the CodePu
 
 * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
 
+Each download reports a stream of its own, opened by an event with `receivedBytes` at `0`. When a release ships with a binary patch that cannot be applied, the update is downloaded again in full, so one update can report two such streams - the second with the full download's larger `totalBytes`.
+
 #### codePush.allowRestart
 
 ```javascript
@@ -461,6 +463,8 @@ In addition to the options, the `sync` method also accepts several optional func
     * __totalBytes__ *(Number)* - The total number of bytes expected to be received for this update (i.e. the size of the set of files which changed from the previous release).
 
     * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
+
+    See [codePushDownloadDidProgress](#codepushdownloaddidprogress-event-hook) for how a binary patch fallback reports a second download.
 
 * __handleBinaryVersionMismatchCallback__ *((update: RemotePackage) => void)* - 
 Called when there are any binary update available. The method is called with a [`RemotePackage`](#remotepackage) object. Refer to [codePush.checkForUpdate](#codepushcheckforupdate) section for more details.

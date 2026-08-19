@@ -61,6 +61,12 @@ failCallback:(void (^)(NSError *err))failCallback {
     }
     
     self.expectedContentLength = response.expectedContentLength;
+    if (self.expectedContentLength > 0) {
+        // Each download opens its own progress stream. The zero-received event hands the
+        // listener the new total up front, so the full download after a binary patch
+        // fallback shows as restarting rather than running backwards.
+        self.progressCallback(self.expectedContentLength, 0);
+    }
     [self.outputFileStream open];
 }
 

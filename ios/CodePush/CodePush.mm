@@ -739,6 +739,14 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
         operationQueue:_methodQueue
         // The download is progressing forward
         progressCallback:^(long long expectedContentLength, long long receivedContentLength) {
+            // Received bytes only run backwards when a new download starts a stream of its
+            // own - the full archive after a binary patch fallback. The pause left over
+            // from the finished patch download would swallow that whole stream, so frame
+            // observation resumes here and the throttle forgets the previous stream.
+            if (receivedContentLength < _latestReceivedConentLength) {
+                self.paused = NO;
+                _lastProgressEventTime = 0;
+            }
             // Update the download progress so that the frame observer can notify the JS side
             _latestExpectedContentLength = expectedContentLength;
             _latestReceivedConentLength = receivedContentLength;
