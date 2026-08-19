@@ -156,19 +156,30 @@ public class CodePushUpdateManager {
         }
     }
 
-    public void downloadPackage(JSONObject updatePackage, String expectedBundleFileName,
-                                DownloadProgressCallback progressCallback) throws IOException {
+    /**
+     * @return what the attempt at installing the update from its binary patch archive ended
+     *         in, or null when the update had no patch archive to attempt. The result belongs
+     *         to this download alone: the metadata written for the update never carries it.
+     */
+    public JSONObject downloadPackage(JSONObject updatePackage, String expectedBundleFileName,
+                                      DownloadProgressCallback progressCallback) throws IOException {
         // A release that was published with a binary patch offers two archives of the same
         // update. The patch is worth trying because it is a fraction of the size, and the
         // full archive is always there when it does not work out.
         String binaryPatchDownloadUrl = updatePackage.optString(CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY, null);
-        if (binaryPatchDownloadUrl != null
-                && tryDownloadBinaryPatchPackage(updatePackage, expectedBundleFileName, progressCallback, binaryPatchDownloadUrl)) {
-            return;
+        BinaryPatchAttempt patchAttempt = null;
+        if (binaryPatchDownloadUrl != null) {
+            patchAttempt = new BinaryPatchAttempt();
+            if (tryDownloadBinaryPatchPackage(updatePackage, expectedBundleFileName, progressCallback,
+                    binaryPatchDownloadUrl, patchAttempt)) {
+                return patchAttempt.result();
+            }
         }
 
         downloadAndInstallPackage(updatePackage, expectedBundleFileName, progressCallback,
-                updatePackage.optString(CodePushConstants.DOWNLOAD_URL_KEY, null), false);
+                updatePackage.optString(CodePushConstants.DOWNLOAD_URL_KEY, null), false, null);
+
+        return patchAttempt == null ? null : patchAttempt.result();
     }
 
     /**
@@ -180,19 +191,22 @@ public class CodePushUpdateManager {
      * a call that is not allowed to take the patch path, so it has no failure of its own to
      * fall back from.
      *
+     * @param patchAttempt records what the attempt ended in, for the caller to hand to
+     *                     whoever asked for the download
      * @return true when the update was installed, false when the caller has to download the
      *         full archive instead
      */
     private boolean tryDownloadBinaryPatchPackage(JSONObject updatePackage, String expectedBundleFileName,
                                                   DownloadProgressCallback progressCallback,
-                                                  String binaryPatchDownloadUrl) {
+                                                  String binaryPatchDownloadUrl, BinaryPatchAttempt patchAttempt) {
         try {
             BinaryPatchResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
-                    progressCallback, binaryPatchDownloadUrl, true);
+                    progressCallback, binaryPatchDownloadUrl, true, patchAttempt);
             if (patchResult.succeeded()) {
                 return true;
             }
 
+            patchAttempt.recordFallback(patchResult.getFailureReason());
             CodePushUtils.log("Binary patch update failed (" + patchResult.getFailureReason()
                     + "). Downloading the full update instead.");
         } catch (Exception | OutOfMemoryError e) {
@@ -200,6 +214,7 @@ public class CodePushUpdateManager {
             // running out of it is a failure this has to absorb like any other: by the time
             // it lands here the arrays are unreachable, and the full archive is downloaded
             // to disk in chunks rather than held.
+            patchAttempt.recordFallbackAfterError();
             CodePushUtils.log(e);
             CodePushUtils.log("The binary patch update could not be completed. Downloading the full update instead.");
         } finally {
@@ -217,13 +232,16 @@ public class CodePushUpdateManager {
      *                            Only an archive downloaded from the binary patch URL is
      *                            treated that way, so an update being downloaded in full can
      *                            never end up on the patch path.
+     * @param patchAttempt the record the patch is timed into, or null for a full download,
+     *                     which has no patch to time
      * @return the outcome of the patch: a failed result means the update was not installed
      *         and the caller has to fall back to the full archive. Downloading the full
      *         archive always succeeds or throws.
      */
     BinaryPatchResult downloadAndInstallPackage(JSONObject updatePackage, String expectedBundleFileName,
                                                 DownloadProgressCallback progressCallback,
-                                                String downloadUrlString, boolean isBinaryPatchUpdate) throws IOException {
+                                                String downloadUrlString, boolean isBinaryPatchUpdate,
+                                                BinaryPatchAttempt patchAttempt) throws IOException {
         String newUpdateHash = updatePackage.optString(CodePushConstants.PACKAGE_HASH_KEY, null);
         String newUpdateFolderPath = getPackageFolderPath(newUpdateHash);
         String newUpdateMetadataPath = CodePushUtils.appendPathComponent(newUpdateFolderPath, CodePushConstants.PACKAGE_FILE_NAME);
@@ -320,8 +338,9 @@ public class CodePushUpdateManager {
                     return patchResult;
                 }
 
-                CodePushUtils.log("Restored the update from its binary patch in "
-                        + (System.currentTimeMillis() - patchStartTime) + " ms.");
+                long applyDurationMs = System.currentTimeMillis() - patchStartTime;
+                patchAttempt.recordBundleRestored(applyDurationMs);
+                CodePushUtils.log("Restored the update from its binary patch in " + applyDurationMs + " ms.");
             }
 
             // Merge contents with current update based on the manifest

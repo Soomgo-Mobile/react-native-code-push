@@ -61,6 +61,10 @@ static NSString *const BinaryBundleDateKey = @"binaryDate";
 static NSString *const PackageHashKey = @"packageHash";
 static NSString *const PackageIsPendingKey = @"isPending";
 
+// Not one of those keys: the field a download that tried a binary patch reports its outcome
+// under, on the package it resolves with and on no package it stores.
+static NSString *const BinaryPatchResultKey = @"binaryPatchResult";
+
 #pragma mark - Static variables
 
 static BOOL isRunningBinaryVersion = NO;
@@ -755,13 +759,24 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
             }
         }
         // The download completed
-        doneCallback:^{
+        doneCallback:^(NSDictionary *binaryPatchResult) {
             NSError *err;
             NSDictionary *newPackage = [CodePushPackage getPackage:mutableUpdatePackage[PackageHashKey] error:&err];
 
             if (err) {
                 return reject([NSString stringWithFormat: @"%lu", (long)err.code], err.localizedDescription, err);
             }
+
+            if (binaryPatchResult) {
+                // The result describes this download rather than the update, so it is put on
+                // what this call resolves with and nowhere else: the metadata that was
+                // written for the update knows nothing about it, and whoever asked for the
+                // download decides what the result is worth.
+                NSMutableDictionary *downloadedPackage = [newPackage mutableCopy];
+                downloadedPackage[BinaryPatchResultKey] = binaryPatchResult;
+                return resolve(downloadedPackage);
+            }
+
             resolve(newPackage);
         }
         // The download failed

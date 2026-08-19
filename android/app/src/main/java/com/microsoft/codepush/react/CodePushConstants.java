@@ -21,6 +21,9 @@ public class CodePushConstants {
     // archive, so the headroom below is generous enough for the limit to only ever catch
     // a manifest that is wrong. The other platform's applier holds the same value.
     public static final long BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE = 128L * 1024 * 1024;
+    // Not part of the CLI's contract: the field a download that tried a patch reports its
+    // outcome under, on the package it resolves with and on no package it stores.
+    public static final String BINARY_PATCH_RESULT_KEY = "binaryPatchResult";
     public static final String BINARY_PATCH_TARGET_BUNDLE_HASH_KEY = "targetBundleHash";
     public static final String BINARY_PATCH_TARGET_BUNDLE_SIZE_KEY = "targetBundleSize";
     public static final String BINARY_PATCH_TARGET_FILE_NAME = "target.bundle";

@@ -29,6 +29,15 @@ extern NSString *const CodePushBinaryPatchReasonPatchApplyFailed;
 extern NSString *const CodePushBinaryPatchReasonTargetVerificationFailed;
 
 /**
+ * The update restored from the patch did not pass the checks every update passes before
+ * it is installed - the folder hash above all.
+ *
+ * This one is reported by the caller rather than by the applier: by the time it applies,
+ * the applier has already handed back a bundle it was happy with.
+ */
+extern NSString *const CodePushBinaryPatchReasonPackageVerificationFailed;
+
+/**
  * Rebuilds the JS bundle of an update that was downloaded as a binary patch archive.
  *
  * A patch archive holds everything the full archive holds except the JS bundle, which it

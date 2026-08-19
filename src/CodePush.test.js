@@ -1,8 +1,9 @@
 /**
  * A binary patch is announced in the release history and consumed by the native side,
  * which only ever sees the object handed to `downloadUpdate`. These cases pin that path:
- * what the release history says, what `checkForUpdate` resolves to, and what the native
- * module is given when the update is downloaded.
+ * what the release history says, what `checkForUpdate` resolves to, what the native
+ * module is given when the update is downloaded, and what an app that asked to hear how
+ * the patch went is told about it.
  */
 
 jest.mock('react-native', () => ({
@@ -17,6 +18,9 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   TurboModuleRegistry: { get: () => null },
 }));
+
+// The install modes are the ones of the native module the bridge below stands in for.
+const { InstallMode } = require('./native/NativeCodePush');
 
 const BINARY_VERSION = '1.0.0';
 const LABEL = '1.0.1';
@@ -36,25 +40,52 @@ function fullOnlyRelease() {
   };
 }
 
-function createNativeBridge() {
+/** The release the CLI writes when the update was published with a binary patch too. */
+function patchedRelease() {
+  return {
+    [LABEL]: {
+      ...fullOnlyRelease()[LABEL],
+      binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
+    },
+  };
+}
+
+/**
+ * @param binaryPatchResult what the native side reports the patch attempt ended in, which
+ *        only a download that had a patch to try comes back with.
+ */
+function createNativeBridge({ binaryPatchResult } = {}) {
   return {
     addDownloadProgressListener: jest.fn(() => ({ remove: jest.fn() })),
-    downloadUpdate: jest.fn(async (updatePackage) => ({ ...updatePackage })),
+    downloadUpdate: jest.fn(async (updatePackage) => ({
+      ...updatePackage,
+      ...(binaryPatchResult ? { binaryPatchResult } : {}),
+    })),
     // No CodePush update is installed, so the app runs the bundle of its binary.
     getUpdateMetadata: jest.fn(async () => null),
     isFailedUpdate: jest.fn(async () => false),
     isFirstRun: jest.fn(async () => false),
+    // The rest of what a full `sync()` reaches for.
+    InstallMode,
+    clearPendingRestart: jest.fn(),
+    getNewStatusReport: jest.fn(async () => null),
+    installUpdate: jest.fn(async () => {}),
+    notifyApplicationReady: jest.fn(async () => {}),
   };
 }
 
 /**
  * Loads a fresh copy of the module - the options passed to `codePush()` and the injected
- * native bridge live on the module itself - configured the way an app configures it.
+ * native bridge live on the module itself - configured the way an app configures it: the
+ * decorator registers the app-wide options, and every sync below is one the app asks for.
+ *
+ * @param onBinaryPatchResult a callback the app registers on the decorator, as opposed to
+ *        one it passes to a single `sync()` call.
  */
-function loadCodePush({ releaseHistory = {}, updateChecker } = {}) {
+function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult, onBinaryPatchResult } = {}) {
   jest.resetModules();
   const CodePush = require('./CodePush');
-  const nativeBridge = createNativeBridge();
+  const nativeBridge = createNativeBridge({ binaryPatchResult });
 
   CodePush.setUpTestDependencies(
     null,
@@ -62,8 +93,10 @@ function loadCodePush({ releaseHistory = {}, updateChecker } = {}) {
     nativeBridge,
   );
   CodePush({
+    checkFrequency: CodePush.CheckFrequency.MANUAL,
     releaseHistoryFetcher: async () => releaseHistory,
     updateChecker,
+    onBinaryPatchResult,
   });
 
   return { CodePush, nativeBridge };
@@ -77,14 +110,7 @@ function downloadedPackageMetadata(nativeBridge) {
 
 describe('checkForUpdate with a binary patch in the release history', () => {
   it('carries the patch url into the update and on to the native module', async () => {
-    const { CodePush, nativeBridge } = loadCodePush({
-      releaseHistory: {
-        [LABEL]: {
-          ...fullOnlyRelease()[LABEL],
-          binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
-        },
-      },
-    });
+    const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: patchedRelease() });
 
     const remotePackage = await CodePush.checkForUpdate();
 
@@ -210,5 +236,147 @@ describe('checkForUpdate through the deprecated updateChecker', () => {
     const remotePackage = await CodePush.checkForUpdate();
 
     expect(remotePackage).not.toHaveProperty('binaryPatchDownloadUrl');
+  });
+});
+
+/**
+ * How a patch attempt went is reported to the app that asked to hear about it, and to
+ * nobody else: it is not part of the update, and an app that asked for nothing gets the
+ * install it always got.
+ */
+describe('the binary patch result of a sync', () => {
+  const APPLIED = { status: 'applied', applyDurationMs: 812 };
+  const FELL_BACK = { status: 'fallback', fallbackReason: 'base_hash_mismatch', applyDurationMs: 1503 };
+
+  /** The metadata the update is installed from, as the native module is given it. */
+  function installedPackageMetadata(nativeBridge) {
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+    return nativeBridge.installUpdate.mock.calls[0][0];
+  }
+
+  it('tells the app the update was installed from its patch, and how long that took', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+    });
+    const onBinaryPatchResult = jest.fn();
+
+    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
+    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, APPLIED);
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the app why the update came from the full archive instead', async () => {
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: FELL_BACK,
+    });
+    const onBinaryPatchResult = jest.fn();
+
+    // A patch that could not be applied is not a failed update: the full archive installs.
+    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, FELL_BACK);
+  });
+
+  it('tells the app that registered the callback on the decorator, even about a sync it asked for itself', async () => {
+    const onBinaryPatchResult = jest.fn();
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+      onBinaryPatchResult,
+    });
+
+    // The decorator checks nothing on its own, so this sync is the app's own call.
+    const syncStatus = await CodePush.sync();
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
+    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, APPLIED);
+  });
+
+  it('tells only the callback of the sync call when one was passed to it', async () => {
+    const registeredOnTheDecorator = jest.fn();
+    const passedToTheSyncCall = jest.fn();
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+      onBinaryPatchResult: registeredOnTheDecorator,
+    });
+
+    const syncStatus = await CodePush.sync({ onBinaryPatchResult: passedToTheSyncCall });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(passedToTheSyncCall).toHaveBeenCalledTimes(1);
+    expect(passedToTheSyncCall).toHaveBeenCalledWith(LABEL, APPLIED);
+    expect(registeredOnTheDecorator).not.toHaveBeenCalled();
+  });
+
+  it('says nothing about a download that had no patch to try', async () => {
+    const { CodePush } = loadCodePush({ releaseHistory: fullOnlyRelease() });
+    const onBinaryPatchResult = jest.fn();
+
+    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onBinaryPatchResult).not.toHaveBeenCalled();
+  });
+
+  it('installs the update even when the callback throws', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+    });
+    const onBinaryPatchResult = jest.fn(() => {
+      throw new Error('the telemetry the app sends the result to is down');
+    });
+
+    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the result out of the package the update is installed from', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+    });
+
+    await CodePush.sync({ onBinaryPatchResult: jest.fn() });
+
+    const installedPackage = installedPackageMetadata(nativeBridge);
+    expect(installedPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
+    expect(installedPackage).not.toHaveProperty('binaryPatchResult');
+  });
+
+  it('installs the same update, without the result, when no callback is registered', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: FELL_BACK,
+    });
+
+    const syncStatus = await CodePush.sync();
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(installedPackageMetadata(nativeBridge)).not.toHaveProperty('binaryPatchResult');
+  });
+
+  it('leaves the result off the package a download resolves with', async () => {
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      binaryPatchResult: APPLIED,
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    const localPackage = await remotePackage.download();
+
+    expect(localPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
+    expect(localPackage).not.toHaveProperty('binaryPatchResult');
   });
 });

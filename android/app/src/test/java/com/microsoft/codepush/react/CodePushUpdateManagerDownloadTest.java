@@ -85,12 +85,15 @@ public class CodePushUpdateManagerDownloadTest {
         String patchUrl = serve("/patch.zip", zipOf(patchArchiveContents()));
         String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
 
-        updateManager(applierWriting(TARGET_BUNDLE))
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
                 .downloadPackage(updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
         assertEquals("the full archive is not downloaded when the patch installs",
                 Arrays.asList("/patch.zip"), mServer.requestedPaths());
         assertInstalledContents();
+        assertEquals("applied", patchResult.optString("status", null));
+        assertFalse("an applied patch has nothing to report a reason for", patchResult.has("fallbackReason"));
+        assertTrue("the apply is timed", patchResult.optLong("applyDurationMs", -1) >= 0);
     }
 
     @Test
@@ -99,11 +102,12 @@ public class CodePushUpdateManagerDownloadTest {
         String patchUrl = serve("/patch.zip", ERROR_PAGE);
         String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
 
-        updateManager(applierWriting(TARGET_BUNDLE))
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
                 .downloadPackage(updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
         assertEquals(Arrays.asList("/patch.zip", "/full.zip"), mServer.requestedPaths());
         assertInstalledContents();
+        assertFallbackResult(patchResult, BinaryPatchResult.REASON_INVALID_MANIFEST);
     }
 
     @Test
@@ -112,7 +116,7 @@ public class CodePushUpdateManagerDownloadTest {
 
         BinaryPatchResult result = updateManager(applierWriting(TARGET_BUNDLE)).downloadAndInstallPackage(
                 updatePackage("https://example.test/unused.zip", patchUrl), BUNDLE_FILE_NAME, ignoreProgress(),
-                patchUrl, true);
+                patchUrl, true, new BinaryPatchAttempt());
 
         assertFalse(result.succeeded());
         assertEquals(BinaryPatchResult.REASON_INVALID_MANIFEST, result.getFailureReason());
@@ -130,11 +134,38 @@ public class CodePushUpdateManagerDownloadTest {
             }
         };
 
-        updateManager(outOfMemoryApplier)
+        JSONObject patchResult = updateManager(outOfMemoryApplier)
                 .downloadPackage(updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
         assertEquals(Arrays.asList("/patch.zip", "/full.zip"), mServer.requestedPaths());
         assertInstalledContents();
+        // Running out of memory is not one of the outcomes the appliers have a word for, and
+        // no word is invented for it here.
+        assertFallbackResult(patchResult, null);
+    }
+
+    @Test
+    public void reportsAPackageVerificationFailureWhenTheRestoredUpdateIsNotTheOnePublished() throws IOException {
+        // The patch archive carries an asset the release was not published with, so the
+        // bundle it restores is the promised one while the update it makes is not.
+        Map<String, byte[]> contents = patchArchiveContents();
+        contents.put(CONTENTS_DIR_NAME + "/" + ASSET_PATH, bytes("an image from some other release"));
+        String patchUrl = serve("/patch.zip", zipOf(contents));
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
+                .downloadPackage(updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/patch.zip", "/full.zip"), mServer.requestedPaths());
+        assertInstalledContents();
+        assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
+    }
+
+    /** The result of a download the update had to be downloaded in full for. */
+    private static void assertFallbackResult(JSONObject patchResult, String expectedReason) {
+        assertEquals("fallback", patchResult.optString("status", null));
+        assertEquals(expectedReason, patchResult.optString("fallbackReason", null));
+        assertTrue("the attempt is timed", patchResult.optLong("applyDurationMs", -1) >= 0);
     }
 
     /** The installed update is the full archive's contents, whichever archive it came from. */
@@ -151,6 +182,10 @@ public class CodePushUpdateManagerDownloadTest {
         String bundlePath = metadata.optString(CodePushConstants.RELATIVE_BUNDLE_PATH_KEY, null);
         assertTrue("the metadata points at the restored bundle, but says " + bundlePath,
                 bundlePath != null && bundlePath.endsWith(CONTENTS_DIR_NAME + "/" + BUNDLE_FILE_NAME));
+        // How the update was downloaded says nothing about the update, so it is not part of
+        // what the update is installed from and outlives the download in no file.
+        assertFalse("the patch attempt reached the stored metadata",
+                metadata.has(CodePushConstants.BINARY_PATCH_RESULT_KEY));
 
         File binaryPatchFolder = new File(
                 new File(mDocumentsDirectory, CodePushConstants.CODE_PUSH_FOLDER_PREFIX),

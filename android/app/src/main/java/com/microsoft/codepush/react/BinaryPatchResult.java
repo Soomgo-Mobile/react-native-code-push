@@ -28,6 +28,15 @@ public class BinaryPatchResult {
     /** The restored bundle is not the one the manifest promised. */
     public static final String REASON_TARGET_VERIFICATION_FAILED = "target_verification_failed";
 
+    /**
+     * The update restored from the patch did not pass the checks every update passes before
+     * it is installed - the folder hash above all.
+     *
+     * This one is reported by the caller rather than by the applier: by the time it applies,
+     * the applier has already handed back a bundle it was happy with.
+     */
+    public static final String REASON_PACKAGE_VERIFICATION_FAILED = "package_verification_failed";
+
     private final boolean mSucceeded;
     private final String mFailureReason;
 

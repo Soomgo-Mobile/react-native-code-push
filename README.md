@@ -298,6 +298,36 @@ Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-nat
 - **onDownloadStart:** Triggered when the bundle download begins.
 - **onDownloadSuccess:** Triggered when the bundle download completes successfully.
 - **onSyncError:** Triggered when an unknown error occurs during the update process. (`CodePush.SyncStatus.UNKNOWN_ERROR` status)
+- **onBinaryPatchResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the patch went. Unlike the callbacks above, this one can also be passed to a single `sync()` call - see below.
+
+`onBinaryPatchResult` is called with `{ status: "applied" | "fallback", fallbackReason?: string, applyDurationMs: number }`.
+A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
+is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
+its telemetry sends it itself. A callback that throws never fails the update - the error is only logged to the console.
+
+Register it on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
+and including the `CodePush.sync()` calls you make yourself.
+
+```typescript
+export default CodePush({
+  checkFrequency: CodePush.CheckFrequency.MANUAL, // or something else
+  releaseHistoryFetcher: releaseHistoryFetcher,
+  onBinaryPatchResult: (label, result) => {
+    // Send it to your own telemetry, if you want it there.
+  },
+})(MyApp);
+```
+
+Pass it to a `sync()` call to override the registered one for that call - to tag the result of one particular sync,
+for instance.
+
+```typescript
+CodePush.sync({
+  onBinaryPatchResult: (label, result) => {
+    // Send it to your own telemetry, if you want it there.
+  },
+});
+```
 
 
 ### 5. Configure the CLI Tool

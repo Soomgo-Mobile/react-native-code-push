@@ -4,7 +4,15 @@
 module.exports = (NativeCodePush) => {
   const remote = () => {
     return {
-      async download(downloadProgressCallback) {
+      /**
+       * @param downloadProgressCallback Called as the archive is received.
+       * @param binaryPatchResultCallback Called with `{ status, fallbackReason?, applyDurationMs }`
+       *        when the update was published with a binary patch, so that the app can observe
+       *        how the patch went. It says nothing about whether the download succeeded - a
+       *        patch that could not be applied is reported here and the update is downloaded
+       *        in full - and it is the only place the result is ever available.
+       */
+      async download(downloadProgressCallback, binaryPatchResultCallback) {
         if (!this.downloadUrl) {
           throw new Error("Cannot download an update without a download url");
         }
@@ -23,7 +31,17 @@ module.exports = (NativeCodePush) => {
           const updatePackageCopy = Object.assign({}, this);
           Object.keys(updatePackageCopy).forEach((key) => (typeof updatePackageCopy[key] === 'function') && delete updatePackageCopy[key]);
 
-          const downloadedPackage = await NativeCodePush.downloadUpdate(updatePackageCopy, !!downloadProgressCallback);
+          const downloadResult = await NativeCodePush.downloadUpdate(updatePackageCopy, !!downloadProgressCallback);
+
+          // The patch result describes the download that just happened, not the update it
+          // delivered, and the package is handed around as the update's metadata from here
+          // on - it is even written back to the native side on install. So the result is
+          // taken off the package and reported on its own, leaving the package exactly what
+          // the native side saved.
+          const { binaryPatchResult, ...downloadedPackage } = downloadResult ?? {};
+          if (binaryPatchResult) {
+            binaryPatchResultCallback?.(binaryPatchResult);
+          }
 
           return { ...downloadedPackage, ...local };
         } finally {

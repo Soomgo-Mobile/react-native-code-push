@@ -543,8 +543,27 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     mandatoryInstallMode: CodePush.InstallMode.IMMEDIATE,
     minimumBackgroundDuration: 0,
     updateDialog: null,
+    // The callback registered on the decorator is the default for every sync, including a
+    // manual one; a callback passed to this call overrides it for this call.
+    onBinaryPatchResult: sharedCodePushOptions.onBinaryPatchResult ?? null,
     ...options,
   };
+
+  /*
+   * A callback an app registered to observe how a binary patch went must not be able to
+   * cost it an update, so it is isolated the way the other sync callbacks are: whatever it
+   * throws is logged and the install carries on. An app that registered none leaves the
+   * download exactly as it was before this option existed.
+   */
+  const onBinaryPatchResult = typeof syncOptions.onBinaryPatchResult === "function"
+    ? (label, result) => {
+      try {
+        syncOptions.onBinaryPatchResult(label, result);
+      } catch (error) {
+        log(`An error has occurred : ${error.stack}`);
+      }
+    }
+    : null;
 
   syncStatusChangeCallback = typeof syncStatusChangeCallback === "function"
     ? syncStatusChangeCallback
@@ -597,7 +616,10 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
       syncStatusChangeCallback(CodePush.SyncStatus.DOWNLOADING_PACKAGE);
       sharedCodePushOptions.onDownloadStart?.(remotePackageLabel);
 
-      const localPackage = await remotePackage.download(downloadProgressCallback);
+      const localPackage = await remotePackage.download(
+        downloadProgressCallback,
+        onBinaryPatchResult && ((result) => onBinaryPatchResult(remotePackageLabel, result)),
+      );
 
       sharedCodePushOptions.onDownloadSuccess?.(remotePackageLabel);
 
@@ -731,6 +753,9 @@ let CodePush;
  *
  *   onRolloutSkipped: (label: string, error: Error) => void | undefined,
  *   setOnRolloutSkipped(onRolloutSkippedFunction: (label: string, error: Error) => void | undefined): void,
+ *
+ *   onBinaryPatchResult: (label: string, result: object) => void | undefined,
+ *   setOnBinaryPatchResult(onBinaryPatchResultFunction: (label: string, result: object) => void | undefined): void,
  * }}
  */
 const sharedCodePushOptions = {
@@ -781,6 +806,12 @@ const sharedCodePushOptions = {
     if (typeof onRolloutSkippedFunction !== 'function') throw new Error('Please pass a function to onRolloutSkipped');
     this.onRolloutSkipped = onRolloutSkippedFunction;
   },
+  onBinaryPatchResult: undefined,
+  setOnBinaryPatchResult(onBinaryPatchResultFunction) {
+    if (!onBinaryPatchResultFunction) return;
+    if (typeof onBinaryPatchResultFunction !== 'function') throw new Error('Please pass a function to onBinaryPatchResult');
+    this.onBinaryPatchResult = onBinaryPatchResultFunction;
+  },
 }
 
 function codePushify(options = {}) {
@@ -817,6 +848,7 @@ function codePushify(options = {}) {
   sharedCodePushOptions.setOnDownloadSuccess(options.onDownloadSuccess);
   sharedCodePushOptions.setOnSyncError(options.onSyncError);
   sharedCodePushOptions.setOnRolloutSkipped(options.onRolloutSkipped);
+  sharedCodePushOptions.setOnBinaryPatchResult(options.onBinaryPatchResult);
 
   const decorator = (RootComponent) => {
     class CodePushComponent extends React.Component {
