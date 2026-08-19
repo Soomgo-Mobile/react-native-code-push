@@ -7,6 +7,9 @@ NSString * const AssetsFolderName = @"assets";
 NSString * const BinaryHashKey = @"CodePushBinaryHash";
 NSString * const ManifestFolderPrefix = @"CodePush";
 
+/* How much of a file is read at a time while hashing it. */
+static const NSUInteger HashChunkSize = 1024 * 8;
+
 /*
  Ignore list for hashing
  */
@@ -95,11 +98,56 @@ NSString * const IgnoreDSStore = @".DS_Store";
 {
     uint8_t digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(inputData.bytes, (CC_LONG)inputData.length, digest);
+    return [self hashStringForDigest:digest];
+}
+
+/*
+ A file is hashed a chunk at a time, so that hashing one costs no more memory than the
+ chunk however large the file is.
+ */
++ (NSString *)computeHashForFileAtPath:(NSString *)filePath
+{
+    NSFileHandle *fileHandle = [NSFileHandle fileHandleForReadingAtPath:filePath];
+    if (!fileHandle) {
+        CPLog(@"Unable to open %@ to hash it.", filePath);
+        return nil;
+    }
+
+    CC_SHA256_CTX context;
+    CC_SHA256_Init(&context);
+
+    while (YES) {
+        @autoreleasepool {
+            NSError *error = nil;
+            NSData *chunk = [fileHandle readDataUpToLength:HashChunkSize error:&error];
+            if (!chunk) {
+                CPLog(@"Unable to read %@ to hash it: %@", filePath, error);
+                [fileHandle closeAndReturnError:nil];
+                return nil;
+            }
+
+            if (chunk.length == 0) {
+                break;
+            }
+
+            CC_SHA256_Update(&context, chunk.bytes, (CC_LONG)chunk.length);
+        }
+    }
+
+    [fileHandle closeAndReturnError:nil];
+
+    uint8_t digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256_Final(digest, &context);
+    return [self hashStringForDigest:digest];
+}
+
++ (NSString *)hashStringForDigest:(const uint8_t *)digest
+{
     NSMutableString* inputHash = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
     for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
         [inputHash appendFormat:@"%02x", digest[i]];
     }
-    
+
     return inputHash;
 }
 

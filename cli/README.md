@@ -116,11 +116,12 @@ applying it yields the same `packageHash` as the full bundle. Both sizes and the
 are printed before either artifact is uploaded. The release history entry records where
 the patch bundle can be downloaded, next to the full bundle URL.
 
-An Android client installs the update from the patch bundle when the release has one, and
-downloads the full bundle instead whenever the patch cannot be applied, so a release is
-never left uninstallable by a patch. Applying a patch is native code, which the Android
-library builds from source: an app that depends on it needs the NDK and CMake, both of
-which a React Native project normally already has.
+A client installs the update from the patch bundle when the release has one, and downloads
+the full bundle instead whenever the patch cannot be applied, so a release is never left
+uninstallable by a patch. Applying a patch is native code, which both libraries build from
+the same sources: on Android that needs the NDK and CMake, both of which a React Native
+project normally already has, and on iOS the pod carries the sources, so CocoaPods builds
+them with nothing to add.
 
 #### Prerequisites: building the patch generator
 

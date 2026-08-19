@@ -117,11 +117,11 @@ npx code-push release [options]
 절감량은 업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
 내려받을 수 있는 URL이 기록됩니다.
 
-Android 클라이언트는 patch 번들이 있는 릴리스라면 patch로 업데이트를 설치하고, patch를
-적용할 수 없으면 full 번들을 대신 내려받으므로 patch 때문에 설치가 실패하지는 않습니다.
-patch 적용은 네이티브 코드이며 Android 라이브러리가 소스에서 직접 빌드하므로, 이 라이브러리를
-사용하는 앱을 빌드하려면 NDK와 CMake가 필요합니다. React Native 프로젝트라면 대개 이미
-갖추고 있습니다.
+클라이언트는 patch 번들이 있는 릴리스라면 patch로 업데이트를 설치하고, patch를 적용할 수
+없으면 full 번들을 대신 내려받으므로 patch 때문에 설치가 실패하지는 않습니다. patch 적용은
+네이티브 코드이며 두 라이브러리가 같은 소스에서 직접 빌드합니다. Android는 그래서 NDK와
+CMake가 필요하지만 React Native 프로젝트라면 대개 이미 갖추고 있고, iOS는 pod가 소스를
+함께 가지고 있어 CocoaPods가 빌드하므로 따로 준비할 것이 없습니다.
 
 #### 사전 준비: patch 생성 도구 빌드
 
