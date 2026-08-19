@@ -228,7 +228,6 @@ jobs:
     outputs:
       current_beta_version: ${{ steps.plan.outputs.current_beta_version }}
       dist_tag: ${{ steps.plan.outputs.dist_tag }}
-      is_draft: ${{ steps.plan.outputs.is_draft }}
       is_prerelease: ${{ steps.plan.outputs.is_prerelease }}
       latest_version: ${{ steps.plan.outputs.latest_version }}
       should_publish: ${{ steps.plan.outputs.should_publish }}
@@ -246,8 +245,6 @@ jobs:
 
       - name: Plan release
         id: plan
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           PACKAGE_NAME_FROM_FILE="$(node -p "require('./package.json').name")"
           if [[ "$PACKAGE_NAME_FROM_FILE" != "$PACKAGE_NAME" ]]; then
@@ -285,14 +282,8 @@ jobs:
               ;;
           esac
 
-          IS_DRAFT=false
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
-          fi
-
           echo "current_beta_version=$CURRENT_BETA_VERSION" >> "$GITHUB_OUTPUT"
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          echo "is_draft=$IS_DRAFT" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "latest_version=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
           echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
@@ -477,29 +468,3 @@ jobs:
           DIST_TAG: ${{ needs.plan-release.outputs.dist_tag }}
           TARBALL: ${{ needs.build-release.outputs.tarball }}
         run: npm publish "./release/$TARBALL" --ignore-scripts --tag "$DIST_TAG"
-
-  publish-github-release:
-    needs:
-      - plan-release
-      - publish-npm
-    if: >-
-      ${{
-        always() &&
-        needs.plan-release.result == 'success' &&
-        (
-          needs.publish-npm.result == 'success' ||
-          (
-            needs.plan-release.outputs.should_publish == 'false' &&
-            needs.plan-release.outputs.is_draft == 'true'
-          )
-        )
-      }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Publish draft GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan-release.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false

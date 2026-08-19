@@ -12,9 +12,9 @@ GitHub Actions와 npm Trusted Publishing(OIDC)으로 배포합니다. 장기 npm
 4. beta 버전을 배포하려면 `beta`를 선택한 뒤 워크플로를 실행합니다.
 5. 생성된 `release/v<version>` PR에서 `Approve workflows to run`을 선택합니다. `Unit Test`가 통과하면 PR을 병합합니다.
 6. PR을 병합하면 Release 워크플로가 태그와 Draft GitHub Release를 만들고 패키지를 검증합니다.
-7. Draft GitHub Release에 작성된 릴리즈 노트를 확인합니다.
+7. Draft GitHub Release에 작성된 릴리즈 노트를 검토하고 필요한 내용을 편집합니다.
 8. 문제가 없다면 Release 워크플로에서 `npm-release` 배포를 승인합니다.
-9. npm 배포가 끝나면 워크플로가 Draft GitHub Release를 공개합니다.
+9. npm 배포가 끝나면 Draft GitHub Release에서 `Publish release`를 선택해 직접 공개합니다.
 
 정식 버전은 npm의 `latest` dist-tag로 배포합니다. beta 버전은 `beta` dist-tag와 GitHub prerelease로 배포합니다.
 선택한 버전이 현재 `beta` dist-tag보다 낮으면 워크플로가 배포를 중단합니다. `beta` dist-tag가 이전 버전으로 돌아가는 상황을 막기 위한 검사입니다.
@@ -30,7 +30,7 @@ GitHub Actions와 npm Trusted Publishing(OIDC)으로 배포합니다. 장기 npm
 
 - 릴리즈 PR을 만들다가 실패하면 Release 워크플로를 다시 실행합니다. 같은 버전의 `release/v<version>` 브랜치나 열린 PR이 있으면 이를 재사용합니다. `Unit Test`가 실패했다면 해당 실행을 PR에서 다시 실행합니다.
 - PR을 병합한 뒤 npm 배포 전에 실패하면 해당 Release 워크플로를 다시 실행합니다. 기존 태그와 Draft GitHub Release가 현재 배포 커밋을 가리키는지 확인한 뒤 재사용합니다.
-- npm 배포는 성공했지만 GitHub Release를 공개하지 못했다면 Release 워크플로를 다시 실행합니다. 워크플로가 npm 게시 상태를 확인하고 남아 있는 Draft를 공개합니다.
+- npm 배포는 성공했지만 GitHub Release를 공개하지 않았다면 Draft의 내용을 확인한 뒤 직접 공개합니다.
 - npm에서 버전을 삭제해도 같은 버전으로 다시 배포할 수 없습니다. 새 버전을 만들기 전에 npm과 GitHub의 현재 상태부터 확인합니다.
 
 ## 참고
