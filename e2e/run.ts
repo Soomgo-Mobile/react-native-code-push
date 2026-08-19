@@ -11,6 +11,7 @@ import { assertArtifactStorageLayout, clearArtifactLog } from "./helpers/artifac
 import { assertNoPatchDownloads, startRecordingDownloads } from "./helpers/download-order";
 import { assertReleaseOffersNoPatch } from "./helpers/binary-patch-fixtures";
 import { runBinaryPatchPhase } from "./helpers/binary-patch-phase";
+import { assertExportedBundleMatchesBinary } from "./helpers/embedded-bundle-export";
 
 interface CliOptions {
   app: string;
@@ -110,6 +111,18 @@ async function main() {
     }
 
     const appId = getAppId(appPath, options.platform);
+
+    // The export hooks run inside the build that was just made, so what they wrote is
+    // checked against that build's binary before the run goes on to release anything.
+    console.log("\n=== [assert-embedded-bundle-export] ===");
+    assertExportedBundleMatchesBinary({
+      appPath,
+      platform: options.platform,
+      appId,
+      binaryVersion: "1.0.0",
+      buildSkipped: options.maestroOnly ?? false,
+    });
+
     // 3. Prepare update bundle
     console.log("\n=== [prepare-bundle] ===");
     cleanMockData();

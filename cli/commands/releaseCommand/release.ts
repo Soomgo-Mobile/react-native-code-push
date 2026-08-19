@@ -7,6 +7,7 @@ import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
 import { unzip } from "../../utils/unzip.js";
 import {
     BINARY_PATCH_ARCHIVE_SUFFIX,
+    BINARY_PATCH_BASE_RECORD_NAME,
     DEFAULT_OVERSIZED_PATCH_POLICY,
     extractCodePushBundleContents,
     formatBinaryPatchSummary,
@@ -14,6 +15,7 @@ import {
     isPatchArchiveOversized,
     makeBinaryPatchBundle,
     readBinaryPatchBaseRecord,
+    type BinaryPatchBaseRecord,
     type BinaryPatchBundle,
     type OversizedPatchPolicy,
 } from "../../functions/makeBinaryPatchBundle.js";
@@ -41,6 +43,12 @@ export async function release(
     baseBundlePath?: string,
     onOversizedPatch: OversizedPatchPolicy = DEFAULT_OVERSIZED_PATCH_POLICY,
 ): Promise<void> {
+    if (baseBundlePath) {
+        // Checked before the bundler runs, so the wrong base bundle costs a second rather
+        // than a full build.
+        verifyExportedBaseBundleRecord(baseBundlePath, binaryVersion);
+    }
+
     const codePushBundle = skipBundle
         ? null
         : await bundleCodePush(framework, platform, outputPath, entryFile, jsBundleName, bundleDirectory, outputMetroDir, baseBundlePath);
@@ -218,6 +226,59 @@ async function makeBinaryPatchArtifact({
         if (extractDir) {
             fs.rmSync(extractDir, { recursive: true, force: true });
         }
+    }
+}
+
+/**
+ * Cross-checks the base bundle against the record a build hook exported next to it.
+ *
+ * The base bundle is the one input a release cannot verify on its own: pass the bundle of
+ * a different build and everything still succeeds, only for the patch to be unappliable
+ * on every device. The record says which bytes and which binary the export came from, so
+ * when it is there, the two mistakes that produce a broken release - a base file that was
+ * replaced after it was exported, and a base exported from a different binary version -
+ * stop the release before anything is built or uploaded.
+ *
+ * A base bundle produced some other way has no record next to it, and releases exactly as
+ * it did before. A record that cannot be read only warns: it is a cross-check, and losing
+ * it must never be able to fail a release that is otherwise fine.
+ */
+function verifyExportedBaseBundleRecord(baseBundlePath: string, binaryVersion: string): void {
+    const recordPath = path.join(path.dirname(path.resolve(baseBundlePath)), BINARY_PATCH_BASE_RECORD_NAME);
+
+    let contents: string;
+    try {
+        contents = fs.readFileSync(recordPath, 'utf8');
+    } catch {
+        return;
+    }
+
+    let record: Partial<BinaryPatchBaseRecord> = {};
+    try {
+        record = (JSON.parse(contents) as Partial<BinaryPatchBaseRecord> | null) ?? {};
+    } catch {
+        // Left empty, which is reported below as a record that says nothing to check.
+    }
+    if (typeof record.baseBundleHash !== 'string') {
+        console.warn(
+            `warn: "${recordPath}" is not a readable binary patch base record, so the base bundle was released without cross-checking it.`,
+        );
+        return;
+    }
+
+    const baseBundleHash = hashBundleFile(baseBundlePath);
+    if (record.baseBundleHash !== baseBundleHash) {
+        throw new Error(
+            `The base bundle "${baseBundlePath}" does not match the record exported next to it: the record describes ${record.baseBundleHash}, ` +
+                `but the file hashes to ${baseBundleHash}. Export the bundle again from the build that produced the binary.`,
+        );
+    }
+
+    if (typeof record.binaryVersion === 'string' && record.binaryVersion !== binaryVersion) {
+        throw new Error(
+            `The base bundle "${baseBundlePath}" was exported from binary version ${record.binaryVersion}, but this release targets ${binaryVersion} ` +
+                '(--binary-version). Release against the bundle of the binary being targeted.',
+        );
     }
 }
 

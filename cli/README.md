@@ -156,6 +156,16 @@ comes out the same size or larger: `skip` (the default) logs a warning, notes th
 the summary and releases the full bundle alone, while `fail` stops the release before
 anything is uploaded and leaves the release history untouched.
 
+#### Verifying the base bundle
+
+The bundle `--binary-bundle-path` points at is the one input a release cannot verify on
+its own, so the [build hooks](../README.md#6-export-the-embedded-bundle-optional) leave a
+`binary-patch-base.json` record next to every bundle they export. When that record is
+there, the release fails before anything is built or uploaded if the base bundle no longer
+hashes to what the record describes, or if it was exported from a binary version other
+than `--binary-version`. A base bundle with no record beside it releases exactly as before,
+and a record that cannot be read only warns.
+
 ```bash
 # Standard iOS release
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios

@@ -1,0 +1,115 @@
+/**
+ * Exports the JS bundle a release build embeds in the app, so a later CodePush release
+ * can compute a binary patch against exactly the bytes the store binary ships.
+ *
+ * Apply it from the app module's build.gradle, below the React Native plugin:
+ *
+ *     apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"
+ *
+ * Every variant that bundles JS gets a `codePushExport<Variant>Bundle` task that runs
+ * right after `createBundle<Variant>JsAndAssets`. Variants the React Native plugin lists
+ * in `debuggableVariants` never bundle - they have no bundle task - so they get no export
+ * task and the build behaves exactly as it did without this script.
+ *
+ * Each export writes the bundle and a `binary-patch-base.json` record next to it, under
+ * `<buildDir>/codepush/embedded-bundle/<variant>/`. Set the `codePushExportDir` Gradle
+ * property to export somewhere else; the `<variant>` directory is appended to it either
+ * way, so an `assemble` that builds several variants never has them overwrite each other.
+ */
+
+import groovy.json.JsonOutput
+
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+
+/**
+ * Name and field names of the record are a contract shared with the CodePush CLI
+ * (`cli/functions/makeBinaryPatchBundle.ts`) and the iOS export script
+ * (`scripts/export-embedded-bundle.sh`). Keep the three in step.
+ */
+def exportRecordName = 'binary-patch-base.json'
+
+def exportRootDir = project.hasProperty('codePushExportDir')
+        ? project.file(project.property('codePushExportDir'))
+        : new File(project.layout.buildDirectory.get().asFile, 'codepush/embedded-bundle')
+
+// The variant API is the only place the version of the artifact being built is known.
+def variantOutputs = [:]
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    variantOutputs[variant.name] = variant.outputs.find { it.outputType.toString() == 'SINGLE' } ?: variant.outputs.first()
+}
+
+// Runs after the Android plugin has created the variants and React Native has registered
+// its bundle tasks, so the tasks to hook onto are all there to be found.
+project.afterEvaluate {
+    def gitDir = project.rootDir
+
+    variantOutputs.each { variantName, variantOutput ->
+        def capitalizedName = variantName.capitalize()
+
+        // The React Native plugin registers this task only for variants that bundle JS, so
+        // a missing task means the variant embeds no bundle and there is nothing to export.
+        def bundleTask = project.tasks.findByName("createBundle${capitalizedName}JsAndAssets")
+        if (bundleTask == null) {
+            return
+        }
+
+        // Taken from the bundle task's own output properties rather than a fixed path, so a
+        // custom `bundleAssetName` or a new React Native output layout still resolves.
+        def bundleFile = bundleTask.jsBundleDir.file(bundleTask.bundleAssetName)
+        def exportDir = new File(exportRootDir, variantName)
+        def binaryVersion = variantOutput.versionName
+        def buildNumber = variantOutput.versionCode
+
+        def exportTask = project.tasks.register("codePushExport${capitalizedName}Bundle") { task ->
+            task.group = 'codepush'
+            task.description = "Exports the ${variantName} JS bundle embedded in the app, with the record describing it, to ${exportDir}."
+            task.inputs.file(bundleFile)
+            // The versions are part of what the record says, so bumping one has to rewrite
+            // it even when the bundle itself came out unchanged.
+            task.inputs.property('binaryVersion', binaryVersion)
+            task.inputs.property('buildNumber', buildNumber)
+            task.outputs.dir(exportDir)
+            task.doLast {
+                def embeddedBundle = bundleFile.get().asFile
+                exportDir.mkdirs()
+                def exportedBundle = new File(exportDir, embeddedBundle.name)
+                Files.copy(embeddedBundle.toPath(), exportedBundle.toPath(), StandardCopyOption.REPLACE_EXISTING)
+
+                def digest = MessageDigest.getInstance('SHA-256')
+                exportedBundle.eachByte(64 * 1024) { buffer, length -> digest.update(buffer, 0, length) }
+
+                def baseRecord = [baseBundleHash: digest.digest().encodeHex().toString()]
+                if (binaryVersion.getOrNull() != null) {
+                    baseRecord.binaryVersion = binaryVersion.get()
+                }
+                if (buildNumber.getOrNull() != null) {
+                    baseRecord.buildNumber = buildNumber.get().toString()
+                }
+
+                // A build outside a git checkout still exports a usable record, just without
+                // the commit, so a missing or failing git is never a build failure.
+                try {
+                    def git = new ProcessBuilder('git', 'rev-parse', 'HEAD')
+                            .directory(gitDir)
+                            .redirectError(ProcessBuilder.Redirect.DISCARD)
+                            .start()
+                    def gitSha = git.inputStream.getText('UTF-8').trim()
+                    if (git.waitFor() == 0 && !gitSha.isEmpty()) {
+                        baseRecord.gitSha = gitSha
+                    }
+                } catch (Exception ignored) {
+                }
+
+                new File(exportDir, exportRecordName).write(JsonOutput.prettyPrint(JsonOutput.toJson(baseRecord)), 'UTF-8')
+                // A bare `logger` here resolves against the enclosing script, so it is the
+                // Project's logger and drags the Project into the task action, which the
+                // configuration cache refuses. The action's own task carries one.
+                task.logger.lifecycle("CodePush: exported the embedded ${variantName} bundle to ${exportedBundle}")
+            }
+        }
+
+        bundleTask.finalizedBy(exportTask)
+    }
+}

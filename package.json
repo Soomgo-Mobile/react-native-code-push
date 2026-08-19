@@ -46,6 +46,7 @@
     "cli/dist",
     "cli/**/*.ts",
     "!cli/node_modules",
+    "scripts/export-embedded-bundle.sh",
     "scripts/binary-patch/build-hdiffpatch.sh",
     "expo",
     "typings",

@@ -36,6 +36,11 @@ export const BINARY_PATCH_ARCHIVE_SUFFIX = '-patch.zip';
  * Record the `bundle` command leaves in the output root - outside the update contents,
  * so it never reaches the archive - to say which base bundle the JS bundle was
  * compiled against. A later `release` compares it with the base it was given.
+ *
+ * The build hooks (`android/codepush-export.gradle`, `scripts/export-embedded-bundle.sh`)
+ * write a record of the same name next to the bundle they export from a native build,
+ * which is what makes that bundle self-describing when it is later passed to
+ * `release --binary-bundle-path`.
  */
 export const BINARY_PATCH_BASE_RECORD_NAME = 'binary-patch-base.json';
 
@@ -61,8 +66,22 @@ export type BinaryPatchBundle = {
     manifest: BinaryPatchManifest;
 };
 
+/**
+ * Contents of `binary-patch-base.json`. The `bundle` command writes the hash alone; a
+ * build hook, which knows which binary the bundle it exported went into, adds the rest.
+ *
+ * The field names are a contract shared with `android/codepush-export.gradle` and
+ * `scripts/export-embedded-bundle.sh`, which spell them out as literals. Keep the three
+ * in step.
+ */
 export type BinaryPatchBaseRecord = {
     baseBundleHash: string;
+    /** Marketing version of the binary the bundle shipped in: `versionName` / `CFBundleShortVersionString`. */
+    binaryVersion?: string;
+    /** Build number of that binary: `versionCode` / `CFBundleVersion`. */
+    buildNumber?: string;
+    /** Commit the binary was built from, present only when the build could work it out. */
+    gitSha?: string;
 };
 
 /** SHA-256 of a single file's bytes, which is what the manifest records. */

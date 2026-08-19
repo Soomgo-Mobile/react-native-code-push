@@ -287,7 +287,7 @@ function buildAndroid(appPath: string): Promise<void> {
   return executeCommand("npx", args, appPath);
 }
 
-function isExpoApp(appPath: string): boolean {
+export function isExpoApp(appPath: string): boolean {
   const packageJsonPath = path.join(appPath, "package.json");
   if (!fs.existsSync(packageJsonPath)) {
     return false;

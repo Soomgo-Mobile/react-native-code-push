@@ -154,6 +154,15 @@ patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습�
 기본값 `skip`은 경고를 남기고 요약에 skip 사실을 명시한 뒤 full 번들만 배포하며, `fail`은
 어떤 업로드도 시작하기 전에 릴리스를 실패시키고 릴리스 히스토리를 변경하지 않습니다.
 
+#### base 번들 검증
+
+`--binary-bundle-path`가 가리키는 번들은 릴리스가 스스로 검증할 수 없는 유일한 입력이므로,
+[build 훅](../README.md#6-export-the-embedded-bundle-optional)은 export하는 번들 옆에
+`binary-patch-base.json` 기록을 함께 남깁니다. 이 기록이 있으면 base 번들의 실제 SHA-256이
+기록과 다르거나 `--binary-version`이 아닌 다른 바이너리 버전에서 export된 번들일 때, 빌드나
+업로드를 시작하기 전에 릴리스를 실패시킵니다. 기록이 없는 base 번들은 기존과 동일하게
+동작하고, 읽을 수 없는 기록은 경고만 남깁니다.
+
 **예시:**
 
 ```bash

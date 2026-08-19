@@ -400,6 +400,84 @@ module.exports = Config;
 ```
 
 
+### 6. Export the Embedded Bundle (Optional)
+
+Only needed if you want to release **binary patch updates** (`release --binary-bundle-path`).
+A binary patch is the difference between the update and the JS bundle that is already
+inside the installed app, so releasing one means holding on to that bundle: the exact
+bytes the build you shipped to the store embedded.
+
+The library ships a hook for each platform that copies the freshly compiled bundle out of
+the build, together with a `binary-patch-base.json` record describing it.
+
+**Android** - apply the Gradle script in your app module's `android/app/build.gradle`:
+
+```groovy
+apply plugin: "com.android.application"
+apply plugin: "com.facebook.react"
+
+react {
+    // ...
+}
+
+apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"
+```
+
+The line can go anywhere in the file (if you use `ext.codePushExportDir`, set it before the
+`apply from:` line). Every variant that bundles JS then exports to
+`android/app/build/codepush/embedded-bundle/<variant>/` after it is bundled. Pass
+`-PcodePushExportDir=<path>` (or set `ext.codePushExportDir`) to export somewhere else; the
+`<variant>` directory is appended either way.
+
+**iOS** - call the export script at the end of the **"Bundle React Native code and images"**
+build phase. In Xcode, open that phase
+in your app target's **Build Phases** tab and append the last line below to its script:
+
+```bash
+/bin/sh -c "\"$WITH_ENVIRONMENT\" \"$REACT_NATIVE_XCODE\""
+
+"$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"
+```
+
+The export lands in `$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/`.
+Set the `CODEPUSH_EXPORT_DIR` environment variable to export somewhere else; the
+`$CONFIGURATION-$PLATFORM_NAME` directory is appended either way.
+
+**Archive the export per binary release.** Whatever pipeline builds your store binary
+should keep that build's export somewhere durable, organized by binary version, so a later
+release can fetch the bundle that matches the binary it targets:
+
+```bash
+# Android, after ./gradlew :app:assembleRelease
+aws s3 cp --recursive \
+  android/app/build/codepush/embedded-bundle/release \
+  "s3://your-bucket/binaries/android/$BINARY_VERSION/"
+
+# iOS - point the export at a path the pipeline knows, since $BUILD_DIR only exists inside the build
+export CODEPUSH_EXPORT_DIR="$PWD/codepush-export"
+xcodebuild -workspace ios/YourApp.xcworkspace -scheme YourApp -configuration Release archive # ...
+aws s3 cp --recursive \
+  "$CODEPUSH_EXPORT_DIR/Release-iphoneos" \
+  "s3://your-bucket/binaries/ios/$BINARY_VERSION/"
+```
+
+To release a patch later, download the export and pass the bundle's path to
+`--binary-bundle-path`:
+
+```bash
+aws s3 cp --recursive "s3://your-bucket/binaries/android/1.0.0/" ./binary/
+npx code-push release -b 1.0.0 -v 1.0.1 -p android \
+                      --binary-bundle-path ./binary/index.android.bundle
+```
+
+`release` also uses the record to verify the base bundle it was handed - see
+[Verifying the base bundle](cli/README.md#verifying-the-base-bundle) for details.
+
+> [!NOTE]
+> Applying these hooks automatically through the Expo config plugin (`app.plugin.js`) is
+> not implemented yet.
+
+
 ## 🚀 CLI Tool Usage
 
 > [!TIP]
