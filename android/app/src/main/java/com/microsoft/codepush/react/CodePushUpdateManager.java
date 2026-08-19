@@ -260,7 +260,6 @@ public class CodePushUpdateManager {
 
         // Download the file while checking if it is a zip and notifying client of progress.
         try {
-            progressCallback.onDownloadStart();
             URL downloadUrl = new URL(downloadUrlString);
             connection = (HttpURLConnection) (downloadUrl.openConnection());
 
@@ -276,6 +275,9 @@ public class CodePushUpdateManager {
             connection.setRequestProperty("Accept-Encoding", "identity");
             bin = new BufferedInputStream(connection.getInputStream());
 
+            // Announced only once the response is flowing, so a connection that fails to
+            // open never announces an empty stream.
+            progressCallback.onDownloadStart();
             long totalBytes = connection.getContentLength();
             long receivedBytes = 0;
 

@@ -164,11 +164,11 @@ Called when the sync process moves from one stage to another in the overall upda
 
 Called periodically when an available update is being downloaded from the CodePush server. The method is called with a `DownloadProgress` object, which contains the following two properties:
 
-* __totalBytes__ *(Number)* - The total number of bytes expected to be received for this update (i.e. the size of the set of files which changed from the previous release).
+* __totalBytes__ *(Number)* - The total number of bytes expected to be received for this download (for a regular update, the size of the set of files which changed from the previous release).
 
 * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
 
-Each download reports a stream of its own, opened by an event with `receivedBytes` at `0`. When a release ships with a binary patch that cannot be applied, the update is downloaded again in full, so one update can report two such streams - the second with the full download's larger `totalBytes`.
+Each download reports a progress stream of its own: `receivedBytes` counts from zero against that download's own `totalBytes`. When a release ships with a binary patch that cannot be applied, the update is downloaded again in full, so one update can report two streams - the second with the full download's larger `totalBytes`.
 
 #### codePush.allowRestart
 
@@ -460,7 +460,7 @@ In addition to the options, the `sync` method also accepts several optional func
 
 * __downloadProgressCallback__ *((progress: DownloadProgress) => void)* - Called periodically when an available update is being downloaded from the CodePush server. The method is called with a `DownloadProgress` object, which contains the following two properties:
 
-    * __totalBytes__ *(Number)* - The total number of bytes expected to be received for this update (i.e. the size of the set of files which changed from the previous release).
+    * __totalBytes__ *(Number)* - The total number of bytes expected to be received for this download (for a regular update, the size of the set of files which changed from the previous release).
 
     * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
 

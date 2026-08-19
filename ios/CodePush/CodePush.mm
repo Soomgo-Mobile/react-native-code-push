@@ -743,7 +743,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
             // own - the full archive after a binary patch fallback. The pause left over
             // from the finished patch download would swallow that whole stream, so frame
             // observation resumes here and the throttle forgets the previous stream.
-            if (receivedContentLength < _latestReceivedConentLength) {
+            if (notifyProgress && receivedContentLength < _latestReceivedConentLength) {
                 self.paused = NO;
                 _lastProgressEventTime = 0;
             }

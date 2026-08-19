@@ -162,7 +162,9 @@ export interface CodePushOptions extends SyncOptions {
 
 export interface DownloadProgress {
     /**
-     * The total number of bytes expected to be received for this update.
+     * The total number of bytes expected to be received for this download. An update
+     * published with a binary patch can be downloaded twice: when applying the patch
+     * fails, the full archive is downloaded as a second stream with its own total.
      */
     totalBytes: number;
 
