@@ -430,7 +430,7 @@ The line can go anywhere in the file (if you use `ext.codePushExportDir`, set it
 `<variant>` directory is appended either way.
 
 **iOS** - call the export script at the end of the **"Bundle React Native code and images"**
-build phase, the same place tools like Sentry and Datadog hook in. In Xcode, open that phase
+build phase. In Xcode, open that phase
 in your app target's **Build Phases** tab and append the last line below to its script:
 
 ```bash
@@ -461,7 +461,8 @@ aws s3 cp --recursive \
   "s3://your-bucket/binaries/ios/$BINARY_VERSION/"
 ```
 
-To release a patch later, download the export and pass its path:
+To release a patch later, download the export and pass the bundle's path to
+`--binary-bundle-path`:
 
 ```bash
 aws s3 cp --recursive "s3://your-bucket/binaries/android/1.0.0/" ./binary/
