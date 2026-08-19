@@ -65,6 +65,11 @@ const setupSteps: SetupStep[] = [
     run: createReactNativeTemplateApp
   },
   {
+    name: "pin-ruby-version",
+    description: "Pin the Ruby version used for pod install",
+    run: pinRubyVersion
+  },
+  {
     name: "configure-ios-versioning",
     description: "Configure iOS versioning and minimum OS",
     run: configureIosVersioning
@@ -214,6 +219,18 @@ function ensureDirectory(targetDir: string) {
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
+}
+
+// The version the e2e workflows install via ruby/setup-ruby. The template's Gemfile.lock
+// pins an old bundler that crashes on Ruby 3.2+, so newer local rubies break pod install.
+const EXAMPLE_APP_RUBY_VERSION = "3.1.6";
+
+async function pinRubyVersion(context: SetupContext): Promise<void> {
+  fs.writeFileSync(
+    path.join(context.projectPath, ".ruby-version"),
+    `${EXAMPLE_APP_RUBY_VERSION}\n`,
+    "utf8"
+  );
 }
 
 async function configureIosVersioning(context: SetupContext): Promise<void> {
