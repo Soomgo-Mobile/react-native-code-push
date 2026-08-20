@@ -32,6 +32,10 @@ export function runExpoBundleCommand(
         'false',
         '--entry-file',
         entryFile,
+        // Same reason as `runReactNativeBundleCommand`: the native build embeds an
+        // unminified bundle, and diverging from it inflates every binary patch.
+        '--minify',
+        'false',
         '--platform',
         platform,
         '--sourcemap-output',
