@@ -304,8 +304,10 @@ Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-nat
 A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
 is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
 its telemetry sends it itself. A callback that throws never fails the update - the error is only logged to the console.
+A fallback also shows in `downloadProgressCallback`: the full download reports a second progress stream that counts
+`receivedBytes` from zero again, against its own, larger `totalBytes`.
 
-Register it on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
+Register `onBinaryPatchResult` on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
 and including the `CodePush.sync()` calls you make yourself.
 
 ```typescript

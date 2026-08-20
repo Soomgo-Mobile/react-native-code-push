@@ -147,6 +147,10 @@ public class CodePushUpdateManagerBinaryPatchTest {
     private static DownloadProgressCallback ignoreProgress() {
         return new DownloadProgressCallback() {
             @Override
+            public void onDownloadStart() {
+            }
+
+            @Override
             public void call(DownloadProgress downloadProgress) {
             }
         };

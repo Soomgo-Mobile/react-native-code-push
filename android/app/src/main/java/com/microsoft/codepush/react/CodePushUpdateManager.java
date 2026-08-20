@@ -275,8 +275,17 @@ public class CodePushUpdateManager {
             connection.setRequestProperty("Accept-Encoding", "identity");
             bin = new BufferedInputStream(connection.getInputStream());
 
+            // Announced only once the response is flowing, so a connection that fails to
+            // open never announces an empty stream.
+            progressCallback.onDownloadStart();
             long totalBytes = connection.getContentLength();
             long receivedBytes = 0;
+
+            if (totalBytes > 0) {
+                // The zero-received event hands the listener this download's total up front,
+                // so a fallback download shows as restarting rather than running backwards.
+                progressCallback.call(new DownloadProgress(totalBytes, 0));
+            }
 
             File downloadFolder = new File(getCodePushPath());
             downloadFolder.mkdirs();

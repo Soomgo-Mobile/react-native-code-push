@@ -161,6 +161,42 @@ public class CodePushUpdateManagerDownloadTest {
         assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
     }
 
+    @Test
+    public void announcesEachDownloadOfAFallbackAsItsOwnProgressStream() throws IOException {
+        byte[] fullArchive = zipOf(fullArchiveContents());
+        String patchUrl = serve("/patch.zip", ERROR_PAGE);
+        String fullUrl = serve("/full.zip", fullArchive);
+        final List<List<Long>> streams = new ArrayList<>();
+        final List<Long> completedBytes = new ArrayList<>();
+
+        updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, new DownloadProgressCallback() {
+                    @Override
+                    public void onDownloadStart() {
+                        streams.add(new ArrayList<Long>());
+                    }
+
+                    @Override
+                    public void call(DownloadProgress downloadProgress) {
+                        streams.get(streams.size() - 1).add(downloadProgress.getReceivedBytes());
+                        if (downloadProgress.isCompleted()) {
+                            completedBytes.add(downloadProgress.getReceivedBytes());
+                        }
+                    }
+                });
+
+        assertEquals("each download announces a stream of its own", 2, streams.size());
+        for (List<Long> stream : streams) {
+            assertEquals("a stream opens by putting its total on the table at zero received",
+                    Long.valueOf(0), stream.get(0));
+            for (int i = 1; i < stream.size(); i++) {
+                assertTrue("a stream never runs backwards", stream.get(i) >= stream.get(i - 1));
+            }
+        }
+        assertEquals("both downloads complete at the size of the body they served",
+                Arrays.asList((long) ERROR_PAGE.length, (long) fullArchive.length), completedBytes);
+    }
+
     /** The result of a download the update had to be downloaded in full for. */
     private static void assertFallbackResult(JSONObject patchResult, String expectedReason) {
         assertEquals("fallback", patchResult.optString("status", null));
@@ -393,6 +429,10 @@ public class CodePushUpdateManagerDownloadTest {
 
     private static DownloadProgressCallback ignoreProgress() {
         return new DownloadProgressCallback() {
+            @Override
+            public void onDownloadStart() {
+            }
+
             @Override
             public void call(DownloadProgress downloadProgress) {
             }
