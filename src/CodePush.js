@@ -191,7 +191,7 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
            * Only released updates that were published with a binary patch carry this.
            * When it is missing, the update is downloaded in full from `download_url`.
            */
-          binary_patch_download_url: diffPackageDownloadUrl ?? latestReleaseInfo.binaryPatchDownloadUrl,
+          binary_patch_download_url: diffPackageDownloadUrl || latestReleaseInfo.binaryPatchDownloadUrl,
           // (`enabled` will always be true in the release information obtained from the previous process.)
           is_available: latestReleaseInfo.enabled,
           package_hash: latestReleaseInfo.packageHash,
