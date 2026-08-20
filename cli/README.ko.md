@@ -118,12 +118,13 @@ npx code-push release [options]
 | `--on-oversized-patch <policy>` | patch 번들이 full 번들보다 작지 않을 때의 동작: `skip`은 full 번들만 배포하고, `fail`은 업로드 전에 릴리스를 중단합니다 | `skip` |
 | `--diff-base-count <number>` | [asset diff archive](#asset-diff-archive)를 만들 최근 릴리스 개수 (`0`이면 배포하지 않음). 설정 파일의 `bundleDownloader`와 `--binary-bundle-path` 릴리스가 필요합니다 | `3` |
 
-`--binary-bundle-path`를 사용하면 플랫폼별로 두 개의 artifact를 업로드합니다. `packageHash`
-이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은 `<packageHash>-patch.zip` patch
-번들입니다. patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가
-포함되어, patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와
-절감량은 업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
-내려받을 수 있는 URL이 기록됩니다.
+`--binary-bundle-path`를 사용하면 플랫폼별로 두 개의 artifact를 업로드하고,
+[asset diff archive](#asset-diff-archive)를 함께 배포한다면 archive마다 하나를 더 업로드합니다.
+`packageHash` 이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은
+`<packageHash>-patch.zip` patch 번들입니다. patch 번들에는 업데이트 복원 방법을 담은
+`codepush-binary-patch.json` manifest가 포함되어, patch를 적용하면 full 번들과 동일한
+`packageHash`가 됩니다. 두 artifact의 크기와 절감량은 업로드 전에 출력됩니다. 릴리스 히스토리
+항목에는 full 번들 URL과 함께 patch 번들을 내려받을 수 있는 URL이 기록됩니다.
 
 클라이언트는 patch 번들이 있는 릴리스라면 patch로 업데이트를 설치하고, patch를 적용할 수
 없으면 full 번들을 대신 내려받으므로 patch 때문에 설치가 실패하지는 않습니다. patch 적용은

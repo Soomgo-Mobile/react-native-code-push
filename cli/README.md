@@ -116,9 +116,10 @@ npx code-push release [options]
 | `--on-oversized-patch <policy>` | What to do when the patch bundle is not smaller than the full bundle: `skip` releases the full bundle only, `fail` stops the release before any upload | `skip` |
 | `--diff-base-count <number>` | How many of the most recent releases to build [asset diff archives](#asset-diff-archives) against (`0` disables them). Needs `bundleDownloader` in the config file and a `--binary-bundle-path` release | `3` |
 
-With `--binary-bundle-path`, the release uploads two artifacts per platform: the full
-bundle named after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip`
-that carries only the difference from the bundle inside the binary. The patch bundle
+With `--binary-bundle-path`, the release uploads two artifacts per platform - plus one per
+[asset diff archive](#asset-diff-archives) when those are enabled: the full bundle named
+after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip` that carries
+only the difference from the bundle inside the binary. The patch bundle
 holds a `codepush-binary-patch.json` manifest describing how to rebuild the update, so
 applying it yields the same `packageHash` as the full bundle. Both sizes and the saving
 are printed before either artifact is uploaded. The release history entry records where
