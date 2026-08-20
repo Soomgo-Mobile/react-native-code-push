@@ -10,5 +10,7 @@ module.exports = {
     '^.+\\.(t|j)s$': ['babel-jest', { configFile: '../babel.config.js' }],
   },
   moduleFileExtensions: ['ts', 'js'],
+  // `dist` holds the compiled copy of every suite here, which would otherwise run twice.
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   watchman: false,
 };
