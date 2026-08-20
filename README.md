@@ -371,7 +371,8 @@ downloaded in full instead, and `onBinaryPatchResult` reports it as
 
 **(1) Create a `code-push.config.ts` file in the root directory of your project.**
 
-Then, implement three functions to upload the bundle file and create/update the release history.
+Then, implement three functions to upload the bundle file and create/update the release history,
+plus an optional fourth one - `bundleDownloader` - if you publish [asset diff archives](#4-2-asset-diff-archives).
 The CLI tool uses these functions to release CodePush updates and manage releases.
 (These functions are not used at runtime by the library.)
 
@@ -409,6 +410,15 @@ const Config: CliConfigInterface = {
   ): Promise<void> => {
     // ...
   },
+
+  // Only needed to publish asset diff archives (see "4-2. Asset Diff Archives").
+  // bundleDownloader: async (
+  //   downloadUrl: string,
+  //   platform: "ios" | "android",
+  //   identifier,
+  // ): Promise<{downloadedFilePath: string}> => {
+  //   // fetch the archive from your storage (S3, GCS, ...) and return where it landed
+  // },
 };
 
 module.exports = Config;
