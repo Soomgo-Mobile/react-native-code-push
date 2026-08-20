@@ -1,6 +1,6 @@
 import { program, Option } from "commander";
 import { findAndReadConfigFile } from "../../utils/fsUtils.js";
-import { release } from "./release.js";
+import { DEFAULT_DIFF_BASE_COUNT, release } from "./release.js";
 import {
     DEFAULT_OVERSIZED_PATCH_POLICY,
     OVERSIZED_PATCH_POLICIES,
@@ -30,6 +30,7 @@ type Options = {
     hashCalc?: boolean;
     binaryBundlePath?: string;
     onOversizedPatch: OversizedPatchPolicy;
+    diffBaseCount: number;
 }
 
 program.command('release')
@@ -55,11 +56,17 @@ program.command('release')
     .addOption(new Option('--on-oversized-patch <policy>', 'what to do when the binary patch bundle is not smaller than the full bundle: "skip" releases the full bundle only, "fail" stops the release before any upload')
         .choices(OVERSIZED_PATCH_POLICIES)
         .default(DEFAULT_OVERSIZED_PATCH_POLICY))
+    .option('--diff-base-count <number>', 'how many recent releases to build asset diff archives against (0 disables). Requires `bundleDownloader` in the config file.', parseDecimalInt, DEFAULT_DIFF_BASE_COUNT)
     .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
         if (typeof options.rollout === 'number' && (options.rollout < 0 || options.rollout > 100)) {
             console.error('Rollout percentage number must be between 0 and 100 (inclusive).');
+            process.exit(1);
+        }
+
+        if (!Number.isInteger(options.diffBaseCount) || options.diffBaseCount < 0) {
+            console.error('--diff-base-count must be a whole number of releases, 0 or greater.');
             process.exit(1);
         }
 
@@ -93,10 +100,18 @@ program.command('release')
             options.hashCalc,
             baseBundlePath,
             options.onOversizedPatch,
+            config.bundleDownloader,
+            options.diffBaseCount,
         )
 
         console.log('🚀 Release completed.')
     });
+
+// Not `parseInt` itself: commander hands a coercion function the current value as its
+// second argument, which `parseInt` reads as the radix.
+function parseDecimalInt(value: string): number {
+    return parseInt(value, 10);
+}
 
 function parseBoolean(value: string): boolean | undefined {
     if (value === 'true') return true;

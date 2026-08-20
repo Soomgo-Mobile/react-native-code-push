@@ -2,9 +2,11 @@ import fs from "fs";
 import path from "path";
 import { bundleCodePush, resolveJsBundleName } from "../bundleCommand/bundleCodePush.js";
 import { addToReleaseHistory } from "./addToReleaseHistory.js";
-import type { CliConfigInterface } from "../../../typings/react-native-code-push.d.ts";
+import type { CliConfigInterface, ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
 import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
 import { unzip } from "../../utils/unzip.js";
+import { ASSET_DIFF_ARCHIVE_INFIX, makeAssetDiffBundle } from "../../functions/makeAssetDiffBundle.js";
+import { resolveAssetDiffBases } from "../../functions/resolveAssetDiffBases.js";
 import {
     BINARY_PATCH_ARCHIVE_SUFFIX,
     BINARY_PATCH_BASE_RECORD_NAME,
@@ -19,6 +21,9 @@ import {
     type BinaryPatchBundle,
     type OversizedPatchPolicy,
 } from "../../functions/makeBinaryPatchBundle.js";
+
+/** How many of the most recent releases a release builds asset diff archives against. */
+export const DEFAULT_DIFF_BASE_COUNT = 3;
 
 export async function release(
     bundleUploader: CliConfigInterface['bundleUploader'],
@@ -42,6 +47,8 @@ export async function release(
     hashCalc?: boolean,
     baseBundlePath?: string,
     onOversizedPatch: OversizedPatchPolicy = DEFAULT_OVERSIZED_PATCH_POLICY,
+    bundleDownloader?: CliConfigInterface['bundleDownloader'],
+    diffBaseCount: number = DEFAULT_DIFF_BASE_COUNT,
 ): Promise<void> {
     if (baseBundlePath) {
         // Checked before the bundler runs, so the wrong base bundle costs a second rather
@@ -77,6 +84,22 @@ export async function release(
         })
         : null;
 
+    // A diff is the patch archive with what a base package already holds taken out, so it
+    // only exists where a patch does - and only a consumer that can hand back a released
+    // archive can supply the bases to diff against.
+    const assetDiffArtifacts = binaryPatch && bundleDownloader && diffBaseCount > 0
+        ? await makeAssetDiffArtifacts({
+            patchBundleFilePath: binaryPatch.patchBundleFilePath,
+            releaseHistory: await getReleaseHistory(binaryVersion, platform, identifier),
+            diffBaseCount,
+            bundleDownloader,
+            bundleDirectory,
+            packageHash,
+            platform,
+            identifier,
+        })
+        : [];
+
     // Every artifact is uploaded before the release history is touched, so a failed
     // upload leaves the history describing only updates that can actually be downloaded.
     const downloadUrl = await uploadArtifact(bundleUploader, bundleFilePath, platform, identifier, 'bundle');
@@ -84,6 +107,12 @@ export async function release(
     if (binaryPatch) {
         patchDownloadUrl = await uploadArtifact(bundleUploader, binaryPatch.patchBundleFilePath, platform, identifier, 'binary patch bundle');
         console.log(`log: Binary patch archive uploaded (download url: ${patchDownloadUrl})`);
+    }
+    const diffPackages: Record<string, string> = {};
+    for (const { basePackageHash, filePath } of assetDiffArtifacts) {
+        const diffDownloadUrl = await uploadArtifact(bundleUploader, filePath, platform, identifier, 'asset diff bundle');
+        diffPackages[basePackageHash] = diffDownloadUrl;
+        console.log(`log: Asset diff archive against ${basePackageHash} uploaded (download url: ${diffDownloadUrl})`);
     }
 
     await addToReleaseHistory(
@@ -99,6 +128,7 @@ export async function release(
         mandatory,
         enable,
         rollout,
+        Object.keys(diffPackages).length > 0 ? diffPackages : undefined,
     )
 
     if (!skipCleanup) {
@@ -111,9 +141,11 @@ function cleanUpOutputs(dir: string) {
 }
 
 function readBundleFileNameFrom(bundleDirectory: string): string {
-    // A previous release of the same bundle may have left its patch archive here, and
-    // that archive is derived from the bundle file rather than a candidate for release.
-    const files = fs.readdirSync(bundleDirectory).filter((file) => !file.endsWith(BINARY_PATCH_ARCHIVE_SUFFIX));
+    // A previous release of the same bundle may have left its patch and diff archives
+    // here, and those are derived from the bundle file rather than candidates for release.
+    const files = fs.readdirSync(bundleDirectory).filter(
+        (file) => !file.endsWith(BINARY_PATCH_ARCHIVE_SUFFIX) && !file.includes(ASSET_DIFF_ARCHIVE_INFIX),
+    );
     if (files.length !== 1) {
         console.error('The bundlePath must contain only one file.');
         process.exit(1);
@@ -227,6 +259,69 @@ async function makeBinaryPatchArtifact({
             fs.rmSync(extractDir, { recursive: true, force: true });
         }
     }
+}
+
+type AssetDiffArtifact = { basePackageHash: string, filePath: string };
+
+/**
+ * Builds a diff artifact per recently released package, for the clients holding one.
+ *
+ * A base that cannot be downloaded or verified is left out by the resolver, and a diff
+ * that comes out no smaller than the patch archive is not published. Either way the
+ * release goes out with its full and patch archives, serving fewer diffs.
+ *
+ * @return {Promise<AssetDiffArtifact[]>} The diff archives to upload, each naming the package it was built against.
+ */
+async function makeAssetDiffArtifacts({
+    patchBundleFilePath,
+    releaseHistory,
+    diffBaseCount,
+    bundleDownloader,
+    bundleDirectory,
+    packageHash,
+    platform,
+    identifier,
+}: {
+    patchBundleFilePath: string;
+    releaseHistory: ReleaseHistoryInterface;
+    diffBaseCount: number;
+    bundleDownloader: NonNullable<CliConfigInterface['bundleDownloader']>;
+    bundleDirectory: string;
+    packageHash: string;
+    platform: 'ios' | 'android';
+    identifier: string | undefined;
+}): Promise<AssetDiffArtifact[]> {
+    const bases = await resolveAssetDiffBases({
+        releaseHistory,
+        diffBaseCount,
+        bundleDownloader,
+        platform,
+        identifier,
+    });
+
+    const artifacts: AssetDiffArtifact[] = [];
+    const builtAgainst = new Set<string>();
+    for (const base of bases) {
+        // Releasing identical contents twice leaves two history entries describing one
+        // package, and their diff is the same archive built - and named - twice.
+        if (builtAgainst.has(base.basePackageHash)) {
+            continue;
+        }
+        builtAgainst.add(base.basePackageHash);
+
+        const assetDiff = await makeAssetDiffBundle({
+            patchBundleFilePath,
+            baseBundleFilePath: base.baseBundleFilePath,
+            bundleDirectory,
+            packageHash,
+            basePackageHash: base.basePackageHash,
+        });
+        if (assetDiff) {
+            artifacts.push({ basePackageHash: base.basePackageHash, filePath: assetDiff.diffBundleFilePath });
+        }
+    }
+
+    return artifacts;
 }
 
 /**
