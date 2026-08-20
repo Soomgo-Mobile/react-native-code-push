@@ -332,6 +332,38 @@ CodePush.sync({
 ```
 
 
+#### 4-2. Asset Diff Archives
+
+A release published with a binary patch can carry **asset diff archives** as well - one per
+recently released version. A diff archive holds the patch of the JS bundle, only the assets
+that version does not already have, and a manifest of the files it has to drop. The client
+copies the update it already has installed, applies those, and ends up holding exactly the
+contents of the full archive.
+
+So one release has a full archive, a patch archive and up to `--diff-base-count` diff
+archives, and a client downloads one of them per attempt: the diff archive built against
+the update it is running, when the release has one, and the patch archive when it is
+running the bundle in the binary or an update this release was not diffed against.
+
+Diff archives are published only when all three of these hold:
+- the release is a binary patch release (`release --binary-bundle-path`),
+- `code-push.config.ts` implements `bundleDownloader`, so the CLI can fetch the earlier releases to diff against,
+- `--diff-base-count` is greater than `0` (it defaults to `3`).
+
+```ts
+bundleDownloader: async (downloadUrl) => {
+    const downloadedFilePath = path.join(os.tmpdir(), path.basename(new URL(downloadUrl).pathname));
+    // fetch the archive from your storage (S3, GCS, ...) to downloadedFilePath
+    return { downloadedFilePath };
+},
+```
+
+Rebuilding the update from a diff archive falls back the way a patch does: the update is
+downloaded in full instead, and `onBinaryPatchResult` reports it as
+`{ status: "fallback", fallbackReason: "package_verification_failed" }`. See
+[Asset diff archives](cli/README.md#asset-diff-archives) for what the release publishes.
+
+
 ### 5. Configure the CLI Tool
 
 > [!TIP]
