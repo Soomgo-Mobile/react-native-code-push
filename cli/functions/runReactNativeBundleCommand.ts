@@ -38,6 +38,16 @@ export function runReactNativeBundleCommand(
         'false',
         '--entry-file',
         entryFile,
+        /**
+         * Match React Native's Hermes builds, which disable JS minification. Minifying an
+         * update barely changes how large its bytecode is, but it changes how that bytecode
+         * is laid out - enough that a binary patch against an unminified binary costs far
+         * more than the source change does.
+         *
+         * Listed before the caller's options so an explicit `--minify` still wins.
+         */
+        '--minify',
+        'false',
         '--platform',
         platform,
         '--sourcemap-output',
