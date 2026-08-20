@@ -153,6 +153,31 @@ describe("resolveAssetDiffBases", () => {
         expect(calls).toEqual([[released.downloadUrl, 'ios', undefined]]);
     });
 
+    it("ignores a history entry whose key is not a version, and resolves the rest", async () => {
+        const [released] = await stageReleases(['1.4.0']);
+        const { download, calls } = fakeDownloader({ [released.downloadUrl]: released.archivePath });
+
+        const bases = await resolveAssetDiffBases({
+            releaseHistory: {
+                ...releaseHistoryOf([released]),
+                'not-a-version': {
+                    enabled: true,
+                    mandatory: false,
+                    downloadUrl: released.downloadUrl,
+                    packageHash: released.packageHash,
+                },
+            },
+            diffBaseCount: 2,
+            bundleDownloader: download,
+            platform: 'ios',
+        });
+
+        expect(bases).toEqual([
+            { basePackageHash: released.packageHash, baseBundleFilePath: released.archivePath },
+        ]);
+        expect(calls).toEqual([[released.downloadUrl, 'ios', undefined]]);
+    });
+
     it("drops a base whose downloaded bytes do not match its recorded package hash", async () => {
         const [older, newer] = await stageReleases(['1.2.0', '1.2.1']);
         // The newest base comes back as some other release's archive.

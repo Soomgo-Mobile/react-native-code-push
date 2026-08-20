@@ -614,13 +614,18 @@ describe("release with asset diff bases", () => {
 
     type StagedBaseRelease = { downloadUrl: string, packageHash: string, archivePath: string };
 
-    /** A package released earlier, as the history describes it and as the CDN serves it. */
-    async function stageBaseRelease(caseName: string): Promise<StagedBaseRelease> {
+    /**
+     * A package released earlier, as the history describes it and as the CDN serves it.
+     *
+     * @param ownAsset An asset only this release holds, which is what makes two staged base releases two packages rather than one.
+     */
+    async function stageBaseRelease(caseName: string, ownAsset?: string): Promise<StagedBaseRelease> {
         const caseDir = fs.mkdtempSync(path.join(workDir, `${caseName}-base-`));
         const contentsPath = path.join(caseDir, CONTENTS_DIR_NAME);
         const files: Record<string, Buffer | string> = {
             'main.jsbundle': fs.readFileSync(baseFixture),
             'assets/keep.png': sharedAsset,
+            ...(ownAsset === undefined ? {} : { 'assets/dropped.png': ownAsset }),
         };
 
         for (const [relativePath, content] of Object.entries(files)) {
@@ -651,10 +656,14 @@ describe("release with asset diff bases", () => {
         ]));
     }
 
-    /** Serves the staged base archive, and records which releases were asked for. */
-    function recordingDownloader(base: StagedBaseRelease, downloads: string[]): CliConfigInterface['bundleDownloader'] {
+    /** Serves the staged base archives, and records which releases were asked for. */
+    function recordingDownloader(bases: StagedBaseRelease[], downloads: string[]): CliConfigInterface['bundleDownloader'] {
         return async (downloadUrl: string) => {
             downloads.push(downloadUrl);
+            const base = bases.find((candidate) => candidate.downloadUrl === downloadUrl);
+            if (!base) {
+                throw new Error(`the downloader was called with an unexpected url: ${downloadUrl}`);
+            }
             return { downloadedFilePath: base.archivePath };
         };
     }
@@ -667,7 +676,7 @@ describe("release with asset diff bases", () => {
         const { uploads, releaseHistories, uploadCountsWhenHistorySaved } = await runRelease(staged, {
             binaryBundlePath: baseFixture,
             releaseHistory: releaseHistoryOf(base),
-            bundleDownloader: recordingDownloader(base, downloads),
+            bundleDownloader: recordingDownloader([base], downloads),
         });
 
         const diffFileName = `${staged.bundleFileName}${ASSET_DIFF_ARCHIVE_INFIX}${base.packageHash}.zip`;
@@ -710,7 +719,7 @@ describe("release with asset diff bases", () => {
         const { uploads, releaseHistories } = await runRelease(staged, {
             binaryBundlePath: baseFixture,
             releaseHistory: releaseHistoryOf(base),
-            bundleDownloader: recordingDownloader(base, downloads),
+            bundleDownloader: recordingDownloader([base], downloads),
             diffBaseCount: 0,
         });
 
@@ -727,7 +736,7 @@ describe("release with asset diff bases", () => {
         const { uploads, releaseHistories } = await runRelease(staged, {
             binaryBundlePath: baseFixture,
             releaseHistory: releaseHistoryOf(base, ['9.9.8', PREVIOUS_APP_VERSION]),
-            bundleDownloader: recordingDownloader(base, downloads),
+            bundleDownloader: recordingDownloader([base], downloads),
         });
 
         expect(downloads).toHaveLength(2);
@@ -735,6 +744,38 @@ describe("release with asset diff bases", () => {
         expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
             [base.packageHash]: uploads[2].downloadUrl,
         });
+    });
+
+    it("releases the diffs that uploaded when one of them is rejected", async () => {
+        const staged = await stageBundleOutput("diff-upload-failure", updateFiles());
+        // Two packages to diff against, one of whose diffs the storage backend refuses.
+        const rejected = await stageBaseRelease("diff-upload-failure-rejected");
+        const kept = await stageBaseRelease("diff-upload-failure-kept", 'an asset of the older release');
+        const downloads: string[] = [];
+
+        const { uploads, releaseHistories } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: {
+                ...releaseHistoryOf(kept, ['9.9.8']),
+                ...releaseHistoryOf(rejected, [PREVIOUS_APP_VERSION]),
+            },
+            bundleDownloader: recordingDownloader([kept, rejected], downloads),
+            uploadFailsFor: (filePath) => filePath.includes(rejected.packageHash),
+        });
+
+        expect(uploads.map(({ filePath }) => path.basename(filePath))).toEqual([
+            staged.bundleFileName,
+            `${staged.bundleFileName}${BINARY_PATCH_ARCHIVE_SUFFIX}`,
+            `${staged.bundleFileName}${ASSET_DIFF_ARCHIVE_INFIX}${kept.packageHash}.zip`,
+        ]);
+        // The release goes out with the two artifacts it needs, and describes only the diff
+        // a client can actually download.
+        expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
+            [kept.packageHash]: uploads[2].downloadUrl,
+        });
+        expect(logs.filter((line) => line.startsWith('warn:')).join('\n')).toMatch(
+            new RegExp(`Skipping the asset diff archive against ${rejected.packageHash}`),
+        );
     });
 
     it("still picks the full bundle when diff archives sit in the output directory", async () => {

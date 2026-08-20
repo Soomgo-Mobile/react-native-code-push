@@ -110,9 +110,19 @@ export async function release(
     }
     const diffPackages: Record<string, string> = {};
     for (const { basePackageHash, filePath } of assetDiffArtifacts) {
-        const diffDownloadUrl = await uploadArtifact(bundleUploader, filePath, platform, identifier, 'asset diff bundle');
-        diffPackages[basePackageHash] = diffDownloadUrl;
-        console.log(`log: Asset diff archive against ${basePackageHash} uploaded (download url: ${diffDownloadUrl})`);
+        // A diff is an optimisation on top of the patch archive, which is uploaded by now:
+        // one that cannot be uploaded is left out of the history instead of failing the
+        // release the other two artifacts are ready for.
+        try {
+            const diffDownloadUrl = await uploadFile(bundleUploader, filePath, platform, identifier);
+            diffPackages[basePackageHash] = diffDownloadUrl;
+            console.log(`log: Asset diff archive against ${basePackageHash} uploaded (download url: ${diffDownloadUrl})`);
+        } catch (error) {
+            console.warn(
+                `warn: Skipping the asset diff archive against ${basePackageHash}: it could not be uploaded ` +
+                    `(${error instanceof Error ? error.message : String(error)}).`,
+            );
+        }
     }
 
     await addToReleaseHistory(
@@ -309,15 +319,22 @@ async function makeAssetDiffArtifacts({
         }
         builtAgainst.add(base.basePackageHash);
 
-        const assetDiff = await makeAssetDiffBundle({
-            patchBundleFilePath,
-            baseBundleFilePath: base.baseBundleFilePath,
-            bundleDirectory,
-            packageHash,
-            basePackageHash: base.basePackageHash,
-        });
-        if (assetDiff) {
-            artifacts.push({ basePackageHash: base.basePackageHash, filePath: assetDiff.diffBundleFilePath });
+        try {
+            const assetDiff = await makeAssetDiffBundle({
+                patchBundleFilePath,
+                baseBundleFilePath: base.baseBundleFilePath,
+                bundleDirectory,
+                packageHash,
+                basePackageHash: base.basePackageHash,
+            });
+            if (assetDiff) {
+                artifacts.push({ basePackageHash: base.basePackageHash, filePath: assetDiff.diffBundleFilePath });
+            }
+        } catch (error) {
+            console.warn(
+                `warn: Skipping the asset diff against ${base.basePackageHash}: it could not be built ` +
+                    `(${error instanceof Error ? error.message : String(error)}).`,
+            );
         }
     }
 
@@ -398,6 +415,7 @@ function warnOnBaseBundleMismatch(outputPath: string, baseBundlePath: string): v
     }
 }
 
+/** Uploads an artifact the release cannot go out without, so a failure ends the program. */
 async function uploadArtifact(
     bundleUploader: CliConfigInterface['bundleUploader'],
     filePath: string,
@@ -406,10 +424,19 @@ async function uploadArtifact(
     artifactName: string,
 ): Promise<string> {
     try {
-        const { downloadUrl } = await bundleUploader(filePath, platform, identifier);
-        return downloadUrl
+        return await uploadFile(bundleUploader, filePath, platform, identifier);
     } catch (error) {
         console.error(`Failed to upload the ${artifactName} file. Exiting the program.\n`, error)
         process.exit(1)
     }
+}
+
+async function uploadFile(
+    bundleUploader: CliConfigInterface['bundleUploader'],
+    filePath: string,
+    platform: 'ios' | 'android',
+    identifier: string | undefined,
+): Promise<string> {
+    const { downloadUrl } = await bundleUploader(filePath, platform, identifier);
+    return downloadUrl
 }

@@ -156,7 +156,10 @@ async function listFilesRelative(directoryPath: string): Promise<string[]> {
 }
 
 function sameBytes(left: string, right: string): boolean {
-    if (fs.statSync(left).size !== fs.statSync(right).size) {
+    // A base that holds a directory where the update holds a file has nothing the update
+    // can be spared from downloading, so the file ships.
+    const rightStats = fs.statSync(right);
+    if (!rightStats.isFile() || fs.statSync(left).size !== rightStats.size) {
         return false;
     }
     return fs.readFileSync(left).equals(fs.readFileSync(right));

@@ -48,9 +48,12 @@ export async function resolveAssetDiffBases({
     identifier?: string;
 }): Promise<AssetDiffBase[]> {
     // The seeded entry for the update inside the app binary has neither a url nor a hash,
-    // and nothing can be diffed against a package that was never published.
+    // and nothing can be diffed against a package that was never published. A key that is
+    // not a version cannot be ordered against the others either, and ordering is what picks
+    // the recent releases, so it is not eligible.
     const candidates = Object.entries(releaseHistory)
-        .filter(([, releaseInfo]) => Boolean(releaseInfo.downloadUrl) && Boolean(releaseInfo.packageHash))
+        .filter(([version, releaseInfo]) =>
+            Boolean(semver.valid(version)) && Boolean(releaseInfo.downloadUrl) && Boolean(releaseInfo.packageHash))
         .sort(([left], [right]) => semver.rcompare(left, right))
         .slice(0, diffBaseCount);
 
