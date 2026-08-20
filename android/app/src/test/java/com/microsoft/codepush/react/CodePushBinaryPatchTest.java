@@ -88,6 +88,43 @@ public class CodePushBinaryPatchTest {
     }
 
     @Test
+    public void restoresTheBundleWhenTheDiffManifestSitsBesideTheContentsDirectory() throws IOException {
+        // A diff archive carries the manifest of the assets to delete at its root, beside
+        // the one directory its contents are wrapped in.
+        File unzippedFolder = mTemporaryFolder.newFolder("diff-archive");
+        File contentsFolder = new File(unzippedFolder, "CodePush");
+        assertTrue(contentsFolder.mkdirs());
+        File diffManifestFile = new File(unzippedFolder, CodePushConstants.DIFF_MANIFEST_FILE_NAME);
+        writeFile(diffManifestFile, bytes("{\"deletedFiles\":[]}"));
+        assertTrue(mManifestFile.renameTo(new File(contentsFolder, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME)));
+        assertTrue(mPatchFile.renameTo(new File(contentsFolder, PATCH_FILE_NAME)));
+        File assetFile = new File(contentsFolder, "logo.png");
+        writeFile(assetFile, bytes("an asset the diff brought along"));
+
+        BinaryPatchResult result = new CodePushBinaryPatch(providerOf(BASE_BUNDLE), succeedingApplier())
+                .restoreBundle(unzippedFolder.getAbsolutePath(), mWorkingFolder.getAbsolutePath(), BUNDLE_FILE_NAME);
+
+        assertTrue(result.succeeded());
+        assertArrayEquals(TARGET_BUNDLE, readFile(new File(contentsFolder, BUNDLE_FILE_NAME)));
+        assertFalse(new File(contentsFolder, PATCH_FILE_NAME).exists());
+        assertFalse(new File(contentsFolder, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME).exists());
+        assertTrue("the diff manifest is what tells the install which assets to delete", diffManifestFile.exists());
+        assertTrue("the rest of the contents is left as the archive delivered it", assetFile.exists());
+        assertNoTemporaryFilesLeft();
+    }
+
+    @Test
+    public void keepsARootHoldingLooseFilesBesidesTheDiffManifestAsItsOwnContentsRoot() throws IOException {
+        writeFile(new File(mContentsFolder, CodePushConstants.DIFF_MANIFEST_FILE_NAME), bytes("{\"deletedFiles\":[]}"));
+
+        BinaryPatchResult result = restoreBundle(BASE_BUNDLE, succeedingApplier());
+
+        assertTrue(result.succeeded());
+        assertArrayEquals(TARGET_BUNDLE, readFile(mBundleFile));
+        assertNoTemporaryFilesLeft();
+    }
+
+    @Test
     public void removesWhatAnInterruptedAttemptLeftInTheWorkingDirectory() throws IOException {
         assertTrue(mWorkingFolder.mkdirs());
         writeFile(new File(mWorkingFolder, CodePushConstants.BINARY_PATCH_TARGET_FILE_NAME), bytes("half a bundle"));

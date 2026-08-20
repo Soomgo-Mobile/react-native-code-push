@@ -181,15 +181,29 @@ public class CodePushBinaryPatch {
      * An archive wraps its files in a single directory, and the manifest's paths are
      * relative to that directory rather than to the archive. An archive whose files are at
      * the top level is its own contents root, which is how the tooling that unpacks one
-     * reads it too.
+     * reads it too. A diff archive carries the manifest of the assets to delete beside that
+     * wrapper directory, at the root, so that file does not count against the shape.
      */
     private static File resolveContentsFolder(File unzippedFolder) {
         File[] entries = unzippedFolder.listFiles();
-        if (entries != null && entries.length == 1 && entries[0].isDirectory()) {
-            return entries[0];
+        if (entries == null) {
+            return unzippedFolder;
         }
 
-        return unzippedFolder;
+        File wrapper = null;
+        for (File entry : entries) {
+            if (entry.isFile() && entry.getName().equals(CodePushConstants.DIFF_MANIFEST_FILE_NAME)) {
+                continue;
+            }
+            if (wrapper == null && entry.isDirectory()) {
+                wrapper = entry;
+                continue;
+            }
+
+            return unzippedFolder;
+        }
+
+        return wrapper != null ? wrapper : unzippedFolder;
     }
 
     /**
