@@ -34,6 +34,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -50,11 +52,18 @@ public class CodePushUpdateManagerDownloadTest {
     /** Every archive wraps its files in one directory, which the manifest paths are relative to. */
     private static final String CONTENTS_DIR_NAME = "CodePush";
     private static final String ASSET_PATH = "assets/logo.png";
+    /** An asset the update adds, so the diff archive is the only place it comes from. */
+    private static final String ADDED_ASSET_PATH = "assets/badge.png";
+    /** An asset the installed package holds and the update does without. */
+    private static final String DROPPED_ASSET_PATH = "assets/legacy.png";
 
     private static final byte[] BASE_BUNDLE = bytes("the bundle inside the app binary");
     private static final byte[] TARGET_BUNDLE = bytes("the bundle the update wants to run");
+    private static final byte[] INSTALLED_BUNDLE = bytes("the bundle of the update already installed");
     private static final byte[] PATCH = bytes("the difference between the two");
     private static final byte[] ASSET = bytes("an image the update ships with");
+    private static final byte[] ADDED_ASSET = bytes("an image only the newer update ships");
+    private static final byte[] DROPPED_ASSET = bytes("an image the newer update leaves behind");
     private static final byte[] ERROR_PAGE = bytes("<html><body>404 Not Found</body></html>");
 
     @Rule
@@ -162,6 +171,61 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void installsAnAssetDiffUpdateByMergingWithTheInstalledPackage() throws IOException {
+        installBaseUpdate();
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH)));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
+                .downloadPackage(updatePackage(updateHash, fullUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals("the update is downloaded as its diff alone, the base being already installed",
+                Arrays.asList("/installed.zip", "/diff.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertFalse("an applied diff has nothing to report a reason for", patchResult.has("fallbackReason"));
+        // The asset the diff leaves out is carried over from the installed package, and the
+        // one its manifest names is not.
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void fallsBackToTheFullArchiveWhenTheAssetDiffMergeYieldsTheWrongContents() throws IOException {
+        // A manifest that deletes an asset the update keeps: the merge ends up missing a file
+        // the release was published with, and the update is not the one the hash is for.
+        installBaseUpdate();
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(ASSET_PATH)));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
+                .downloadPackage(updatePackage(updateHash, fullUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/full.zip"), mServer.requestedPaths());
+        assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void fallsBackToTheFullArchiveWhenAnAssetDiffArrivesWithNoInstalledPackage() throws IOException {
+        // Nothing is installed, so the assets the diff counts on being there already have
+        // nowhere to be copied from and the merge cannot make the update whole.
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH)));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
+                .downloadPackage(updatePackage(updateHash, fullUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/diff.zip", "/full.zip"), mServer.requestedPaths());
+        assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
     public void announcesEachDownloadOfAFallbackAsItsOwnProgressStream() throws IOException {
         byte[] fullArchive = zipOf(fullArchiveContents());
         String patchUrl = serve("/patch.zip", ERROR_PAGE);
@@ -229,6 +293,58 @@ public class CodePushUpdateManagerDownloadTest {
         assertFalse(binaryPatchFolder.exists());
     }
 
+    /**
+     * The update installed under a hash is these contents and nothing else, which is the
+     * whole question for an update that was rebuilt from parts of two archives.
+     */
+    private void assertInstalledContents(String packageHash, Map<String, byte[]> expectedContents) throws IOException {
+        File packageFolder = new File(new File(mDocumentsDirectory, CodePushConstants.CODE_PUSH_FOLDER_PREFIX), packageHash);
+        Map<String, byte[]> installedFiles = filesUnder(packageFolder, "");
+        // Written last, so its presence also says the folder hash check passed.
+        assertTrue("the update is installed without its metadata",
+                installedFiles.remove(CodePushConstants.PACKAGE_FILE_NAME) != null);
+
+        assertEquals("the installed files", new TreeSet<>(expectedContents.keySet()), installedFiles.keySet());
+        for (Map.Entry<String, byte[]> expectedFile : expectedContents.entrySet()) {
+            assertArrayEquals("the contents of " + expectedFile.getKey(),
+                    expectedFile.getValue(), installedFiles.get(expectedFile.getKey()));
+        }
+    }
+
+    /** Every file in a folder, keyed by its path relative to that folder. */
+    private static Map<String, byte[]> filesUnder(File folder, String pathPrefix) throws IOException {
+        Map<String, byte[]> files = new TreeMap<>();
+        File[] entries = folder.listFiles();
+        if (entries == null) {
+            return files;
+        }
+
+        for (File entry : entries) {
+            String relativePath = pathPrefix.isEmpty() ? entry.getName() : pathPrefix + "/" + entry.getName();
+            if (entry.isDirectory()) {
+                files.putAll(filesUnder(entry, relativePath));
+            } else {
+                files.put(relativePath, readFile(entry));
+            }
+        }
+
+        return files;
+    }
+
+    /**
+     * Downloads an update in full and makes it the current package, which is what the asset
+     * diff of a later release is merged into.
+     */
+    private void installBaseUpdate() throws IOException {
+        Map<String, byte[]> contents = installedArchiveContents();
+        JSONObject installedPackage = fullUpdatePackage(
+                packageHashOf(contents), serve("/installed.zip", zipOf(contents)));
+
+        CodePushUpdateManager updateManager = updateManager(applierWriting(TARGET_BUNDLE));
+        updateManager.downloadPackage(installedPackage, BUNDLE_FILE_NAME, ignoreProgress());
+        updateManager.installPackage(installedPackage, false);
+    }
+
     private CodePushUpdateManager updateManager(CodePushBinaryPatch.PatchApplier applier) {
         CodePushBinaryPatch binaryPatch = new CodePushBinaryPatch(new CodePushBinaryPatch.BaseBundleProvider() {
             @Override
@@ -283,11 +399,52 @@ public class CodePushUpdateManagerDownloadTest {
         return contents;
     }
 
+    /** The full archive of the release that is installed when the asset diff arrives. */
+    private Map<String, byte[]> installedArchiveContents() {
+        Map<String, byte[]> contents = new LinkedHashMap<>();
+        contents.put(CONTENTS_DIR_NAME + "/" + BUNDLE_FILE_NAME, INSTALLED_BUNDLE);
+        contents.put(CONTENTS_DIR_NAME + "/" + ASSET_PATH, ASSET);
+        contents.put(CONTENTS_DIR_NAME + "/" + DROPPED_ASSET_PATH, DROPPED_ASSET);
+        return contents;
+    }
+
+    /**
+     * An asset diff archive: the patch archive carrying only the assets the update changes,
+     * plus the manifest of the files to delete at the archive root, beside the contents
+     * directory the manifest's paths are relative to. An asset the installed package already
+     * holds unchanged is not shipped at all - the client copies it over.
+     */
+    private Map<String, byte[]> assetDiffArchiveContents(String deletedAssetPath) {
+        Map<String, byte[]> contents = patchArchiveContents();
+        contents.remove(CONTENTS_DIR_NAME + "/" + ASSET_PATH);
+        contents.put(CONTENTS_DIR_NAME + "/" + ADDED_ASSET_PATH, ADDED_ASSET);
+        contents.put(CodePushConstants.DIFF_MANIFEST_FILE_NAME,
+                bytes("{\"deletedFiles\":[\"" + CONTENTS_DIR_NAME + "/" + deletedAssetPath + "\"]}"));
+        return contents;
+    }
+
+    /** What an asset diff has to add up to: the contents of the update's full archive. */
+    private Map<String, byte[]> assetDiffTargetContents() {
+        Map<String, byte[]> contents = fullArchiveContents();
+        contents.put(CONTENTS_DIR_NAME + "/" + ADDED_ASSET_PATH, ADDED_ASSET);
+        return contents;
+    }
+
     private JSONObject updatePackage(String downloadUrl, String binaryPatchDownloadUrl) {
-        JSONObject updatePackage = new JSONObject();
-        CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.PACKAGE_HASH_KEY, mPackageHash);
-        CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.DOWNLOAD_URL_KEY, downloadUrl);
+        return updatePackage(mPackageHash, downloadUrl, binaryPatchDownloadUrl);
+    }
+
+    private JSONObject updatePackage(String packageHash, String downloadUrl, String binaryPatchDownloadUrl) {
+        JSONObject updatePackage = fullUpdatePackage(packageHash, downloadUrl);
         CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY, binaryPatchDownloadUrl);
+        return updatePackage;
+    }
+
+    /** A release with no second archive to try, so it is downloaded in full. */
+    private JSONObject fullUpdatePackage(String packageHash, String downloadUrl) {
+        JSONObject updatePackage = new JSONObject();
+        CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.PACKAGE_HASH_KEY, packageHash);
+        CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.DOWNLOAD_URL_KEY, downloadUrl);
         return updatePackage;
     }
 
