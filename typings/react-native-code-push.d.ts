@@ -34,6 +34,13 @@ export interface ReleaseInfo {
      * that cannot use it downloads the full update from `downloadUrl` instead.
      */
     binaryPatchDownloadUrl?: string;
+    /**
+     * URLs of patch archives that also carry an asset diff, keyed by the packageHash of the
+     * release each archive was diffed against. A client whose installed update matches one of
+     * these keys downloads that archive instead of `binaryPatchDownloadUrl`; every other client
+     * ignores this field. Only present when the release was published with asset diff archives.
+     */
+    diffPackages?: Record<string, string>;
     packageHash: string;
     rollout?: number;
 }
@@ -647,6 +654,18 @@ export interface CliConfigInterface {
         platform: "ios" | "android",
         identifier?: string,
     ) => Promise<{downloadUrl: string}>;
+
+    /**
+     * Downloads a previously released update archive so the release command can compute
+     * asset diffs against it. Receives the `downloadUrl` recorded in the release history and
+     * must resolve with the local path of the downloaded file.
+     * Optional: when absent, releases are published without asset diff archives.
+     */
+    bundleDownloader?: (
+        downloadUrl: string,
+        platform: "ios" | "android",
+        identifier?: string,
+    ) => Promise<{ downloadedFilePath: string }>;
 
     /**
      * Interface that must be implemented to retrieve ReleaseHistory information.
