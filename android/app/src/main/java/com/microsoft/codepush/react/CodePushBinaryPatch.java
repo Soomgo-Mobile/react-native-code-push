@@ -207,13 +207,13 @@ public class CodePushBinaryPatch {
     }
 
     /**
-     * Resolves a path the manifest points at, refusing anything that would reach outside
-     * the archive - an archive is untrusted input, and its manifest is no more trusted
-     * than its entries.
+     * Resolves a path a manifest points at, refusing anything that would reach outside the
+     * folder it is relative to - an archive is untrusted input, and its manifest is no more
+     * trusted than its entries.
      *
      * @return the resolved file, or null when the path is unusable
      */
-    private static File resolveInsideFolder(File folder, String relativePath) {
+    static File resolveInsideFolder(File folder, String relativePath) {
         if (isNullOrEmpty(relativePath) || new File(relativePath).isAbsolute()) {
             return null;
         }

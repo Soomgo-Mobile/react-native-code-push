@@ -226,6 +226,28 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void leavesAFileOutsideThePackageFolderAloneWhenTheAssetDiffManifestNamesIt() throws IOException {
+        // A manifest entry that climbs out of the package folder: the client is not the one
+        // that wrote it, so it must not act on it.
+        installBaseUpdate();
+        File fileOutsideThePackage = mTemporaryFolder.newFile("keep-me.txt");
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip",
+                zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH, CONTENTS_DIR_NAME + "/../../../keep-me.txt")));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE))
+                .downloadPackage(updatePackage(updateHash, fullUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertTrue("a manifest entry reaching outside the package folder deleted " + fileOutsideThePackage,
+                fileOutsideThePackage.exists());
+        // Skipping it costs the update nothing, so the diff still installs.
+        assertEquals("applied", patchResult.optString("status", null));
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
     public void announcesEachDownloadOfAFallbackAsItsOwnProgressStream() throws IOException {
         byte[] fullArchive = zipOf(fullArchiveContents());
         String patchUrl = serve("/patch.zip", ERROR_PAGE);
@@ -420,6 +442,14 @@ public class CodePushUpdateManagerDownloadTest {
         contents.put(CONTENTS_DIR_NAME + "/" + ADDED_ASSET_PATH, ADDED_ASSET);
         contents.put(CodePushConstants.DIFF_MANIFEST_FILE_NAME,
                 bytes("{\"deletedFiles\":[\"" + CONTENTS_DIR_NAME + "/" + deletedAssetPath + "\"]}"));
+        return contents;
+    }
+
+    /** The same archive, with one more path in its manifest of the files to delete. */
+    private Map<String, byte[]> assetDiffArchiveContents(String deletedAssetPath, String otherDeletedPath) {
+        Map<String, byte[]> contents = assetDiffArchiveContents(deletedAssetPath);
+        contents.put(CodePushConstants.DIFF_MANIFEST_FILE_NAME,
+                bytes("{\"deletedFiles\":[\"" + CONTENTS_DIR_NAME + "/" + deletedAssetPath + "\",\"" + otherDeletedPath + "\"]}"));
         return contents;
     }
 
