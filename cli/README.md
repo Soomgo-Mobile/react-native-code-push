@@ -25,7 +25,14 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios
 
 ## Configuration
 
-You need a `code-push.config.ts` (or `.js`) file at your project root. It exports an object with three functions — `bundleUploader`, `getReleaseHistory`, and `setReleaseHistory` — that tell the CLI how to talk to your storage backend.
+You need a `code-push.config.ts` (or `.js`) file at your project root. It exports an object with three functions — `bundleUploader`, `getReleaseHistory`, and `setReleaseHistory` — that tell the CLI how to talk to your storage backend, and a fourth optional one for releases that publish asset diff archives.
+
+| Function | Description | Required |
+|----------|-------------|----------|
+| `bundleUploader(source, platform, identifier?)` | Uploads a bundle file and returns the `downloadUrl` it can be downloaded from | Yes |
+| `getReleaseHistory(targetBinaryVersion, platform, identifier?)` | Returns the release history of a binary version | Yes |
+| `setReleaseHistory(targetBinaryVersion, jsonFilePath, releaseInfo, platform, identifier?)` | Creates or overwrites the release history of a binary version | Yes |
+| `bundleDownloader(downloadUrl, platform, identifier?)` | Downloads a released archive from a `downloadUrl` recorded in the release history and returns its local path as `downloadedFilePath`. Only used to fetch the releases that [asset diff archives](#asset-diff-archives) are built against | No |
 
 > Implementation examples:
 > - [AWS S3 + CloudFront](../Examples/CodePushDemoApp/code-push.config.ts)
@@ -107,10 +114,12 @@ npx code-push release [options]
 | `--output-metro-dir <string>` | Directory to copy Metro JS bundle and sourcemap before Hermes compilation | — |
 | `--binary-bundle-path <string>` | JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it | — |
 | `--on-oversized-patch <policy>` | What to do when the patch bundle is not smaller than the full bundle: `skip` releases the full bundle only, `fail` stops the release before any upload | `skip` |
+| `--diff-base-count <number>` | How many of the most recent releases to build [asset diff archives](#asset-diff-archives) against (`0` disables them). Needs `bundleDownloader` in the config file and a `--binary-bundle-path` release | `3` |
 
-With `--binary-bundle-path`, the release uploads two artifacts per platform: the full
-bundle named after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip`
-that carries only the difference from the bundle inside the binary. The patch bundle
+With `--binary-bundle-path`, the release uploads two artifacts per platform - plus one per
+[asset diff archive](#asset-diff-archives) when those are enabled: the full bundle named
+after its `packageHash`, and a patch bundle named `<packageHash>-patch.zip` that carries
+only the difference from the bundle inside the binary. The patch bundle
 holds a `codepush-binary-patch.json` manifest describing how to rebuild the update, so
 applying it yields the same `packageHash` as the full bundle. Both sizes and the saving
 are printed before either artifact is uploaded. The release history entry records where
@@ -166,6 +175,30 @@ hashes to what the record describes, or if it was exported from a binary version
 than `--binary-version`. A base bundle with no record beside it releases exactly as before,
 and a record that cannot be read only warns.
 
+#### Asset diff archives
+
+A patch bundle still carries every asset of the update, and a client that already has an
+earlier update installed has most of those assets on disk. So with `bundleDownloader` in
+the config file, a binary patch release publishes one more artifact per recent release:
+`<packageHash>-diff-<basePackageHash>.zip`, holding the bundle patch, only the assets that
+release does not already have, and a manifest of the files it has to drop. A client holding
+that release copies its installed update, applies those, and ends up with the same
+`packageHash` the full bundle would have produced.
+
+`--diff-base-count` decides how many of the most recent releases the diffs are built
+against (`3` by default, `0` publishes none). The CLI downloads each of those releases
+through `bundleDownloader` and checks that the archive hashes to the `packageHash` the
+history recorded for it: a base that cannot be downloaded or does not match is skipped with
+a warning, and a diff that does not come out smaller than the patch bundle is not
+published. Either way the release still goes out with its full and patch bundles, serving
+fewer diff archives.
+
+Each published diff archive is recorded in the release history entry under `diffPackages`,
+keyed by the `packageHash` of the release it was built against. A client downloads the diff
+archive built against the update it is running, the patch bundle when it is running the
+binary or an update this release was not diffed against, and the full bundle whenever what
+it downloaded cannot be applied.
+
 ```bash
 # Standard iOS release
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios
@@ -187,6 +220,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/mai
 
 # Same, but fail the release if the patch does not come out smaller
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --on-oversized-patch fail
+
+# Also publish asset diff archives against the 5 most recent releases (needs `bundleDownloader`)
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-base-count 5
 ```
 
 ---
@@ -286,7 +322,10 @@ The release history is a JSON object keyed by app version. For example, the hist
     "mandatory": true,
     "downloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...",
     "packageHash": "d4e5f6...",
-    "binaryPatchDownloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...-patch.zip"
+    "binaryPatchDownloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...-patch.zip",
+    "diffPackages": {
+      "a1b2c3...": "https://storage.example.com/bundles/ios/staging/d4e5f6...-diff-a1b2c3....zip"
+    }
   }
 }
 ```
@@ -294,6 +333,11 @@ The release history is a JSON object keyed by app version. For example, the hist
 `binaryPatchDownloadUrl` is only written for a release published with
 `--binary-bundle-path`. Every other release leaves the field out, and a history written
 before binary patches existed stays valid as it is.
+
+`diffPackages` is only written when such a release also published
+[asset diff archives](#asset-diff-archives), and holds one entry per archive: the
+`packageHash` of the release the archive was diffed against, and the URL the archive can be
+downloaded from. A release published without them leaves the field out the same way.
 
 ## Typical Workflow
 
