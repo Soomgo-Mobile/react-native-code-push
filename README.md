@@ -417,7 +417,7 @@ const Config: CliConfigInterface = {
   //   platform: "ios" | "android",
   //   identifier,
   // ): Promise<{downloadedFilePath: string}> => {
-  //   // fetch the archive from your storage (S3, GCS, ...) and return where it landed
+  //   // ...
   // },
 };
 
