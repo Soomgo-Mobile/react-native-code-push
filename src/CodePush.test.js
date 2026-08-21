@@ -27,6 +27,8 @@ const LABEL = '1.0.1';
 const PACKAGE_HASH = 'a'.repeat(64);
 const DOWNLOAD_URL = 'https://cdn.example.com/full.zip';
 const BINARY_PATCH_DOWNLOAD_URL = 'https://cdn.example.com/full.zip-patch.zip';
+const DIFF_URL = 'https://cdn.example.com/diff-from-base.zip';
+const INSTALLED_HASH = 'base-package-hash';
 
 /** The release the CLI writes when only the full bundle was published. */
 function fullOnlyRelease() {
@@ -50,19 +52,27 @@ function patchedRelease() {
   };
 }
 
+/** The release the CLI writes when the update also has a diff archive against an earlier one. */
+function diffRelease() {
+  const history = patchedRelease();
+  history[LABEL].diffPackages = { [INSTALLED_HASH]: DIFF_URL };
+  return history;
+}
+
 /**
  * @param binaryPatchResult what the native side reports the patch attempt ended in, which
  *        only a download that had a patch to try comes back with.
+ * @param installedPackage the CodePush update the app is running, if any.
  */
-function createNativeBridge({ binaryPatchResult } = {}) {
+function createNativeBridge({ binaryPatchResult, installedPackage } = {}) {
   return {
     addDownloadProgressListener: jest.fn(() => ({ remove: jest.fn() })),
     downloadUpdate: jest.fn(async (updatePackage) => ({
       ...updatePackage,
       ...(binaryPatchResult ? { binaryPatchResult } : {}),
     })),
-    // No CodePush update is installed, so the app runs the bundle of its binary.
-    getUpdateMetadata: jest.fn(async () => null),
+    // Without an installed CodePush update, the app runs the bundle of its binary.
+    getUpdateMetadata: jest.fn(async () => installedPackage ?? null),
     isFailedUpdate: jest.fn(async () => false),
     isFirstRun: jest.fn(async () => false),
     // The rest of what a full `sync()` reaches for.
@@ -82,10 +92,10 @@ function createNativeBridge({ binaryPatchResult } = {}) {
  * @param onBinaryPatchResult a callback the app registers on the decorator, as opposed to
  *        one it passes to a single `sync()` call.
  */
-function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult, onBinaryPatchResult } = {}) {
+function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult, onBinaryPatchResult, installedPackage } = {}) {
   jest.resetModules();
   const CodePush = require('./CodePush');
-  const nativeBridge = createNativeBridge({ binaryPatchResult });
+  const nativeBridge = createNativeBridge({ binaryPatchResult, installedPackage });
 
   CodePush.setUpTestDependencies(
     null,
@@ -197,6 +207,66 @@ describe('checkForUpdate without a binary patch in the release history', () => {
       isMandatory: true,
     });
     expect(remotePackage).not.toHaveProperty('binaryPatchDownloadUrl');
+  });
+});
+
+/**
+ * A diff archive only applies to the one release it was computed against, so which of the
+ * two patch urls of a release is downloaded depends on what the app is running right now.
+ */
+describe('checkForUpdate with asset diff packages in the release history', () => {
+  it('downloads the diff archive when the installed update matches a diff base', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: diffRelease(),
+      installedPackage: { packageHash: INSTALLED_HASH },
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    await remotePackage.download();
+
+    expect(downloadedPackageMetadata(nativeBridge)).toMatchObject({
+      downloadUrl: DOWNLOAD_URL,
+      binaryPatchDownloadUrl: DIFF_URL,
+    });
+  });
+
+  it('downloads the plain patch archive when the installed update matches no diff base', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: diffRelease(),
+      installedPackage: { packageHash: 'other-hash' },
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    await remotePackage.download();
+
+    expect(downloadedPackageMetadata(nativeBridge)).toMatchObject({
+      binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
+    });
+  });
+
+  it('downloads the plain patch archive when no update is installed', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: diffRelease() });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    await remotePackage.download();
+
+    expect(downloadedPackageMetadata(nativeBridge)).toMatchObject({
+      binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
+    });
+  });
+
+  it('does not send the diff package map across the bridge', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: diffRelease(),
+      installedPackage: { packageHash: INSTALLED_HASH },
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    expect(remotePackage).not.toHaveProperty('diffPackages');
+
+    await remotePackage.download();
+
+    expect(downloadedPackageMetadata(nativeBridge)).not.toHaveProperty('diffPackages');
   });
 });
 
