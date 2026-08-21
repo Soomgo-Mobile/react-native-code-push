@@ -15,6 +15,7 @@ export async function addToReleaseHistory(
     mandatory: boolean,
     enable: boolean,
     rollout: number | undefined,
+    diffPackages: Record<string, string> | undefined,
 ): Promise<void> {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
@@ -37,6 +38,12 @@ export async function addToReleaseHistory(
     // this history downloads the full bundle exactly as it did before patches existed.
     if (binaryPatchDownloadUrl) {
         newReleaseHistory[appVersion].binaryPatchDownloadUrl = binaryPatchDownloadUrl;
+    }
+
+    // Same for the asset diffs: an entry only names the bases it actually published a
+    // diff archive for.
+    if (diffPackages && Object.keys(diffPackages).length > 0) {
+        newReleaseHistory[appVersion].diffPackages = diffPackages;
     }
 
     if (typeof rollout === 'number') {

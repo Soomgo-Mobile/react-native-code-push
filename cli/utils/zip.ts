@@ -11,6 +11,20 @@ import { walk } from "./promisfied-fs.js";
 type ReleaseFile = { sourceLocation: string, targetLocation: string };
 
 export function zip(updateContentsPath: string): Promise<string> {
+    // For legacy reasons, put the root directory in the zip
+    return zipRelativeTo(updateContentsPath, path.join(updateContentsPath, '..'));
+}
+
+/**
+ * Zips the contents of `rootPath` with entries relative to the root itself, so a file
+ * placed directly under the root lands at the archive root rather than inside a wrapper
+ * directory.
+ */
+export function zipDirectoryContents(rootPath: string): Promise<string> {
+    return zipRelativeTo(rootPath, rootPath);
+}
+
+function zipRelativeTo(updateContentsPath: string, baseDirectoryPath: string): Promise<string> {
 
     // eslint-disable-next-line no-async-promise-executor
     return new Promise(async (resolve, reject) => {
@@ -29,9 +43,6 @@ export function zip(updateContentsPath: string): Promise<string> {
             }
             reject(error);
         }
-
-        const directoryPath = updateContentsPath;
-        const baseDirectoryPath = path.join(directoryPath, '..'); // For legacy reasons, put the root directory in the zip
 
         const files: string[] = await walk(updateContentsPath);
 

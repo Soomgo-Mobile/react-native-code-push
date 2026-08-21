@@ -1,9 +1,11 @@
+import crypto from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { release } from "./release.js";
 import { makeCodePushBundle } from "../../functions/makeCodePushBundle.js";
+import { ASSET_DIFF_ARCHIVE_INFIX, assetDiffArchiveName } from "../../functions/makeAssetDiffBundle.js";
 import {
     BINARY_PATCH_ARCHIVE_SUFFIX,
     BINARY_PATCH_BASE_RECORD_NAME,
@@ -15,7 +17,7 @@ import {
 import { applyPatch } from "../../utils/binaryPatch.js";
 import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
 import { unzip } from "../../utils/unzip.js";
-import type { ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
+import type { CliConfigInterface, ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
 
 /**
  * Covers the release flow around the binary patch option with `--skip-bundle`, which is
@@ -103,16 +105,17 @@ function recordingUploader(uploads: Uploads, failOn?: (filePath: string) => bool
     };
 }
 
-function historyStore() {
+function historyStore(existingHistory: ReleaseHistoryInterface = {}, onSave?: () => void) {
     const saved: ReleaseHistoryInterface[] = [];
     return {
         saved,
-        getReleaseHistory: async () => ({}) as ReleaseHistoryInterface,
+        getReleaseHistory: async () => existingHistory,
         setReleaseHistory: async (
             _binaryVersion: string,
             _jsonFilePath: string,
             releaseInfo: ReleaseHistoryInterface,
         ) => {
+            onSave?.();
             saved.push(releaseInfo);
         },
     };
@@ -127,11 +130,18 @@ type ReleaseOverrides = {
     onOversizedPatch?: OversizedPatchPolicy;
     /** Passed in when the case has to read the uploads of a release that threw. */
     uploads?: Uploads;
+    /** What the consumer already has released, which the asset diff bases are picked from. */
+    releaseHistory?: ReleaseHistoryInterface;
+    bundleDownloader?: CliConfigInterface['bundleDownloader'];
+    diffBaseCount?: number;
 };
 
 async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}) {
     const uploads: Uploads = overrides.uploads ?? [];
-    const history = historyStore();
+    const uploadCountsWhenHistorySaved: number[] = [];
+    const history = historyStore(overrides.releaseHistory, () => {
+        uploadCountsWhenHistorySaved.push(uploads.length);
+    });
 
     await release(
         recordingUploader(uploads, overrides.uploadFailsFor),
@@ -156,9 +166,11 @@ async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}
         undefined,
         overrides.binaryBundlePath,
         overrides.onOversizedPatch,
+        overrides.bundleDownloader,
+        overrides.diffBaseCount,
     );
 
-    return { uploads, releaseHistories: history.saved };
+    return { uploads, releaseHistories: history.saved, uploadCountsWhenHistorySaved };
 }
 
 let logs: string[];
@@ -578,5 +590,200 @@ describe("release --on-oversized-patch", () => {
         });
 
         expect(uploads).toHaveLength(2);
+    });
+});
+
+/**
+ * A release can also ship a diff per recently released package: the patch archive without
+ * the files that package already holds. The bases come out of the release history and are
+ * downloaded through the consumer's `bundleDownloader`, so a release only builds diffs
+ * where the consumer supplied one.
+ */
+describe("release with asset diff bases", () => {
+    /**
+     * The asset both packages hold. Sized like a real asset because a diff is only shipped
+     * when it comes out smaller than the patch archive it was derived from.
+     */
+    const sharedAsset = crypto.randomBytes(4096);
+
+    const PREVIOUS_APP_VERSION = '9.9.9';
+
+    function updateFiles(): Record<string, Buffer | string> {
+        return { 'main.jsbundle': fs.readFileSync(targetFixture), 'assets/keep.png': sharedAsset };
+    }
+
+    type StagedBaseRelease = { downloadUrl: string, packageHash: string, archivePath: string };
+
+    /**
+     * A package released earlier, as the history describes it and as the CDN serves it.
+     *
+     * @param ownAsset An asset only this release holds, which is what makes two staged base releases two packages rather than one.
+     */
+    async function stageBaseRelease(caseName: string, ownAsset?: string): Promise<StagedBaseRelease> {
+        const caseDir = fs.mkdtempSync(path.join(workDir, `${caseName}-base-`));
+        const contentsPath = path.join(caseDir, CONTENTS_DIR_NAME);
+        const files: Record<string, Buffer | string> = {
+            'main.jsbundle': fs.readFileSync(baseFixture),
+            'assets/keep.png': sharedAsset,
+            ...(ownAsset === undefined ? {} : { 'assets/dropped.png': ownAsset }),
+        };
+
+        for (const [relativePath, content] of Object.entries(files)) {
+            const filePath = path.join(contentsPath, relativePath);
+            fs.mkdirSync(path.dirname(filePath), { recursive: true });
+            fs.writeFileSync(filePath, content);
+        }
+
+        const archiveDir = path.join(caseDir, 'archive');
+        const { bundleFileName } = await makeCodePushBundle(contentsPath, archiveDir);
+
+        return {
+            downloadUrl: `https://cdn.example.com/released/${bundleFileName}`,
+            packageHash: bundleFileName,
+            archivePath: path.join(archiveDir, bundleFileName),
+        };
+    }
+
+    function releaseHistoryOf(base: StagedBaseRelease, versions = [PREVIOUS_APP_VERSION]): ReleaseHistoryInterface {
+        return Object.fromEntries(versions.map((version) => [
+            version,
+            {
+                enabled: true,
+                mandatory: false,
+                downloadUrl: base.downloadUrl,
+                packageHash: base.packageHash,
+            },
+        ]));
+    }
+
+    /** Serves the staged base archives, and records which releases were asked for. */
+    function recordingDownloader(bases: StagedBaseRelease[], downloads: string[]): CliConfigInterface['bundleDownloader'] {
+        return async (downloadUrl: string) => {
+            downloads.push(downloadUrl);
+            const base = bases.find((candidate) => candidate.downloadUrl === downloadUrl);
+            if (!base) {
+                throw new Error(`the downloader was called with an unexpected url: ${downloadUrl}`);
+            }
+            return { downloadedFilePath: base.archivePath };
+        };
+    }
+
+    it("publishes asset diff archives against recent releases and records them in the history", async () => {
+        const staged = await stageBundleOutput("asset-diff", updateFiles());
+        const base = await stageBaseRelease("asset-diff");
+        const downloads: string[] = [];
+
+        const { uploads, releaseHistories, uploadCountsWhenHistorySaved } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: releaseHistoryOf(base),
+            bundleDownloader: recordingDownloader([base], downloads),
+        });
+
+        const diffFileName = `${staged.bundleFileName}${ASSET_DIFF_ARCHIVE_INFIX}${base.packageHash}.zip`;
+        // The diff is the last artifact: it is an optimisation on top of the patch, which
+        // is itself an optimisation on top of the full archive.
+        expect(uploads.map(({ filePath }) => path.basename(filePath))).toEqual([
+            staged.bundleFileName,
+            `${staged.bundleFileName}${BINARY_PATCH_ARCHIVE_SUFFIX}`,
+            diffFileName,
+        ]);
+        expect(downloads).toEqual([base.downloadUrl]);
+        // Every artifact is uploaded before the history points at any of them.
+        expect(uploadCountsWhenHistorySaved).toEqual([3]);
+        expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
+            [base.packageHash]: uploads[2].downloadUrl,
+        });
+        expect(fs.existsSync(path.join(staged.bundleDirectory, diffFileName))).toBe(true);
+    });
+
+    it("publishes without diff archives when the config has no bundle downloader", async () => {
+        const staged = await stageBundleOutput("no-downloader", updateFiles());
+        const base = await stageBaseRelease("no-downloader");
+
+        const { uploads, releaseHistories } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: releaseHistoryOf(base),
+        });
+
+        expect(uploads).toHaveLength(2);
+        // A release without diffs says nothing about them, so a client reading this history
+        // behaves exactly as it did before asset diffs existed.
+        expect(releaseHistories[0][APP_VERSION]).not.toHaveProperty('diffPackages');
+    });
+
+    it("publishes without diff archives when --diff-base-count is zero", async () => {
+        const staged = await stageBundleOutput("zero-bases", updateFiles());
+        const base = await stageBaseRelease("zero-bases");
+        const downloads: string[] = [];
+
+        const { uploads, releaseHistories } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: releaseHistoryOf(base),
+            bundleDownloader: recordingDownloader([base], downloads),
+            diffBaseCount: 0,
+        });
+
+        expect(uploads).toHaveLength(2);
+        expect(downloads).toEqual([]);
+        expect(releaseHistories[0][APP_VERSION]).not.toHaveProperty('diffPackages');
+    });
+
+    it("builds one diff archive when two releases hold the same package", async () => {
+        const staged = await stageBundleOutput("repeated-base", updateFiles());
+        const base = await stageBaseRelease("repeated-base");
+        const downloads: string[] = [];
+
+        const { uploads, releaseHistories } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: releaseHistoryOf(base, ['9.9.8', PREVIOUS_APP_VERSION]),
+            bundleDownloader: recordingDownloader([base], downloads),
+        });
+
+        expect(downloads).toHaveLength(2);
+        expect(uploads.filter(({ filePath }) => filePath.includes(ASSET_DIFF_ARCHIVE_INFIX))).toHaveLength(1);
+        expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
+            [base.packageHash]: uploads[2].downloadUrl,
+        });
+    });
+
+    it("releases the diffs that uploaded when one of them is rejected", async () => {
+        const staged = await stageBundleOutput("diff-upload-failure", updateFiles());
+        // Two packages to diff against, one of whose diffs the storage backend refuses.
+        const rejected = await stageBaseRelease("diff-upload-failure-rejected");
+        const kept = await stageBaseRelease("diff-upload-failure-kept", 'an asset of the older release');
+        const downloads: string[] = [];
+
+        const { uploads, releaseHistories } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: {
+                ...releaseHistoryOf(kept, ['9.9.8']),
+                ...releaseHistoryOf(rejected, [PREVIOUS_APP_VERSION]),
+            },
+            bundleDownloader: recordingDownloader([kept, rejected], downloads),
+            uploadFailsFor: (filePath) => filePath.includes(rejected.packageHash),
+        });
+
+        expect(uploads.map(({ filePath }) => path.basename(filePath))).toEqual([
+            staged.bundleFileName,
+            `${staged.bundleFileName}${BINARY_PATCH_ARCHIVE_SUFFIX}`,
+            `${staged.bundleFileName}${ASSET_DIFF_ARCHIVE_INFIX}${kept.packageHash}.zip`,
+        ]);
+        // The release goes out with the two artifacts it needs, and describes only the diff
+        // a client can actually download.
+        expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
+            [kept.packageHash]: uploads[2].downloadUrl,
+        });
+        expect(logs.filter((line) => line.startsWith('warn:')).join('\n')).toMatch(
+            new RegExp(`Skipping the asset diff archive against ${rejected.packageHash}`),
+        );
+    });
+
+    it("still picks the full bundle when diff archives sit in the output directory", async () => {
+        const staged = await stageBundleOutput("leftover-diff");
+        fs.writeFileSync(path.join(staged.bundleDirectory, assetDiffArchiveName('stale', 'stale-base')), 'stale');
+
+        const { uploads } = await runRelease(staged, { binaryBundlePath: baseFixture });
+
+        expect(path.basename(uploads[0].filePath)).toBe(staged.bundleFileName);
     });
 });
