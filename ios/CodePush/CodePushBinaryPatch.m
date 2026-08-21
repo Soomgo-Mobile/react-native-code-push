@@ -40,6 +40,10 @@ static NSString *const BinaryPatchTargetBundleHashKey = @"targetBundleHash";
 static NSString *const BinaryPatchTargetBundleSizeKey = @"targetBundleSize";
 static const NSInteger BinaryPatchFormatVersion = 1;
 
+/* The manifest of the assets to delete that a diff archive carries at its root. Paired
+ * with CodePushPackage.m's DiffManifestFileName, which is file-local there as well. */
+static NSString *const AssetDiffManifestFileName = @"hotcodepush.json";
+
 /*
  * The largest bundle a patch is allowed to promise. A manifest is untrusted input, and
  * the size in it decides how much disk the restore asks for before a single byte of the
@@ -373,21 +377,30 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
  * An archive wraps its files in a single directory, and the manifest's paths are
  * relative to that directory rather than to the archive. An archive whose files are at
  * the top level is its own contents root, which is how the tooling that unpacks one
- * reads it too.
+ * reads it too. A diff archive carries the manifest of the assets to delete beside that
+ * wrapper directory, at the root, so that file does not count against the shape.
  */
 + (NSString *)contentsFolderInUnzippedFolder:(NSString *)unzippedFolderPath
 {
-    NSArray *entries = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:unzippedFolderPath
-                                                                          error:nil];
-    if (entries.count == 1) {
-        NSString *entryPath = [unzippedFolderPath stringByAppendingPathComponent:entries.firstObject];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSArray *entries = [fileManager contentsOfDirectoryAtPath:unzippedFolderPath error:nil];
+    NSString *wrapperPath = nil;
+    for (NSString *entry in entries) {
+        NSString *entryPath = [unzippedFolderPath stringByAppendingPathComponent:entry];
         BOOL isDirectory = NO;
-        if ([[NSFileManager defaultManager] fileExistsAtPath:entryPath isDirectory:&isDirectory] && isDirectory) {
-            return entryPath;
+        BOOL exists = [fileManager fileExistsAtPath:entryPath isDirectory:&isDirectory];
+        if (exists && !isDirectory && [entry isEqualToString:AssetDiffManifestFileName]) {
+            continue;
         }
+        if (wrapperPath == nil && exists && isDirectory) {
+            wrapperPath = entryPath;
+            continue;
+        }
+
+        return unzippedFolderPath;
     }
 
-    return unzippedFolderPath;
+    return wrapperPath != nil ? wrapperPath : unzippedFolderPath;
 }
 
 /**

@@ -110,8 +110,11 @@ public class CodePushUpdateUtils {
             JSONArray deletedFiles = diffManifest.getJSONArray("deletedFiles");
             for (int i = 0; i < deletedFiles.length(); i++) {
                 String fileNameToDelete = deletedFiles.getString(i);
-                File fileToDelete = new File(newPackageFolderPath, fileNameToDelete);
-                if (fileToDelete.exists()) {
+                // The manifest is untrusted input, so an entry that reaches outside the
+                // package folder is ignored rather than followed. Whether skipping it left
+                // the update whole is the folder hash check's answer to give.
+                File fileToDelete = CodePushBinaryPatch.resolveInsideFolder(new File(newPackageFolderPath), fileNameToDelete);
+                if (fileToDelete != null && fileToDelete.exists()) {
                     fileToDelete.delete();
                 }
             }
