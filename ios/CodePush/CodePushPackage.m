@@ -329,8 +329,12 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                                                                                            error:&error];
                                                             NSArray *deletedFiles = manifestJSON[@"deletedFiles"];
                                                             for (NSString *deletedFileName in deletedFiles) {
-                                                                NSString *absoluteDeletedFilePath = [newUpdateFolderPath stringByAppendingPathComponent:deletedFileName];
-                                                                if ([[NSFileManager defaultManager] fileExistsAtPath:absoluteDeletedFilePath]) {
+                                                                // The manifest is untrusted input, so an entry that reaches outside the
+                                                                // package folder is ignored rather than followed. Whether skipping it
+                                                                // left the update whole is the folder hash check's answer to give.
+                                                                NSString *absoluteDeletedFilePath = [self pathInsideFolder:newUpdateFolderPath
+                                                                                                             relativePath:deletedFileName];
+                                                                if (absoluteDeletedFilePath && [[NSFileManager defaultManager] fileExistsAtPath:absoluteDeletedFilePath]) {
                                                                     [[NSFileManager defaultManager] removeItemAtPath:absoluteDeletedFilePath
                                                                                                                error:&error];
                                                                     if (error) {
@@ -466,6 +470,29 @@ static NSString *const UnzippedFolderName = @"unzipped";
 + (NSString *)getBinaryPatchFolderPath
 {
     return [[self getCodePushPath] stringByAppendingPathComponent:BinaryPatchFolderName];
+}
+
+/*
+ * Resolves a path a manifest points at, refusing anything that would reach outside the
+ * folder it is relative to - an archive is untrusted input, and its manifest is no more
+ * trusted than its entries.
+ *
+ * @return the resolved path, or nil when the path is unusable
+ */
++ (NSString *)pathInsideFolder:(NSString *)folderPath
+                  relativePath:(NSString *)relativePath
+{
+    if (relativePath.length == 0 || [relativePath isAbsolutePath]) {
+        return nil;
+    }
+
+    NSString *resolvedFolderPath = [[folderPath stringByStandardizingPath] stringByAppendingString:@"/"];
+    NSString *resolvedPath = [[folderPath stringByAppendingPathComponent:relativePath] stringByStandardizingPath];
+    if (![resolvedPath hasPrefix:resolvedFolderPath]) {
+        return nil;
+    }
+
+    return resolvedPath;
 }
 
 + (NSString *)getCodePushPath
