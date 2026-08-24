@@ -2,10 +2,14 @@
 // @ts-nocheck
 
 import {
+    type BundleDownloadInfo,
+    type BundleUploadArtifact,
     CliConfigInterface,
     ReleaseHistoryInterface,
 } from "@bravemobile/react-native-code-push";
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import axios from "axios"; // install as devDependency
 import * as SupabaseSDK from "@supabase/supabase-js"; // install as devDependency
 
@@ -26,9 +30,25 @@ function historyJsonFileRemotePath(
 function bundleFileRemotePath(
     platform: "ios" | "android",
     identifier: string,
-    fileName: string,
+    artifact: BundleUploadArtifact,
 ) {
-    return `bundles/${platform}/${identifier}/${fileName}`;
+    if (artifact.type === "full-bundle") {
+        return fullBundleRemotePath(platform, identifier, artifact.packageHash);
+    }
+
+    const artifactPath = artifact.type === "asset-diff"
+        ? `asset-diff/${artifact.targetBinaryVersion}/${artifact.packageHash}/${artifact.basePackageHash}`
+        : `binary-patch/${artifact.targetBinaryVersion}/${artifact.packageHash}`;
+
+    return `bundles/${platform}/${identifier}/${artifactPath}`;
+}
+
+function fullBundleRemotePath(
+    platform: "ios" | "android",
+    identifier: string,
+    packageHash: string,
+) {
+    return `bundles/${platform}/${identifier}/full-bundle/${packageHash}`;
 }
 
 const Config: CliConfigInterface = {
@@ -36,10 +56,14 @@ const Config: CliConfigInterface = {
         source: string,
         platform: "ios" | "android",
         identifier = "staging",
+        artifact,
     ): Promise<{downloadUrl: string}> => {
-        const fileName = source.split("/").pop();
+        if (artifact === undefined) {
+            throw new Error("The release command did not provide bundle artifact metadata.");
+        }
+
         const fileStream = fs.createReadStream(source);
-        const remotePath = bundleFileRemotePath(platform, identifier, fileName!);
+        const remotePath = bundleFileRemotePath(platform, identifier, artifact);
 
         const {data, error} = await supabase.storage
             .from(BUCKET_NAME)
@@ -110,6 +134,33 @@ const Config: CliConfigInterface = {
             "Release history File uploaded:",
             `${STORAGE_HOST}/${data.fullPath}`,
         );
+    },
+
+    bundleDownloader: async (
+        archive: BundleDownloadInfo,
+        platform: "ios" | "android",
+        identifier = "staging",
+    ): Promise<{downloadedFilePath: string}> => {
+        const remotePath = fullBundleRemotePath(
+            platform,
+            identifier,
+            archive.packageHash,
+        );
+        const {data, error} = await supabase.storage
+            .from(BUCKET_NAME)
+            .download(remotePath);
+
+        if (error) {
+            throw error;
+        }
+
+        const downloadedFilePath = path.join(
+            os.tmpdir(),
+            `codepush-${archive.releaseVersion}-${archive.packageHash}`,
+        );
+        fs.writeFileSync(downloadedFilePath, Buffer.from(await data.arrayBuffer()));
+
+        return {downloadedFilePath};
     },
 };
 

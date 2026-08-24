@@ -40,12 +40,14 @@ export async function resolveAssetDiffBases({
     bundleDownloader,
     platform,
     identifier,
+    targetBinaryVersion,
 }: {
     releaseHistory: ReleaseHistoryInterface;
     diffBaseCount: number;
     bundleDownloader: NonNullable<CliConfigInterface['bundleDownloader']>;
     platform: 'ios' | 'android';
     identifier?: string;
+    targetBinaryVersion: string;
 }): Promise<AssetDiffBase[]> {
     // The seeded entry for the update inside the app binary has neither a url nor a hash,
     // and nothing can be diffed against a package that was never published. A key that is
@@ -60,7 +62,12 @@ export async function resolveAssetDiffBases({
     const bases: AssetDiffBase[] = [];
     for (const [version, releaseInfo] of candidates) {
         try {
-            const { downloadedFilePath } = await bundleDownloader(releaseInfo.downloadUrl, platform, identifier);
+            const { downloadedFilePath } = await bundleDownloader({
+                downloadUrl: releaseInfo.downloadUrl,
+                targetBinaryVersion,
+                releaseVersion: version,
+                packageHash: releaseInfo.packageHash,
+            }, platform, identifier);
 
             if (!(await matchesPackageHash(downloadedFilePath, releaseInfo.packageHash))) {
                 console.warn(

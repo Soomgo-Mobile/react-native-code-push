@@ -3,7 +3,6 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { MOCK_DATA_DIR, WORK_DIR } from "../config";
-import { PATCH_ARCHIVE_SUFFIX } from "./artifact-storage";
 
 /**
  * Fixtures for the binary patch scenarios: the base bundle a patch is computed against,
@@ -148,7 +147,7 @@ export function assertReleaseOffersPatch(
   }
 
   const patchDownloadUrl = release.binaryPatchDownloadUrl;
-  if (!patchDownloadUrl || !patchDownloadUrl.endsWith(PATCH_ARCHIVE_SUFFIX)) {
+  if (!patchDownloadUrl) {
     throw new Error(
       `${scenario}: v${releaseVersion} was published without a binary patch (binaryPatchDownloadUrl: ${String(patchDownloadUrl)})`,
     );
@@ -227,25 +226,42 @@ export function serveReleaseHistoryOf(
 }
 
 export function findPatchArchive(platform: Platform, identifier: string): string {
-  return findArchive(platform, identifier, (fileName) => fileName.endsWith(PATCH_ARCHIVE_SUFFIX));
+  return findArchive(platform, identifier, "binary-patch");
 }
 
-/** The full archive of a release is stored under its package hash, with no extension. */
+/** The full archive of a release is stored under its full-bundle artifact type. */
 export function findFullArchive(platform: Platform, identifier: string): string {
-  return findArchive(platform, identifier, (fileName) => !fileName.endsWith(PATCH_ARCHIVE_SUFFIX));
+  return findArchive(platform, identifier, "full-bundle");
 }
 
-function findArchive(platform: Platform, identifier: string, matches: (fileName: string) => boolean): string {
+function findArchive(
+  platform: Platform,
+  identifier: string,
+  artifactType: "full-bundle" | "binary-patch",
+): string {
   const bundleDir = path.join(MOCK_DATA_DIR, "bundles", platform, identifier);
-  const fileNames = fs.existsSync(bundleDir) ? fs.readdirSync(bundleDir).filter(matches) : [];
+  const archivePaths = findFiles(bundleDir)
+    .filter((filePath) => path.relative(bundleDir, filePath).split(path.sep).includes(artifactType));
 
-  if (fileNames.length !== 1) {
+  if (archivePaths.length !== 1) {
     throw new Error(
-      `Expected exactly one matching archive in "${bundleDir}", found ${fileNames.length}: [${fileNames.join(", ")}]`,
+      `Expected exactly one ${artifactType} archive in "${bundleDir}", found ${archivePaths.length}: ` +
+      `[${archivePaths.map((filePath) => path.relative(bundleDir, filePath)).join(", ")}]`,
     );
   }
 
-  return path.join(bundleDir, fileNames[0]);
+  return archivePaths[0];
+}
+
+function findFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) {
+    return [];
+  }
+
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(dir, entry.name);
+    return entry.isDirectory() ? findFiles(entryPath) : [entryPath];
+  });
 }
 
 export function readPatchManifest(archivePath: string): BinaryPatchManifest {

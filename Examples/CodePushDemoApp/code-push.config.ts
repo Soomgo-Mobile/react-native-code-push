@@ -1,8 +1,13 @@
 import axios from "axios";
+import os from "os";
+import path from "path";
 import {
+  type BundleDownloadInfo,
+  type BundleUploadArtifact,
   CliConfigInterface,
   ReleaseHistoryInterface,
 } from "@bravemobile/react-native-code-push";
+import {downloadFileFromS3} from "./scripts/downloadFileFromS3";
 import {invalidateCloudfrontCache} from "./scripts/invalidateCloudfrontCache";
 import {uploadFileToS3} from "./scripts/uploadFileToS3";
 
@@ -19,9 +24,26 @@ function historyJsonFileRemotePath(
 function bundleFileRemotePath(
   platform: "ios" | "android",
   identifier: string,
-  fileName: string,
+  artifact: BundleUploadArtifact,
 ) {
-  return `bundles/${platform}/${identifier}/${fileName}`;
+  if (artifact.type === "full-bundle") {
+    // A package hash identifies full bundle contents across target binary versions.
+    return fullBundleRemotePath(platform, identifier, artifact.packageHash);
+  }
+
+  const artifactPath = artifact.type === "asset-diff"
+    ? `asset-diff/${artifact.targetBinaryVersion}/${artifact.packageHash}/${artifact.basePackageHash}`
+    : `binary-patch/${artifact.targetBinaryVersion}/${artifact.packageHash}`;
+
+  return `bundles/${platform}/${identifier}/${artifactPath}`;
+}
+
+function fullBundleRemotePath(
+  platform: "ios" | "android",
+  identifier: string,
+  packageHash: string,
+) {
+  return `bundles/${platform}/${identifier}/full-bundle/${packageHash}`;
 }
 
 const Config: CliConfigInterface = {
@@ -29,12 +51,16 @@ const Config: CliConfigInterface = {
     source: string,
     platform: "ios" | "android",
     identifier = "staging",
+    artifact,
   ): Promise<{downloadUrl: string}> => {
-    const fileName = source.split("/").pop();
+    if (artifact === undefined) {
+      throw new Error("The release command did not provide bundle artifact metadata.");
+    }
+
     const remoteBundlePath = bundleFileRemotePath(
       platform,
       identifier,
-      fileName!,
+      artifact,
     );
 
     await uploadFileToS3({
@@ -106,6 +132,29 @@ const Config: CliConfigInterface = {
     const jsonUrl = `${CDN_HOST}/${remoteJsonPath}`;
 
     console.log("🎉 Release history File uploaded:", jsonUrl);
+  },
+
+  bundleDownloader: async (
+    archive: BundleDownloadInfo,
+    platform: "ios" | "android",
+    identifier = "staging",
+  ): Promise<{downloadedFilePath: string}> => {
+    const key = fullBundleRemotePath(
+      platform,
+      identifier,
+      archive.packageHash,
+    );
+    const downloadedFilePath = path.join(
+      os.tmpdir(),
+      `codepush-${archive.releaseVersion}-${archive.packageHash}`,
+    );
+
+    await downloadFileFromS3({
+      pathToLocalFile: downloadedFilePath,
+      key,
+    });
+
+    return {downloadedFilePath};
   },
 };
 

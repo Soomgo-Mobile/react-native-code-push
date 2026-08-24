@@ -7,16 +7,19 @@ import { ARTIFACT_LOG_PATH, MOCK_DATA_DIR } from "../config";
  * template writes.
  *
  * The point of reading it back is that the storage layout is a contract between the CLI
- * and whatever hosts the artifacts: bundles live under `{platform}/{identifier}`, and a
- * release history under `{platform}/{identifier}/{binaryVersion}.json`. Publishing a
- * binary patch adds a second archive per release, and it has to land in the same place
- * as the full one rather than somewhere of its own.
+ * and whatever hosts the artifacts: a full bundle uses its package hash under
+ * `{platform}/{identifier}/full-bundle`, while binary patches and asset diffs use their
+ * target binary version under `{platform}/{identifier}/{artifactType}`. A release history
+ * lives under `{platform}/{identifier}/{binaryVersion}.json`.
  */
 export interface StoredBundleArtifact {
   kind: "bundle";
   platform: string;
   identifier: string;
-  fileName: string;
+  artifactType: "full-bundle" | "binary-patch" | "asset-diff";
+  targetBinaryVersion: string;
+  packageHash: string;
+  basePackageHash?: string;
   storedPath: string;
   downloadUrl: string;
 }
@@ -30,9 +33,6 @@ export interface StoredHistoryArtifact {
 }
 
 export type StoredArtifact = StoredBundleArtifact | StoredHistoryArtifact;
-
-/** Appended to the full archive name so the two artifacts of a release stay paired. */
-export const PATCH_ARCHIVE_SUFFIX = "-patch.zip";
 
 export function clearArtifactLog(): void {
   fs.rmSync(ARTIFACT_LOG_PATH, { force: true });
@@ -66,7 +66,7 @@ export function assertArtifactStorageLayout(scenario: string): StoredArtifact[] 
 
   for (const artifact of artifacts) {
     const expectedPath = artifact.kind === "bundle"
-      ? path.join("bundles", artifact.platform, artifact.identifier, artifact.fileName)
+      ? bundleStoredPath(artifact)
       : path.join("histories", artifact.platform, artifact.identifier, `${artifact.binaryVersion}.json`);
 
     if (artifact.storedPath !== expectedPath) {
@@ -80,22 +80,59 @@ export function assertArtifactStorageLayout(scenario: string): StoredArtifact[] 
     }
   }
 
-  // The full archive of a release is stored under its package hash, and the patch archive
-  // next to it under the same hash with the patch suffix.
-  for (const patchArchive of bundles.filter((bundle) => bundle.fileName.endsWith(PATCH_ARCHIVE_SUFFIX))) {
-    const packageHash = patchArchive.fileName.slice(0, -PATCH_ARCHIVE_SUFFIX.length);
+  // Binary patches and full bundles share the same package hash and target binary version.
+  for (const patchArchive of bundles.filter((bundle) => bundle.artifactType === "binary-patch")) {
     const fullArchive = bundles.find((bundle) =>
       bundle.platform === patchArchive.platform
       && bundle.identifier === patchArchive.identifier
-      && bundle.fileName === packageHash);
+      && bundle.artifactType === "full-bundle"
+      && bundle.targetBinaryVersion === patchArchive.targetBinaryVersion
+      && bundle.packageHash === patchArchive.packageHash);
 
     if (!fullArchive) {
       throw new Error(
-        `${scenario}: patch archive "${patchArchive.storedPath}" has no full archive of the same release beside it`,
+        `${scenario}: patch archive "${patchArchive.storedPath}" has no matching full archive`,
       );
     }
   }
 
-  console.log(`[assert] ${scenario}: ${artifacts.length} artifacts stored under {platform}/{identifier}`);
+  console.log(`[assert] ${scenario}: ${artifacts.length} artifacts stored under metadata-based paths`);
   return artifacts;
+}
+
+function bundleStoredPath(artifact: StoredBundleArtifact): string {
+  if (artifact.artifactType === "full-bundle") {
+    return path.join(
+      "bundles",
+      artifact.platform,
+      artifact.identifier,
+      artifact.artifactType,
+      artifact.packageHash,
+    );
+  }
+
+  if (artifact.artifactType === "asset-diff") {
+    if (artifact.basePackageHash === undefined) {
+      throw new Error(`Asset diff "${artifact.storedPath}" is missing its base package hash`);
+    }
+
+    return path.join(
+      "bundles",
+      artifact.platform,
+      artifact.identifier,
+      artifact.artifactType,
+      artifact.targetBinaryVersion,
+      artifact.packageHash,
+      artifact.basePackageHash,
+    );
+  }
+
+  return path.join(
+    "bundles",
+    artifact.platform,
+    artifact.identifier,
+    artifact.artifactType,
+    artifact.targetBinaryVersion,
+    artifact.packageHash,
+  );
 }

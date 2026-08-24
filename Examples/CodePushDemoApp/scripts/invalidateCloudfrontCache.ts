@@ -2,20 +2,17 @@ import {
   CloudFrontClient,
   CreateInvalidationCommand,
 } from "@aws-sdk/client-cloudfront";
-
-const CLOUDFRONT_DISTRIBUTION_ID = "DISTRIBUTION_ID";
-
-const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
-const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+import {
+  AWS_CREDENTIALS,
+  AWS_REGION,
+  CLOUDFRONT_DISTRIBUTION_ID,
+} from "./awsConstants";
 
 export async function invalidateCloudfrontCache({key}: {key: string}) {
   console.log(`log: Start creating cache invalidation (${key})`);
   const cloudfront = new CloudFrontClient({
-    region: "ap-northeast-2",
-    credentials: {
-      accessKeyId: AWS_ACCESS_KEY_ID!,
-      secretAccessKey: AWS_SECRET_ACCESS_KEY!,
-    },
+    region: AWS_REGION,
+    credentials: AWS_CREDENTIALS,
   });
 
   const command = new CreateInvalidationCommand({

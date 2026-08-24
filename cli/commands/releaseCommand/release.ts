@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { bundleCodePush, resolveJsBundleName } from "../bundleCommand/bundleCodePush.js";
 import { addToReleaseHistory } from "./addToReleaseHistory.js";
-import type { CliConfigInterface, ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
+import type { BundleUploadArtifact, CliConfigInterface, ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
 import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
 import { unzip } from "../../utils/unzip.js";
 import { ASSET_DIFF_ARCHIVE_INFIX, makeAssetDiffBundle } from "../../functions/makeAssetDiffBundle.js";
@@ -95,6 +95,7 @@ export async function release(
             bundleDownloader,
             bundleDirectory,
             packageHash,
+            targetBinaryVersion: binaryVersion,
             platform,
             identifier,
         })
@@ -102,10 +103,32 @@ export async function release(
 
     // Every artifact is uploaded before the release history is touched, so a failed
     // upload leaves the history describing only updates that can actually be downloaded.
-    const downloadUrl = await uploadArtifact(bundleUploader, bundleFilePath, platform, identifier, 'bundle');
+    const downloadUrl = await uploadArtifact(
+        bundleUploader,
+        bundleFilePath,
+        platform,
+        identifier,
+        {
+            type: 'full-bundle',
+            targetBinaryVersion: binaryVersion,
+            packageHash,
+        },
+        'bundle',
+    );
     let patchDownloadUrl: string | undefined;
     if (binaryPatch) {
-        patchDownloadUrl = await uploadArtifact(bundleUploader, binaryPatch.patchBundleFilePath, platform, identifier, 'binary patch bundle');
+        patchDownloadUrl = await uploadArtifact(
+            bundleUploader,
+            binaryPatch.patchBundleFilePath,
+            platform,
+            identifier,
+            {
+                type: 'binary-patch',
+                targetBinaryVersion: binaryVersion,
+                packageHash,
+            },
+            'binary patch bundle',
+        );
         console.log(`log: Binary patch archive uploaded (download url: ${patchDownloadUrl})`);
     }
     const diffPackages: Record<string, string> = {};
@@ -114,7 +137,12 @@ export async function release(
         // one that cannot be uploaded is left out of the history instead of failing the
         // release the other two artifacts are ready for.
         try {
-            const diffDownloadUrl = await uploadFile(bundleUploader, filePath, platform, identifier);
+            const diffDownloadUrl = await uploadFile(bundleUploader, filePath, platform, identifier, {
+                type: 'asset-diff',
+                targetBinaryVersion: binaryVersion,
+                packageHash,
+                basePackageHash,
+            });
             diffPackages[basePackageHash] = diffDownloadUrl;
             console.log(`log: Asset diff archive against ${basePackageHash} uploaded (download url: ${diffDownloadUrl})`);
         } catch (error) {
@@ -289,6 +317,7 @@ async function makeAssetDiffArtifacts({
     bundleDownloader,
     bundleDirectory,
     packageHash,
+    targetBinaryVersion,
     platform,
     identifier,
 }: {
@@ -298,6 +327,7 @@ async function makeAssetDiffArtifacts({
     bundleDownloader: NonNullable<CliConfigInterface['bundleDownloader']>;
     bundleDirectory: string;
     packageHash: string;
+    targetBinaryVersion: string;
     platform: 'ios' | 'android';
     identifier: string | undefined;
 }): Promise<AssetDiffArtifact[]> {
@@ -307,6 +337,7 @@ async function makeAssetDiffArtifacts({
         bundleDownloader,
         platform,
         identifier,
+        targetBinaryVersion,
     });
 
     const artifacts: AssetDiffArtifact[] = [];
@@ -421,10 +452,11 @@ async function uploadArtifact(
     filePath: string,
     platform: 'ios' | 'android',
     identifier: string | undefined,
+    artifact: BundleUploadArtifact,
     artifactName: string,
 ): Promise<string> {
     try {
-        return await uploadFile(bundleUploader, filePath, platform, identifier);
+        return await uploadFile(bundleUploader, filePath, platform, identifier, artifact);
     } catch (error) {
         console.error(`Failed to upload the ${artifactName} file. Exiting the program.\n`, error)
         process.exit(1)
@@ -436,7 +468,8 @@ async function uploadFile(
     filePath: string,
     platform: 'ios' | 'android',
     identifier: string | undefined,
+    artifact: BundleUploadArtifact,
 ): Promise<string> {
-    const { downloadUrl } = await bundleUploader(filePath, platform, identifier);
+    const { downloadUrl } = await bundleUploader(filePath, platform, identifier, artifact);
     return downloadUrl
 }

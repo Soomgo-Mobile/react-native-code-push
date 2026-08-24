@@ -634,6 +634,31 @@ declare namespace CodePush {
 export default CodePush;
 
 /**
+ * Identifies the archive passed to `bundleUploader` during a release.
+ *
+ * `targetBinaryVersion` is the value of the release command's `--binary-version` option.
+ * A full bundle's `packageHash` identifies its contents across target binary versions, while
+ * binary patch and asset diff archives need the target binary version to distinguish their contents.
+ * Asset diff archives also identify the released package they were built against.
+ */
+export type BundleUploadArtifact = {
+    targetBinaryVersion: string;
+    packageHash: string;
+} & (
+    | { type: 'full-bundle' }
+    | { type: 'binary-patch' }
+    | { type: 'asset-diff'; basePackageHash: string }
+);
+
+/** Identifies the previously released full archive passed to `bundleDownloader`. */
+export interface BundleDownloadInfo {
+    downloadUrl: string;
+    targetBinaryVersion: string;
+    releaseVersion: ReleaseVersion;
+    packageHash: string;
+}
+
+/**
  * Interface for the config file required for `npx code-push` CLI operation.
  *
  * Please refer to the example code for implementation guidance.
@@ -647,25 +672,15 @@ export interface CliConfigInterface {
      *
      * @param source The relative path of the generated bundle file. (e.g. build/bundleOutput/1087bc338fc45a961c...)
      * @param platform The target platform of the bundle file. This is the string passed when executing the CLI command. ('ios'/'android')
+     * @param artifact Information that identifies the full bundle, binary patch, or asset diff archive. The release command always supplies it; it remains optional so existing callers and three-parameter implementations stay compatible.
      * @return {Promise<{downloadUrl: string}>} An object containing the `downloadUrl` property, which is the URL from which the uploaded bundle file can be downloaded. This URL will be recorded in the release history.
      */
     bundleUploader: (
         source: string,
         platform: "ios" | "android",
         identifier?: string,
+        artifact?: BundleUploadArtifact,
     ) => Promise<{downloadUrl: string}>;
-
-    /**
-     * Downloads a previously released update archive so the release command can compute
-     * asset diffs against it. Receives the `downloadUrl` recorded in the release history and
-     * must resolve with the local path of the downloaded file.
-     * Optional: when absent, releases are published without asset diff archives.
-     */
-    bundleDownloader?: (
-        downloadUrl: string,
-        platform: "ios" | "android",
-        identifier?: string,
-    ) => Promise<{ downloadedFilePath: string }>;
 
     /**
      * Interface that must be implemented to retrieve ReleaseHistory information.
@@ -702,4 +717,19 @@ export interface CliConfigInterface {
         platform: "ios" | "android",
         identifier?: string,
     ) => Promise<void>;
+
+    /**
+     * Downloads a previously released update archive so the release command can compute
+     * asset diffs against it. Receives the `downloadUrl` recorded in the release history and
+     * must resolve with the local path of the downloaded file.
+     * Optional: when absent, releases are published without asset diff archives.
+     *
+     * @param archive Information that identifies the released full archive. The release command
+     * supplies its download URL, target binary version, release version, and package hash together.
+     */
+    bundleDownloader?: (
+        archive: BundleDownloadInfo,
+        platform: "ios" | "android",
+        identifier?: string,
+    ) => Promise<{ downloadedFilePath: string }>;
 }

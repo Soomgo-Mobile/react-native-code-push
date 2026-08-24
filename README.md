@@ -351,9 +351,10 @@ Diff archives are published only when all three of these hold:
 - `--diff-base-count` is greater than `0` (it defaults to `3`).
 
 ```ts
-bundleDownloader: async (downloadUrl) => {
-    const downloadedFilePath = path.join(os.tmpdir(), path.basename(new URL(downloadUrl).pathname));
-    // fetch the archive from your storage (S3, GCS, ...) to downloadedFilePath
+bundleDownloader: async (archive, platform, identifier = 'staging') => {
+    const downloadedFilePath = path.join(os.tmpdir(), archive.packageHash);
+    const storageKey = `bundles/${platform}/${identifier}/full-bundle/${archive.packageHash}`;
+    // fetch storageKey from your storage (S3, Supabase, ...) to downloadedFilePath
     return { downloadedFilePath };
 },
 ```
@@ -389,6 +390,7 @@ const Config: CliConfigInterface = {
     source: string,
     platform: "ios" | "android",
     identifier,
+    artifact,
   ): Promise<{downloadUrl: string}> => {
     // ...
   },
@@ -413,7 +415,7 @@ const Config: CliConfigInterface = {
 
   // Only needed to publish asset diff archives (see "4-2. Asset Diff Archives").
   // bundleDownloader: async (
-  //   downloadUrl: string,
+  //   archive,
   //   platform: "ios" | "android",
   //   identifier,
   // ): Promise<{downloadedFilePath: string}> => {
@@ -427,6 +429,9 @@ module.exports = Config;
 
 **`bundleUploader`**
 - Implements a function to upload the bundle file.
+- The optional `artifact` argument identifies the full bundle, binary patch, or asset diff
+  archive. The `release` command always provides it, including the target binary version and
+  the package hashes needed to construct a storage key without parsing a file name.
 - The `downloadUrl` returned by this function is recorded in `ReleaseHistoryInterface` data
   and is used by the library runtime to download the bundle file from this URL.
 - Used in the following cases:
