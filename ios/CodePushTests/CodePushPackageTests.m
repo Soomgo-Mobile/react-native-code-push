@@ -265,9 +265,25 @@ static NSData *CPTestBytes(NSString *text) {
     XCTAssertGreaterThanOrEqual([result[@"applyDurationMs"] doubleValue], 0, @"the attempt is timed");
 }
 
+/* Where a patch attempt does its work, which no attempt may leave behind. */
+- (NSString *)binaryPatchFolder {
+    return [[CodePushPackage getCodePushPath] stringByAppendingPathComponent:@"binary-patch"];
+}
+
+/*
+ * What an attempt that was killed halfway through leaves in the working directory. Only the
+ * download clears this on a patch URL that never reaches the applier, so planting it is what
+ * gives the assertion below something of the download's own to observe.
+ */
+- (void)plantAbandonedBinaryPatchWorkingDirectory {
+    NSString *leftover = [[self binaryPatchFolder] stringByAppendingPathComponent:@"leftover.txt"];
+    CPTestWriteFile(leftover, CPTestBytes(@"half of an earlier restore"));
+    XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath:leftover],
+                  @"the abandoned working directory was not planted");
+}
+
 - (void)assertBinaryPatchFolderRemoved {
-    NSString *workingFolder = [[CodePushPackage getCodePushPath] stringByAppendingPathComponent:@"binary-patch"];
-    XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath:workingFolder],
+    XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath:[self binaryPatchFolder]],
                    @"the working directory outlived the patch attempt");
 }
 
@@ -528,8 +544,13 @@ static NSData *CPTestBytes(NSString *text) {
         @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContents] named:@"patch.zip"],
     } error:&error];
     XCTAssertNil(error);
+    // A patch that installed leaves nothing of its attempt behind. The applier empties its own
+    // working directory on the way out, so what this pins is the outcome and not who reached it.
     [self assertBinaryPatchFolderRemoved];
 
+    // A patch URL that never serves an archive is refused before the applier is ever called, so
+    // whatever an earlier attempt abandoned there is the download's alone to clear up.
+    [self plantAbandonedBinaryPatchWorkingDirectory];
     [self downloadPackage:@{
         @"packageHash": packageHash,
         @"downloadUrl": fullUrl,
