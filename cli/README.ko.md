@@ -25,7 +25,14 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios
 
 ## 설정
 
-CLI는 프로젝트 루트에 `code-push.config.ts` (또는 `.js`) 파일이 필요합니다. 이 파일은 `CliConfigInterface`를 구현하는 객체를 export하며, `bundleUploader`, `getReleaseHistory`, `setReleaseHistory` 세 가지 함수를 정의합니다. 이 함수들을 통해 CLI가 스토리지 백엔드(예: Firebase, Supabase, S3)와 연동됩니다.
+CLI는 프로젝트 루트에 `code-push.config.ts` (또는 `.js`) 파일이 필요합니다. 이 파일은 `CliConfigInterface`를 구현하는 객체를 export하며, `bundleUploader`, `getReleaseHistory`, `setReleaseHistory` 세 가지 함수를 정의합니다. 이 함수들을 통해 CLI가 스토리지 백엔드(예: Firebase, Supabase, S3)와 연동됩니다. asset diff archive를 함께 배포하려면 네 번째 함수 `bundleDownloader`도 구현합니다.
+
+| 함수 | 설명 | 필수 여부 |
+|------|------|-----------|
+| `bundleUploader(source, platform, identifier?)` | 번들 파일을 업로드하고, 내려받을 수 있는 `downloadUrl`을 반환합니다 | 필수 |
+| `getReleaseHistory(targetBinaryVersion, platform, identifier?)` | 바이너리 버전의 릴리스 히스토리를 반환합니다 | 필수 |
+| `setReleaseHistory(targetBinaryVersion, jsonFilePath, releaseInfo, platform, identifier?)` | 바이너리 버전의 릴리스 히스토리를 생성하거나 덮어씁니다 | 필수 |
+| `bundleDownloader(downloadUrl, platform, identifier?)` | 릴리스 히스토리에 기록된 `downloadUrl`에서 배포된 archive를 내려받아 로컬 경로를 `downloadedFilePath`로 반환합니다. [asset diff archive](#asset-diff-archive)를 만들 기준이 되는 base 릴리스를 가져올 때만 사용합니다 | 선택 |
 
 > 전체 구현 예시를 참고하세요:
 > - [AWS S3 + CloudFront 예시](../Examples/CodePushDemoApp/code-push.config.ts)
@@ -109,12 +116,14 @@ npx code-push release [options]
 | `--output-metro-dir <string>` | Hermes 컴파일 전 Metro JS 번들과 소스맵을 복사할 디렉토리 | — |
 | `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. 이 번들에 대한 binary patch 번들을 함께 배포하고, Hermes 컴파일을 이 번들에 정렬합니다 | — |
 | `--on-oversized-patch <policy>` | patch 번들이 full 번들보다 작지 않을 때의 동작: `skip`은 full 번들만 배포하고, `fail`은 업로드 전에 릴리스를 중단합니다 | `skip` |
+| `--diff-base-count <number>` | [asset diff archive](#asset-diff-archive)를 만들 최근 릴리스 개수 (`0`이면 배포하지 않음). 설정 파일의 `bundleDownloader`와 `--binary-bundle-path` 릴리스가 필요합니다 | `3` |
 
-`--binary-bundle-path`를 사용하면 플랫폼별로 두 개의 artifact를 업로드합니다. `packageHash`
-이름의 full 번들과, 바이너리에 포함된 번들과의 차이만 담은 `<packageHash>-patch.zip` patch
-번들입니다. patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가
-포함되어, patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와
-절감량은 업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
+`--binary-bundle-path`를 사용하면 플랫폼별로 `packageHash` 이름의 full 번들과 바이너리에 포함된
+번들과의 차이만 담은 `<packageHash>-patch.zip` patch 번들, 두 개의 artifact를 업로드합니다.
+[asset diff archive](#asset-diff-archive)를 함께 배포한다면 archive마다 하나를 더 업로드합니다.
+patch 번들에는 업데이트 복원 방법을 담은 `codepush-binary-patch.json` manifest가 포함되어,
+patch를 적용하면 full 번들과 동일한 `packageHash`가 됩니다. 두 artifact의 크기와 절감량은
+업로드 전에 출력됩니다. 릴리스 히스토리 항목에는 full 번들 URL과 함께 patch 번들을
 내려받을 수 있는 URL이 기록됩니다.
 
 클라이언트는 patch 번들이 있는 릴리스라면 patch로 업데이트를 설치하고, patch를 적용할 수
@@ -163,6 +172,26 @@ patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습�
 업로드를 시작하기 전에 릴리스를 실패시킵니다. 기록이 없는 base 번들은 기존과 동일하게
 동작하고, 읽을 수 없는 기록은 경고만 남깁니다.
 
+#### asset diff archive
+
+patch 번들도 업데이트의 asset을 모두 담지만, 이전 업데이트를 이미 설치한 클라이언트에는 그
+asset이 대부분 남아 있습니다. 그래서 설정 파일에 `bundleDownloader`가 있으면 binary
+patch 릴리스는 최근 릴리스마다 artifact를 하나 더 배포합니다.
+`<packageHash>-diff-<basePackageHash>.zip`은 번들 patch, 그 릴리스에 없는 asset, 삭제해야 하는
+파일 목록 manifest만 담습니다. 해당 릴리스를 설치한 클라이언트는 설치된 업데이트를 복사한 뒤
+patch와 manifest를 적용하므로, full 번들과 동일한 `packageHash`가 됩니다.
+
+`--diff-base-count`는 최근 릴리스 몇 개를 base로 삼을지 정합니다. 기본값은 `3`이고, `0`이면
+diff를 배포하지 않습니다. CLI는 base마다 `bundleDownloader`로 archive를 내려받아 릴리스
+히스토리에 기록된 `packageHash`와 실제 해시가 같은지 확인합니다. 내려받지 못하거나 해시가 다른
+base는 경고를 남기고 건너뛰며, patch 번들보다 작지 않은 diff는 배포하지 않습니다. 어느 경우든
+릴리스는 full 번들과 patch 번들을 그대로 배포하고 diff archive 개수만 줄어듭니다.
+
+배포된 diff archive는 릴리스 히스토리 항목의 `diffPackages`에 base 릴리스의 `packageHash`를
+키로 기록됩니다. 클라이언트는 실행 중인 업데이트를 기준으로 만든 diff archive를 내려받습니다.
+바이너리를 실행 중이거나 이 릴리스가 diff를 만들지 않은 업데이트라면 patch 번들을 내려받고,
+내려받은 archive를 적용할 수 없으면 full 번들을 내려받습니다.
+
 **예시:**
 
 ```bash
@@ -186,6 +215,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/mai
 
 # 동일하지만, patch가 더 작지 않으면 릴리스를 실패시킴
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --on-oversized-patch fail
+
+# 최근 릴리스 5개를 base로 삼아 asset diff archive까지 배포 (`bundleDownloader` 필요)
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-base-count 5
 ```
 
 ---
@@ -291,13 +323,20 @@ npx code-push show-history -b 1.0.0 -p ios
     "mandatory": true,
     "downloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...",
     "packageHash": "d4e5f6...",
-    "binaryPatchDownloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...-patch.zip"
+    "binaryPatchDownloadUrl": "https://storage.example.com/bundles/ios/staging/d4e5f6...-patch.zip",
+    "diffPackages": {
+      "a1b2c3...": "https://storage.example.com/bundles/ios/staging/d4e5f6...-diff-a1b2c3....zip"
+    }
   }
 }
 ```
 
 `binaryPatchDownloadUrl`은 `--binary-bundle-path`로 배포한 릴리스에만 기록됩니다. 그 외의
 릴리스에는 이 필드가 없으며, binary patch 이전에 작성된 히스토리도 그대로 유효합니다.
+
+`diffPackages`는 binary patch 릴리스가 [asset diff archive](#asset-diff-archive)까지 배포했을 때만
+기록되며, archive마다 한 항목씩 담습니다. 키는 diff 대상 릴리스의 `packageHash`, 값은 그
+archive를 내려받을 수 있는 URL입니다. diff archive 없이 배포한 릴리스에는 이 필드도 없습니다.
 
 ## 일반적인 워크플로우
 
