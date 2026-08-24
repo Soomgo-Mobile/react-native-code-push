@@ -29,10 +29,12 @@ You need a `code-push.config.ts` (or `.js`) file at your project root. It export
 
 | Function | Description | Required |
 |----------|-------------|----------|
-| `bundleUploader(source, platform, identifier?)` | Uploads a bundle file and returns the `downloadUrl` it can be downloaded from | Yes |
+| `bundleUploader(source, platform, identifier?, artifact?)` | Uploads a bundle file and returns the `downloadUrl` it can be downloaded from. `artifact` identifies the full bundle, binary patch, or asset diff archive, including its target binary version and package hashes | Yes |
 | `getReleaseHistory(targetBinaryVersion, platform, identifier?)` | Returns the release history of a binary version | Yes |
 | `setReleaseHistory(targetBinaryVersion, jsonFilePath, releaseInfo, platform, identifier?)` | Creates or overwrites the release history of a binary version | Yes |
-| `bundleDownloader(downloadUrl, platform, identifier?)` | Downloads a released archive from a `downloadUrl` recorded in the release history and returns its local path as `downloadedFilePath`. Only used to fetch the releases that [asset diff archives](#asset-diff-archives) are built against | No |
+| `bundleDownloader(archive, platform, identifier?)` | Downloads a released archive and returns its local path as `downloadedFilePath`. `archive` contains its `downloadUrl`, target binary version, release version, and package hash, so storage keys do not need to be derived from the URL. Only used to fetch the releases that [asset diff archives](#asset-diff-archives) are built against | No |
+
+When deriving storage keys from `artifact`, you can omit `targetBinaryVersion` for a full bundle: its `packageHash` identifies the same contents across target binary versions. Binary patches and asset diff archives must include it because their contents depend on the JS bundle embedded in that target binary.
 
 > Implementation examples:
 > - [AWS S3 + CloudFront](../Examples/CodePushDemoApp/code-push.config.ts)

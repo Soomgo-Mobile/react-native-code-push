@@ -126,14 +126,14 @@ e2e/
 ### Mock Server
 
 Instead of a real CodePush server, tests use a local Express server that serves:
-- **Bundles**: `mock-server/data/bundles/{platform}/{identifier}/`
+- **Bundles**: `mock-server/data/bundles/{platform}/{identifier}/full-bundle/{packageHash}` and `mock-server/data/bundles/{platform}/{identifier}/{artifactType}/{targetBinaryVersion}/`
 - **Release history**: `mock-server/data/histories/{platform}/{identifier}/{version}.json`
 
-The `code-push.config.local.ts` template routes all CLI operations (upload, history read/write) to this local filesystem, and the app's `CODEPUSH_HOST` is patched to point at the mock server. A release published with a binary patch stores a second archive next to the full one, named `{packageHash}-patch.zip`.
+The `code-push.config.local.ts` template routes all CLI operations (upload, history read/write) to this local filesystem, and the app's `CODEPUSH_HOST` is patched to point at the mock server. It uses the uploader's artifact metadata for the storage key, so its layout does not depend on archive filenames.
 
 The server records every request it answers. Reading that log back is how the runner tells apart cases the screen cannot: which update archives the app downloaded, and in which order.
 
-When the config template is given `E2E_ARTIFACT_LOG_PATH`, it also records every artifact it stores (outside the served directory), which the runner reads back to assert that bundles and release histories keep landing under `{platform}/{identifier}`.
+When the config template is given `E2E_ARTIFACT_LOG_PATH`, it also records every artifact it stores (outside the served directory), which the runner reads back to assert that bundles and release histories keep landing under their metadata-based paths.
 
 ### Release Markers
 

@@ -29,10 +29,12 @@ CLI는 프로젝트 루트에 `code-push.config.ts` (또는 `.js`) 파일이 필
 
 | 함수 | 설명 | 필수 여부 |
 |------|------|-----------|
-| `bundleUploader(source, platform, identifier?)` | 번들 파일을 업로드하고, 내려받을 수 있는 `downloadUrl`을 반환합니다 | 필수 |
+| `bundleUploader(source, platform, identifier?, artifact?)` | 번들 파일을 업로드하고, 내려받을 수 있는 `downloadUrl`을 반환합니다. `artifact`에는 full bundle, binary patch, asset diff archive의 종류와 대상 바이너리 버전, package hash가 담깁니다 | 필수 |
 | `getReleaseHistory(targetBinaryVersion, platform, identifier?)` | 바이너리 버전의 릴리스 히스토리를 반환합니다 | 필수 |
 | `setReleaseHistory(targetBinaryVersion, jsonFilePath, releaseInfo, platform, identifier?)` | 바이너리 버전의 릴리스 히스토리를 생성하거나 덮어씁니다 | 필수 |
-| `bundleDownloader(downloadUrl, platform, identifier?)` | 릴리스 히스토리에 기록된 `downloadUrl`에서 배포된 archive를 내려받아 로컬 경로를 `downloadedFilePath`로 반환합니다. [asset diff archive](#asset-diff-archive)를 만들 기준이 되는 base 릴리스를 가져올 때만 사용합니다 | 선택 |
+| `bundleDownloader(archive, platform, identifier?)` | 배포된 archive를 내려받아 로컬 경로를 `downloadedFilePath`로 반환합니다. `archive`에는 `downloadUrl`, 기준 full bundle의 대상 바이너리 버전, 릴리스 버전과 package hash가 담기므로 URL을 파싱해 스토리지 키를 만들 필요가 없습니다. [asset diff archive](#asset-diff-archive)를 만들 기준 릴리스를 가져올 때만 사용합니다 | 선택 |
+
+`artifact`로 스토리지 키를 만들 때 full bundle에는 `targetBinaryVersion`을 넣지 않아도 됩니다. `packageHash`가 대상 바이너리 버전과 무관하게 같은 내용을 식별하기 때문입니다. binary patch와 asset diff archive는 대상 바이너리에 포함된 JS bundle을 기준으로 만들어지므로 반드시 이 값을 포함해야 합니다.
 
 > 전체 구현 예시를 참고하세요:
 > - [AWS S3 + CloudFront 예시](../Examples/CodePushDemoApp/code-push.config.ts)

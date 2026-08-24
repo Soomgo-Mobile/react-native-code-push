@@ -126,14 +126,14 @@ e2e/
 ### Mock 서버
 
 실제 CodePush 서버 대신, 로컬 Express 서버가 다음을 서빙합니다:
-- **번들**: `mock-server/data/bundles/{platform}/{identifier}/`
+- **번들**: `mock-server/data/bundles/{platform}/{identifier}/full-bundle/{packageHash}`와 `mock-server/data/bundles/{platform}/{identifier}/{artifactType}/{targetBinaryVersion}/`
 - **릴리스 히스토리**: `mock-server/data/histories/{platform}/{identifier}/{version}.json`
 
-`code-push.config.local.ts` 템플릿은 모든 CLI 작업(업로드, 히스토리 읽기/쓰기)을 로컬 파일시스템으로 라우팅하며, 앱의 `CODEPUSH_HOST`는 mock 서버를 가리키도록 패치됩니다. 바이너리 패치와 함께 배포된 릴리스는 full archive 옆에 `{packageHash}-patch.zip` 이름으로 두 번째 archive를 저장합니다.
+`code-push.config.local.ts` 템플릿은 모든 CLI 작업(업로드, 히스토리 읽기/쓰기)을 로컬 파일시스템으로 라우팅하며, 앱의 `CODEPUSH_HOST`는 mock 서버를 가리키도록 패치됩니다. 업로더가 전달한 artifact metadata로 스토리지 키를 만들므로 archive 파일명에 의존하지 않습니다.
 
 서버는 응답한 모든 요청을 기록합니다. 러너는 이 기록을 되읽어, 화면으로는 구분할 수 없는 것 — 앱이 어떤 업데이트 archive를 어떤 순서로 내려받았는지 — 를 검증합니다.
 
-`E2E_ARTIFACT_LOG_PATH`가 주어지면 템플릿은 저장한 모든 artifact도 (서빙 디렉터리 바깥에) 기록하며, 러너는 이를 되읽어 번들과 릴리스 히스토리가 계속 `{platform}/{identifier}` 아래에 저장되는지 검증합니다.
+`E2E_ARTIFACT_LOG_PATH`가 주어지면 템플릿은 저장한 모든 artifact도 (서빙 디렉터리 바깥에) 기록하며, 러너는 이를 되읽어 번들과 릴리스 히스토리가 metadata 기반 경로에 저장되는지 검증합니다.
 
 ### 릴리스 마커
 
