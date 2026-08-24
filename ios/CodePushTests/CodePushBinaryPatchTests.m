@@ -11,7 +11,6 @@
  */
 
 #import <XCTest/XCTest.h>
-#import "CodePush.h"
 #import "CodePushBinaryPatch.h"
 #import "CodePushTestHelpers.h"
 

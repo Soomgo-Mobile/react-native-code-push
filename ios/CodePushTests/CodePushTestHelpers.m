@@ -1,7 +1,6 @@
 #import "CodePushTestHelpers.h"
 #import <CommonCrypto/CommonDigest.h>
 #import <SSZipArchive/SSZipArchive.h>
-#import <XCTest/XCTest.h>
 #import <objc/runtime.h>
 
 NSString *CPTestSha256Hex(NSData *data) {

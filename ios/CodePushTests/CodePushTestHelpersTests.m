@@ -6,7 +6,7 @@
 
 @implementation CodePushTestHelpersTests
 
-/* Reference Facts의 검증 벡터: 독립 구현이 프로덕션과 같은 값을 내는지 고정한다. */
+/* The known vector: this independent implementation has to agree with the production hash. */
 - (void)testFolderHashMatchesTheKnownVector {
     NSString *folder = CPTestMakeTempDirectory();
     CPTestWriteFile([folder stringByAppendingPathComponent:@"CodePush/a.txt"],
