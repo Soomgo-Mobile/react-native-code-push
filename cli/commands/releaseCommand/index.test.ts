@@ -12,6 +12,7 @@ jest.mock("./release.js");
 jest.mock("../../utils/fsUtils.js", () => ({
     findAndReadConfigFile: () => ({
         bundleUploader: async () => ({ downloadUrl: 'https://cdn.example.com/bundle' }),
+        bundleDownloader: async () => ({ downloadedFilePath: '/tmp/base.zip' }),
         getReleaseHistory: async () => ({}),
         setReleaseHistory: async () => undefined,
     }),
@@ -29,6 +30,8 @@ const ARG_INDEX = {
     bundleDirectory: 16,
     baseBundlePath: 19,
     onOversizedPatch: 20,
+    bundleDownloader: 21,
+    diffBaseCount: 22,
 } as const;
 
 /**
@@ -111,6 +114,35 @@ describe("release command options", () => {
     it("rejects an oversized patch policy it does not know", async () => {
         await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--on-oversized-patch', 'ask']))
             .rejects.toThrow(/--on-oversized-patch.*'ask'.*skip, fail/s);
+
+        const { release } = await import("./release.js");
+        expect(jest.mocked(release)).not.toHaveBeenCalled();
+    });
+
+    it("hands the release the bundle downloader from the config and three diff bases by default", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1']);
+
+        expect(typeof args[ARG_INDEX.bundleDownloader]).toBe('function');
+        expect(args[ARG_INDEX.diffBaseCount]).toBe(3);
+    });
+
+    it("passes the chosen asset diff base count through to the release", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--diff-base-count', '5']);
+
+        expect(args[ARG_INDEX.diffBaseCount]).toBe(5);
+    });
+
+    it.each([
+        ['is negative', '-1'],
+        ['is not a number at all', 'many'],
+    ])("rejects an asset diff base count that %s", async (_caseName, value) => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+            throw new Error(`process.exit(${code})`);
+        }) as never);
+
+        await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--diff-base-count', value]))
+            .rejects.toThrow('process.exit(1)');
 
         const { release } = await import("./release.js");
         expect(jest.mocked(release)).not.toHaveBeenCalled();
