@@ -34,6 +34,7 @@ import {
   type DownloadedArchive,
 } from "./download-order";
 import {
+  type AssetMarker,
   clearReleaseMarker,
   getCodePushReleaseArgs,
   prepareBundle,
@@ -89,7 +90,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
 
   const releasePatchUpdate = (
     releaseVersion: string,
-    extraOptions: { assetMarkerVersion?: string; mandatory?: boolean; binaryBundlePath?: string } = {},
+    extraOptions: { assetMarkers?: AssetMarker[]; mandatory?: boolean; binaryBundlePath?: string } = {},
   ) => prepareBundle(appPath, platform, releaseIdentifier, framework, {
     releaseVersion,
     releaseMarkerVersion: releaseVersion,
@@ -127,7 +128,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       flowPath: installUpdateFlow,
       expectedDownloads: ["patch"],
       prepare: async () => {
-        await releasePatchUpdate("1.3.2", { assetMarkerVersion: "1.3.2" });
+        await releasePatchUpdate("1.3.2", { assetMarkers: [{ label: "1.3.2" }] });
         assertPatchArchiveCarriesAssets(
           "patch update carrying assets installs",
           findPatchArchive(platform, releaseIdentifier),

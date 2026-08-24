@@ -1,11 +1,13 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- This template has environment-specific dependencies.
 // @ts-nocheck
 import {
+  type BundleDownloadInfo,
   type BundleUploadArtifact,
   CliConfigInterface,
   ReleaseHistoryInterface,
 } from "@bravemobile/react-native-code-push";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 const MOCK_DATA_DIR = process.env.E2E_MOCK_DATA_DIR;
@@ -98,6 +100,26 @@ const Config: CliConfigInterface = {
       return {} as ReleaseHistoryInterface;
     }
     return JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+  },
+
+  // Hands the release command a previously released archive, which is what it computes
+  // asset diffs against. The mock server serves MOCK_DATA_DIR directly, so the URL path
+  // recorded in the history is the stored file's path.
+  bundleDownloader: async (
+    archive: BundleDownloadInfo,
+  ): Promise<{ downloadedFilePath: string }> => {
+    const urlPath = decodeURIComponent(new URL(archive.downloadUrl).pathname).replace(/^\//, "");
+    const sourcePath = path.join(MOCK_DATA_DIR, urlPath);
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`Released archive not found in the mock data: ${sourcePath}`);
+    }
+
+    // Copied into a directory of its own: bases of one release share a file name shape,
+    // and the command may download several of them side by side.
+    const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), "codepush-e2e-base-"));
+    const downloadedFilePath = path.join(downloadDir, path.basename(sourcePath));
+    fs.copyFileSync(sourcePath, downloadedFilePath);
+    return { downloadedFilePath };
   },
 
   setReleaseHistory: async (
