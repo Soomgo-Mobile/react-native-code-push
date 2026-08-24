@@ -1,0 +1,565 @@
+/*
+ * Downloading an update's archive and installing what comes out of it.
+ *
+ * These drive the whole pipeline - download, unzip, restore, merge, folder hash, metadata -
+ * against archives served from disk, with only the two seams that reach into the app binary
+ * replaced. The wiring between those steps is where an archive that is not what it claims
+ * has to be caught, so nothing in between stands in for the real thing.
+ */
+
+#import <XCTest/XCTest.h>
+#import "CodePush.h"
+#import "CodePushBinaryPatch.h"
+#import "CodePushTestHelpers.h"
+
+/*
+ * The package's path guard and its root on disk are internal to the class. Objective-C
+ * dispatch finds them at runtime, so declaring them here is all a test needs.
+ */
+@interface CodePushPackage (TestAccess)
++ (NSString *)pathInsideFolder:(NSString *)folderPath relativePath:(NSString *)relativePath;
++ (NSString *)getCodePushPath;
+@end
+
+static NSString *const ExpectedBundleFileName = @"main.jsbundle";
+/* The metadata the install writes last, which is not part of the contents the hash is for. */
+static NSString *const UpdateMetadataFileName = @"app.json";
+
+static NSData *CPTestBytes(NSString *text) {
+    return [text dataUsingEncoding:NSUTF8StringEncoding];
+}
+
+@interface CodePushPackageTests : XCTestCase
+@property (nonatomic, copy) NSString *servingFolder;   // the archives, served over file://
+@property (nonatomic, copy) NSString *binaryFolder;    // what the app binary ships with
+@property (nonatomic, strong) NSMutableArray *progressEvents;
+@property (nonatomic, strong) NSMutableArray<NSString *> *temporaryFolders;
+@property (nonatomic) IMP originalBinaryBundleURL;
+@property (nonatomic) IMP originalBundleAssetsPath;
+@end
+
+@implementation CodePushPackageTests
+
+- (void)setUp {
+    [super setUp];
+    [CodePush setUsingTestConfiguration:YES];
+    [CodePushPackage clearUpdates];
+    self.temporaryFolders = [NSMutableArray array];
+    self.servingFolder = [self makeTemporaryFolder];
+    self.progressEvents = [NSMutableArray array];
+
+    // The bundle that shipped inside the binary is the one the patch fixture was computed
+    // against, and the assets beside it are what a diff with nothing installed falls back on.
+    self.binaryFolder = [self makeTemporaryFolder];
+    CPTestWriteFile([self.binaryFolder stringByAppendingPathComponent:ExpectedBundleFileName],
+                    CPTestFixture(@"base.bundle"));
+    CPTestWriteFile([self.binaryFolder stringByAppendingPathComponent:@"assets/binary.png"],
+                    CPTestBytes(@"an asset that shipped inside the binary"));
+
+    NSURL *bundleURL = [NSURL fileURLWithPath:[self.binaryFolder stringByAppendingPathComponent:ExpectedBundleFileName]];
+    NSString *assetsPath = [self.binaryFolder stringByAppendingPathComponent:@"assets"];
+    self.originalBinaryBundleURL = CPTestReplaceClassMethod([CodePush class], @selector(binaryBundleURL),
+                                                            ^NSURL *(id self) { return bundleURL; });
+    self.originalBundleAssetsPath = CPTestReplaceClassMethod([CodePush class], @selector(bundleAssetsPath),
+                                                             ^NSString *(id self) { return assetsPath; });
+}
+
+- (void)tearDown {
+    CPTestRestoreClassMethod([CodePush class], @selector(binaryBundleURL), self.originalBinaryBundleURL);
+    CPTestRestoreClassMethod([CodePush class], @selector(bundleAssetsPath), self.originalBundleAssetsPath);
+    [CodePushPackage clearUpdates];
+    [CodePush setUsingTestConfiguration:NO];
+    for (NSString *folder in self.temporaryFolders) {
+        [[NSFileManager defaultManager] removeItemAtPath:folder error:nil];
+    }
+    [super tearDown];
+}
+
+#pragma mark - Running a download
+
+/* Every folder a scenario stages, so a run leaves nothing of itself behind. */
+- (NSString *)makeTemporaryFolder {
+    NSString *folder = CPTestMakeTempDirectory();
+    [self.temporaryFolders addObject:folder];
+    return folder;
+}
+
+/* Zips a staged folder into the serving folder and returns the URL it is served from. */
+- (NSString *)serveArchive:(NSString *)stagingFolder named:(NSString *)name {
+    NSString *zipPath = [self.servingFolder stringByAppendingPathComponent:name];
+    XCTAssertTrue(CPTestZipFolderContents(stagingFolder, zipPath), @"%@ could not be zipped", stagingFolder);
+    return [[NSURL fileURLWithPath:zipPath] absoluteString];
+}
+
+/* The URL of a file served as it is, which is how an archive that is not one arrives. */
+- (NSString *)serveBytes:(NSData *)body named:(NSString *)name {
+    NSString *path = [self.servingFolder stringByAppendingPathComponent:name];
+    CPTestWriteFile(path, body);
+    return [[NSURL fileURLWithPath:path] absoluteString];
+}
+
+/* The URL of a file the serving folder does not hold, which no download can complete. */
+- (NSString *)urlOfMissingFileNamed:(NSString *)name {
+    return [[NSURL fileURLWithPath:[self.servingFolder stringByAppendingPathComponent:name]] absoluteString];
+}
+
+/* Runs a download to its end and hands back what it reported about the patch attempt. */
+- (NSDictionary *)downloadPackage:(NSDictionary *)updatePackage error:(NSError **)outError {
+    dispatch_queue_t queue = dispatch_queue_create("codepush.test.download", DISPATCH_QUEUE_SERIAL);
+    XCTestExpectation *finished = [self expectationWithDescription:@"download finished"];
+    __block NSDictionary *patchResult = nil;
+    __block NSError *failure = nil;
+    // The callbacks all arrive on the serial queue above, so the events they record are
+    // written there and only read once the wait below has returned.
+    NSMutableArray *events = self.progressEvents;
+    [CodePushPackage downloadPackage:updatePackage
+              expectedBundleFileName:ExpectedBundleFileName
+                      operationQueue:queue
+                    progressCallback:^(long long expected, long long received) {
+                        [events addObject:@[@(expected), @(received)]];
+                    }
+                        doneCallback:^(NSDictionary *binaryPatchResult) {
+                            patchResult = binaryPatchResult;
+                            [finished fulfill];
+                        }
+                        failCallback:^(NSError *error) {
+                            failure = error;
+                            [finished fulfill];
+                        }];
+    [self waitForExpectations:@[finished] timeout:60];
+    if (outError != NULL) { *outError = failure; }
+    return patchResult;
+}
+
+/*
+ * Downloads an update in full and makes it the current package, which is what the asset
+ * diff of a later release is merged into.
+ */
+- (NSString *)installPackageWithContents:(NSString *)stagingFolder {
+    NSString *packageHash = CPTestFolderHash(stagingFolder);
+    NSError *error = nil;
+    [self downloadPackage:@{ @"packageHash": packageHash,
+                             @"downloadUrl": [self serveArchive:stagingFolder named:@"installed.zip"] }
+                    error:&error];
+    XCTAssertNil(error);
+    XCTAssertTrue([CodePushPackage installPackage:@{ @"packageHash": packageHash }
+                              removePendingUpdate:NO
+                                            error:&error]);
+    XCTAssertNil(error);
+    return packageHash;
+}
+
+#pragma mark - Archive staging
+
+/* Writes the entries of an archive - or of the update they add up to - into a folder. */
+- (NSString *)stageContents:(NSDictionary<NSString *, NSData *> *)contents {
+    NSString *staging = [self makeTemporaryFolder];
+    for (NSString *relativePath in contents) {
+        CPTestWriteFile([staging stringByAppendingPathComponent:relativePath], contents[relativePath]);
+    }
+    return staging;
+}
+
+- (NSData *)patchManifest {
+    return [NSJSONSerialization dataWithJSONObject:CPTestValidPatchManifest()
+                                           options:kNilOptions
+                                             error:nil];
+}
+
+/*
+ * The update's full archive, which is also the contents every archive of it has to add up
+ * to and so the folder the package hash is computed over.
+ */
+- (NSString *)stageFullArchiveContents {
+    return [self stageContents:@{
+        @"CodePush/main.jsbundle": CPTestFixture(@"target.bundle"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+    }];
+}
+
+/* The same update as a patch archive: the bundle replaced by a patch of it and a manifest. */
+- (NSString *)stagePatchArchiveContents {
+    return [self stageContents:@{
+        @"CodePush/codepush-binary-patch.json": [self patchManifest],
+        @"CodePush/main.jsbundle.patch": CPTestFixture(@"update.patch"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+    }];
+}
+
+/* The full archive of the release that is installed when the asset diff arrives. */
+- (NSString *)stageInstalledArchiveContents {
+    return [self stageContents:@{
+        @"CodePush/main.jsbundle": CPTestBytes(@"the bundle of the update already installed"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+        @"CodePush/assets/legacy.png": CPTestBytes(@"an image the newer update leaves behind"),
+    }];
+}
+
+/*
+ * An asset diff archive: the patch archive carrying only the assets the update changes, plus
+ * the manifest of the files to delete at the archive root, beside the contents directory the
+ * manifest's paths are relative to. An asset the installed package already holds unchanged is
+ * not shipped at all - the client copies it over.
+ */
+- (NSString *)stageAssetDiffArchiveContentsDeleting:(NSArray<NSString *> *)deletedFiles {
+    return [self stageContents:@{
+        @"hotcodepush.json": [NSJSONSerialization dataWithJSONObject:@{ @"deletedFiles": deletedFiles }
+                                                             options:kNilOptions
+                                                               error:nil],
+        @"CodePush/codepush-binary-patch.json": [self patchManifest],
+        @"CodePush/main.jsbundle.patch": CPTestFixture(@"update.patch"),
+        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
+    }];
+}
+
+/* What an asset diff merged into the installed package has to add up to. */
+- (NSString *)stageAssetDiffTargetContents {
+    return [self stageContents:@{
+        @"CodePush/main.jsbundle": CPTestFixture(@"target.bundle"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
+    }];
+}
+
+#pragma mark - Asserting the outcome
+
+/* Every file under a folder, keyed by its path relative to that folder. */
+- (NSDictionary<NSString *, NSData *> *)filesUnder:(NSString *)folder {
+    NSMutableDictionary *files = [NSMutableDictionary dictionary];
+    NSDirectoryEnumerator *entries = [[NSFileManager defaultManager] enumeratorAtPath:folder];
+    for (NSString *relativePath in entries) {
+        if ([[entries.fileAttributes fileType] isEqualToString:NSFileTypeDirectory]) {
+            continue;
+        }
+        files[relativePath] = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:relativePath]];
+    }
+
+    return files;
+}
+
+/*
+ * The update installed under a hash is the staged contents and nothing else, which is the
+ * whole question for an update that was rebuilt from parts of two archives.
+ */
+- (void)assertInstalledContentsOf:(NSString *)packageHash matchStaging:(NSString *)stagingFolder {
+    NSMutableDictionary *installed = [[self filesUnder:[CodePushPackage getPackageFolderPath:packageHash]] mutableCopy];
+    // Written last, so its presence also says the folder hash check passed.
+    XCTAssertNotNil(installed[UpdateMetadataFileName], @"the update was installed without its metadata");
+    [installed removeObjectForKey:UpdateMetadataFileName];
+
+    NSDictionary *expected = [self filesUnder:stagingFolder];
+    XCTAssertEqualObjects([NSSet setWithArray:installed.allKeys], [NSSet setWithArray:expected.allKeys],
+                          @"the installed files");
+    // Hashed rather than compared as data, so that a mismatch reports two hashes instead of
+    // two bundles.
+    for (NSString *relativePath in expected) {
+        XCTAssertEqualObjects(CPTestSha256Hex(installed[relativePath]), CPTestSha256Hex(expected[relativePath]),
+                              @"the contents of %@", relativePath);
+    }
+}
+
+/* The result of an attempt the update had to be downloaded in full after. */
+- (void)assertFallbackResult:(NSDictionary *)result reason:(NSString *)expectedReason {
+    XCTAssertEqualObjects(result[@"status"], @"fallback");
+    XCTAssertEqualObjects(result[@"fallbackReason"], expectedReason);
+    XCTAssertGreaterThanOrEqual([result[@"applyDurationMs"] doubleValue], 0, @"the attempt is timed");
+}
+
+- (void)assertBinaryPatchFolderRemoved {
+    NSString *workingFolder = [[CodePushPackage getCodePushPath] stringByAppendingPathComponent:@"binary-patch"];
+    XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath:workingFolder],
+                   @"the working directory outlived the patch attempt");
+}
+
+#pragma mark - Installing
+
+- (void)testInstallsAnUpdateFromItsFullArchive {
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertNil(result, @"a download that never had a patch to try reported one anyway");
+    [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
+}
+
+- (void)testInstallsAnUpdateFromItsBinaryPatchArchive {
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContents] named:@"patch.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertNil(result[@"fallbackReason"], @"an applied patch has nothing to report a reason for");
+    XCTAssertGreaterThanOrEqual([result[@"applyDurationMs"] doubleValue], 0, @"the apply is timed");
+    [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
+    [self assertBinaryPatchFolderRemoved];
+}
+
+#pragma mark - Falling back to the full archive
+
+- (void)testFallsBackToTheFullArchiveWhenThePatchUrlDoesNotServeAnArchive {
+    // A CDN that answers an error page with a 200 is the realistic way this happens.
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveBytes:CPTestBytes(@"<html><body>404 Not Found</body></html>")
+                                              named:@"patch.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
+}
+
+- (void)testFallsBackToTheFullArchiveWhenThePatchArchiveCannotBeDownloaded {
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self urlOfMissingFileNamed:@"patch.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    // A patch archive that never arrived is not one of the outcomes the appliers have a word
+    // for, and no word is invented for it here.
+    [self assertFallbackResult:result reason:nil];
+    [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
+}
+
+- (void)testFallsBackToTheFullArchiveWhenApplyingThePatchFails {
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+    NSString *patchStaging = [self stagePatchArchiveContents];
+    CPTestWriteFile([patchStaging stringByAppendingPathComponent:@"CodePush/main.jsbundle.patch"],
+                    CPTestBytes(@"the difference between the two"));
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:patchStaging named:@"patch.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonPatchApplyFailed];
+    [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
+}
+
+- (void)testReportsAPackageVerificationFailureWhenTheRestoredUpdateIsNotTheOneTheMetadataPromises {
+    // The patch archive carries an asset the release was not published with, so the bundle it
+    // restores is the promised one while the update it makes is not.
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+    NSString *patchStaging = [self stagePatchArchiveContents];
+    CPTestWriteFile([patchStaging stringByAppendingPathComponent:@"CodePush/assets/extra.png"],
+                    CPTestBytes(@"an image from some other release"));
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:patchStaging named:@"patch.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonPackageVerificationFailed];
+    [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
+}
+
+#pragma mark - Merging an asset diff
+
+- (void)testInstallsAnAssetDiffUpdateByMergingWithTheInstalledPackage {
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[@"CodePush/assets/legacy.png"]]
+                                                named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    // The asset the diff leaves out is carried over from the installed package, and the one
+    // its manifest names is not.
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testFallsBackToTheFullArchiveWhenTheAssetDiffMergeYieldsTheWrongContents {
+    // A manifest that deletes an asset the update keeps: the merge ends up missing a file the
+    // release was published with, and the update is not the one the hash is for.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[@"CodePush/assets/logo.png"]]
+                                                named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonPackageVerificationFailed];
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testCopiesTheBundledResourcesWhenAnAssetDiffArrivesWithNoInstalledPackage {
+    // The platforms part here. With nothing installed there is no package to merge into, so
+    // this one copies the bundle and the assets out of the app binary and merges the diff
+    // into those - the update installs. The other platform has no such copy to make: its
+    // merge leaves the update short of the files the diff counts on, the folder hash refuses
+    // it, and the full archive is downloaded instead.
+    NSString *updateStaging = [self stageContents:@{
+        @"CodePush/main.jsbundle": CPTestFixture(@"target.bundle"),
+        @"CodePush/assets/binary.png": CPTestBytes(@"an asset that shipped inside the binary"),
+        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
+    }];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[]]
+                                                named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testLeavesAFileOutsideThePackageFolderAloneWhenTheAssetDiffManifestNamesOne {
+    // A manifest entry that climbs out of the package folder: the client is not the one that
+    // wrote it, so it must not act on it.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *sentinelPath = [[[CodePushPackage getCodePushPath] stringByDeletingLastPathComponent]
+                              stringByAppendingPathComponent:@"sentinel.txt"];
+    CPTestWriteFile(sentinelPath, CPTestBytes(@"a file the update has no business deleting"));
+    // Nothing is deleted from the package, so the merge keeps everything the installed one had.
+    NSString *updateStaging = [self stageContents:@{
+        @"CodePush/main.jsbundle": CPTestFixture(@"target.bundle"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+        @"CodePush/assets/legacy.png": CPTestBytes(@"an image the newer update leaves behind"),
+        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
+    }];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[@"../../sentinel.txt"]]
+                                                named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath:sentinelPath],
+                  @"a manifest entry reaching outside the package folder deleted %@", sentinelPath);
+    // Skipping it costs the update nothing, so the diff still installs.
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+
+    // The sentinel sits beside the test packages rather than inside them, so clearing the
+    // updates does not take it away.
+    [[NSFileManager defaultManager] removeItemAtPath:sentinelPath error:nil];
+}
+
+#pragma mark - Reporting the download
+
+- (void)testAnnouncesEachDownloadOfAFallbackAsItsOwnProgressStream {
+    NSString *fullStaging = [self stageFullArchiveContents];
+
+    NSError *error = nil;
+    [self downloadPackage:@{
+        @"packageHash": CPTestFolderHash(fullStaging),
+        @"downloadUrl": [self serveArchive:fullStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveBytes:CPTestBytes(@"<html><body>404 Not Found</body></html>")
+                                              named:@"patch.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    NSMutableArray *completedTotals = [NSMutableArray array];
+    for (NSArray *event in self.progressEvents) {
+        if ([event[0] longLongValue] > 0 && [event[0] isEqualToNumber:event[1]]) {
+            [completedTotals addObject:event[0]];
+        }
+    }
+
+    XCTAssertGreaterThanOrEqual(completedTotals.count, (NSUInteger)2,
+                                @"each of the two downloads announces the byte it completed on");
+    XCTAssertEqual([NSSet setWithArray:completedTotals].count, (NSUInteger)2,
+                   @"the two downloads were announced as one stream of a single total: %@", completedTotals);
+}
+
+- (void)testRemovesTheBinaryPatchWorkingDirectoryWhateverTheOutcomeIs {
+    NSString *fullStaging = [self stageFullArchiveContents];
+    NSString *packageHash = CPTestFolderHash(fullStaging);
+    NSString *fullUrl = [self serveArchive:fullStaging named:@"full.zip"];
+
+    NSError *error = nil;
+    [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": fullUrl,
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContents] named:@"patch.zip"],
+    } error:&error];
+    XCTAssertNil(error);
+    [self assertBinaryPatchFolderRemoved];
+
+    [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": fullUrl,
+        @"binaryPatchDownloadUrl": [self serveBytes:CPTestBytes(@"<html><body>404 Not Found</body></html>")
+                                              named:@"not-an-archive.zip"],
+    } error:&error];
+    XCTAssertNil(error);
+    [self assertBinaryPatchFolderRemoved];
+}
+
+#pragma mark - Path guard
+
+/*
+ * The same input table the applier's guard is held to. The two are twins that must not
+ * drift apart, so each is pinned where it lives.
+ */
+- (void)testRefusesAManifestPathThatLeavesTheFolderInThePackageGuard {
+    NSString *folder = [self makeTemporaryFolder];
+
+    XCTAssertNil([CodePushPackage pathInsideFolder:folder relativePath:@"../outside.txt"]);
+    XCTAssertNil([CodePushPackage pathInsideFolder:folder relativePath:@"a/../../outside.txt"]);
+    XCTAssertNil([CodePushPackage pathInsideFolder:folder relativePath:@"/etc/passwd"]);
+    XCTAssertNil([CodePushPackage pathInsideFolder:folder relativePath:@""]);
+    XCTAssertNil([CodePushPackage pathInsideFolder:folder relativePath:nil]);
+
+    // The simulator reaches its temp folder through a symlink, so both sides standardize.
+    XCTAssertEqualObjects([[CodePushPackage pathInsideFolder:folder relativePath:@"CodePush/assets/logo.png"] stringByStandardizingPath],
+                          [[folder stringByAppendingPathComponent:@"CodePush/assets/logo.png"] stringByStandardizingPath]);
+    XCTAssertEqualObjects([[CodePushPackage pathInsideFolder:folder relativePath:@"CodePush/../main.jsbundle"] stringByStandardizingPath],
+                          [[folder stringByAppendingPathComponent:@"main.jsbundle"] stringByStandardizingPath]);
+}
+
+@end
