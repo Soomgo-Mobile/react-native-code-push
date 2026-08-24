@@ -1,5 +1,4 @@
 import { clearRequestLog, getRequestLog } from "../mock-server/server";
-import { PATCH_ARCHIVE_SUFFIX } from "./artifact-storage";
 
 /**
  * Which archive of an update the app asked the mock server for.
@@ -21,7 +20,7 @@ export function startRecordingDownloads(): void {
 export function getDownloadedArchives(): DownloadedArchive[] {
   return getRequestLog()
     .filter((request) => request.method === "GET" && request.url.startsWith("/bundles/"))
-    .map((request) => (request.url.endsWith(PATCH_ARCHIVE_SUFFIX) ? "patch" : "full"));
+    .map((request) => (request.url.includes("/binary-patch/") ? "patch" : "full"));
 }
 
 export function assertDownloadedArchives(scenario: string, expected: DownloadedArchive[]): void {

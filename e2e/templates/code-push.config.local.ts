@@ -1,5 +1,7 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- This template has environment-specific dependencies.
 // @ts-nocheck
 import {
+  type BundleUploadArtifact,
   CliConfigInterface,
   ReleaseHistoryInterface,
 } from "@bravemobile/react-native-code-push";
@@ -34,26 +36,50 @@ function recordArtifact(entry: Record<string, unknown>) {
   fs.appendFileSync(ARTIFACT_LOG_PATH, `${JSON.stringify(entry)}\n`);
 }
 
+function bundleFileRemotePath(
+  platform: "ios" | "android",
+  identifier: string,
+  artifact: BundleUploadArtifact,
+) {
+  if (artifact.type === "full-bundle") {
+    return `bundles/${platform}/${identifier}/full-bundle/${artifact.packageHash}`;
+  }
+
+  const artifactPath = artifact.type === "asset-diff"
+    ? `asset-diff/${artifact.targetBinaryVersion}/${artifact.packageHash}/${artifact.basePackageHash}`
+    : `binary-patch/${artifact.targetBinaryVersion}/${artifact.packageHash}`;
+
+  return `bundles/${platform}/${identifier}/${artifactPath}`;
+}
+
 const Config: CliConfigInterface = {
   bundleUploader: async (
     source: string,
     platform: "ios" | "android",
     identifier = "staging",
+    artifact,
   ): Promise<{ downloadUrl: string }> => {
-    const fileName = path.basename(source);
-    const destDir = path.join(MOCK_DATA_DIR, "bundles", platform, identifier);
+    if (artifact === undefined) {
+      throw new Error("The release command did not provide bundle artifact metadata.");
+    }
+
+    const remotePath = bundleFileRemotePath(platform, identifier, artifact);
+    const destPath = path.join(MOCK_DATA_DIR, remotePath);
+    const destDir = path.dirname(destPath);
     ensureDir(destDir);
-    const destPath = path.join(destDir, fileName);
     fs.copyFileSync(source, destPath);
 
-    const downloadUrl = `${MOCK_SERVER_HOST}/bundles/${platform}/${identifier}/${fileName}`;
+    const downloadUrl = `${MOCK_SERVER_HOST}/${remotePath}`;
     console.log("Bundle copied to:", destPath);
     console.log("Download URL:", downloadUrl);
     recordArtifact({
       kind: "bundle",
       platform,
       identifier,
-      fileName,
+      artifactType: artifact.type,
+      targetBinaryVersion: artifact.targetBinaryVersion,
+      packageHash: artifact.packageHash,
+      ...(artifact.type === "asset-diff" ? { basePackageHash: artifact.basePackageHash } : {}),
       storedPath: path.relative(MOCK_DATA_DIR, destPath),
       downloadUrl,
     });

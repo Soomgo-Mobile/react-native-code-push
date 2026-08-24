@@ -4,7 +4,7 @@ import path from "path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import { makeCodePushBundle } from "./makeCodePushBundle.js";
 import { resolveAssetDiffBases } from "./resolveAssetDiffBases.js";
-import type { CliConfigInterface, ReleaseHistoryInterface } from "../../typings/react-native-code-push.d.ts";
+import type { BundleDownloadInfo, CliConfigInterface, ReleaseHistoryInterface } from "../../typings/react-native-code-push.d.ts";
 
 /**
  * Exercises base acquisition against real archives and real hashes: a base is only usable
@@ -17,6 +17,7 @@ const CONTENTS_DIR_NAME = 'CodePush';
 
 /** Where the resolver unpacks a base for verification, so leftovers are recognizable. */
 const TEMP_DIR_PREFIX = 'codepush-asset-diff-base-';
+const TARGET_BINARY_VERSION = '1.0.0';
 
 type StagedRelease = {
     version: string;
@@ -68,22 +69,22 @@ function releaseHistoryOf(releases: StagedRelease[]): ReleaseHistoryInterface {
 
 /** Stands in for the consumer's downloader: hands back a local archive per download url. */
 function fakeDownloader(archives: Record<string, string | Error>) {
-    const calls: Array<[string, string, string | undefined]> = [];
+    const calls: Array<[BundleDownloadInfo, string, string | undefined]> = [];
     const download: NonNullable<CliConfigInterface['bundleDownloader']> = async (
-        downloadUrl,
+        downloadInfo,
         platform,
         identifier,
     ) => {
-        calls.push([downloadUrl, platform, identifier]);
+        calls.push([downloadInfo, platform, identifier]);
 
-        const archive = archives[downloadUrl];
-        if (archive instanceof Error) {
-            throw archive;
+        const downloadedArchive = archives[downloadInfo.downloadUrl];
+        if (downloadedArchive instanceof Error) {
+            throw downloadedArchive;
         }
-        if (!archive) {
-            throw new Error(`the downloader was called with an unexpected url: ${downloadUrl}`);
+        if (!downloadedArchive) {
+            throw new Error(`the downloader was called with an unexpected url: ${downloadInfo.downloadUrl}`);
         }
-        return { downloadedFilePath: archive };
+        return { downloadedFilePath: downloadedArchive };
     };
     return { download, calls };
 }
@@ -119,6 +120,7 @@ describe("resolveAssetDiffBases", () => {
             bundleDownloader: download,
             platform: 'android',
             identifier: 'my-app',
+            targetBinaryVersion: TARGET_BINARY_VERSION,
         });
 
         expect(bases).toEqual([
@@ -126,8 +128,8 @@ describe("resolveAssetDiffBases", () => {
             { basePackageHash: second.packageHash, baseBundleFilePath: second.archivePath },
         ]);
         expect(calls).toEqual([
-            [newest.downloadUrl, 'android', 'my-app'],
-            [second.downloadUrl, 'android', 'my-app'],
+            [{ downloadUrl: newest.downloadUrl, targetBinaryVersion: TARGET_BINARY_VERSION, releaseVersion: newest.version, packageHash: newest.packageHash }, 'android', 'my-app'],
+            [{ downloadUrl: second.downloadUrl, targetBinaryVersion: TARGET_BINARY_VERSION, releaseVersion: second.version, packageHash: second.packageHash }, 'android', 'my-app'],
         ]);
     });
 
@@ -145,12 +147,17 @@ describe("resolveAssetDiffBases", () => {
             diffBaseCount: 1,
             bundleDownloader: download,
             platform: 'ios',
+            targetBinaryVersion: TARGET_BINARY_VERSION,
         });
 
         expect(bases).toEqual([
             { basePackageHash: released.packageHash, baseBundleFilePath: released.archivePath },
         ]);
-        expect(calls).toEqual([[released.downloadUrl, 'ios', undefined]]);
+        expect(calls).toEqual([[
+            { downloadUrl: released.downloadUrl, targetBinaryVersion: TARGET_BINARY_VERSION, releaseVersion: released.version, packageHash: released.packageHash },
+            'ios',
+            undefined,
+        ]]);
     });
 
     it("ignores a history entry whose key is not a version, and resolves the rest", async () => {
@@ -170,12 +177,17 @@ describe("resolveAssetDiffBases", () => {
             diffBaseCount: 2,
             bundleDownloader: download,
             platform: 'ios',
+            targetBinaryVersion: TARGET_BINARY_VERSION,
         });
 
         expect(bases).toEqual([
             { basePackageHash: released.packageHash, baseBundleFilePath: released.archivePath },
         ]);
-        expect(calls).toEqual([[released.downloadUrl, 'ios', undefined]]);
+        expect(calls).toEqual([[
+            { downloadUrl: released.downloadUrl, targetBinaryVersion: TARGET_BINARY_VERSION, releaseVersion: released.version, packageHash: released.packageHash },
+            'ios',
+            undefined,
+        ]]);
     });
 
     it("drops a base whose downloaded bytes do not match its recorded package hash", async () => {
@@ -192,6 +204,7 @@ describe("resolveAssetDiffBases", () => {
             diffBaseCount: 2,
             bundleDownloader: download,
             platform: 'android',
+            targetBinaryVersion: TARGET_BINARY_VERSION,
         });
 
         expect(bases).toEqual([{ basePackageHash: older.packageHash, baseBundleFilePath: older.archivePath }]);
@@ -212,6 +225,7 @@ describe("resolveAssetDiffBases", () => {
             diffBaseCount: 2,
             bundleDownloader: download,
             platform: 'android',
+            targetBinaryVersion: TARGET_BINARY_VERSION,
         });
 
         expect(bases).toEqual([{ basePackageHash: older.packageHash, baseBundleFilePath: older.archivePath }]);

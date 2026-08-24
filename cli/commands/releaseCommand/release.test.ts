@@ -17,7 +17,7 @@ import {
 import { applyPatch } from "../../utils/binaryPatch.js";
 import { generatePackageHashFromDirectory } from "../../utils/hash-utils.js";
 import { unzip } from "../../utils/unzip.js";
-import type { CliConfigInterface, ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
+import type { BundleUploadArtifact, CliConfigInterface, ReleaseHistoryInterface } from "../../../typings/react-native-code-push.d.ts";
 
 /**
  * Covers the release flow around the binary patch option with `--skip-bundle`, which is
@@ -92,15 +92,23 @@ class ProcessExitError extends Error {
     }
 }
 
-type Uploads = { filePath: string, downloadUrl: string, logCountBeforeUpload: number }[];
+type Uploads = {
+    artifact: BundleUploadArtifact | undefined;
+    downloadUrl: string;
+    filePath: string;
+    logCountBeforeUpload: number;
+}[];
 
-function recordingUploader(uploads: Uploads, failOn?: (filePath: string) => boolean) {
-    return async (filePath: string) => {
+function recordingUploader(
+    uploads: Uploads,
+    failOn?: (filePath: string) => boolean,
+): CliConfigInterface['bundleUploader'] {
+    return async (filePath, _platform, _identifier, artifact) => {
         if (failOn?.(filePath)) {
             throw new Error(`upload rejected: ${path.basename(filePath)}`);
         }
         const downloadUrl = `https://cdn.example.com/${path.basename(filePath)}`;
-        uploads.push({ filePath, downloadUrl, logCountBeforeUpload: logs.length });
+        uploads.push({ artifact, filePath, downloadUrl, logCountBeforeUpload: logs.length });
         return { downloadUrl };
     };
 }
@@ -204,6 +212,17 @@ afterEach(() => {
 });
 
 describe("release without --binary-bundle-path", () => {
+    it("keeps existing three-argument uploaders callable", async () => {
+        const legacyUploader = async (
+            source: string,
+            _platform: 'ios' | 'android',
+            _identifier?: string,
+        ) => ({ downloadUrl: source });
+        const uploader: CliConfigInterface['bundleUploader'] = legacyUploader;
+
+        await expect(uploader('bundle.zip', 'ios')).resolves.toEqual({ downloadUrl: 'bundle.zip' });
+    });
+
     it("uploads the full bundle only, exactly as before binary patches existed", async () => {
         const staged = await stageBundleOutput("full-only");
 
@@ -211,6 +230,11 @@ describe("release without --binary-bundle-path", () => {
 
         expect(uploads).toHaveLength(1);
         expect(uploads[0].filePath).toBe(`${staged.bundleDirectory}/${staged.bundleFileName}`);
+        expect(uploads[0].artifact).toEqual({
+            type: 'full-bundle',
+            targetBinaryVersion: BINARY_VERSION,
+            packageHash: staged.bundleFileName,
+        });
         expect(fs.readdirSync(staged.bundleDirectory)).toEqual([staged.bundleFileName]);
         expect(releaseHistories[0][APP_VERSION]).toEqual({
             enabled: true,
@@ -658,11 +682,11 @@ describe("release with asset diff bases", () => {
 
     /** Serves the staged base archives, and records which releases were asked for. */
     function recordingDownloader(bases: StagedBaseRelease[], downloads: string[]): CliConfigInterface['bundleDownloader'] {
-        return async (downloadUrl: string) => {
-            downloads.push(downloadUrl);
-            const base = bases.find((candidate) => candidate.downloadUrl === downloadUrl);
+        return async (archive) => {
+            downloads.push(archive.downloadUrl);
+            const base = bases.find((candidate) => candidate.downloadUrl === archive.downloadUrl);
             if (!base) {
-                throw new Error(`the downloader was called with an unexpected url: ${downloadUrl}`);
+                throw new Error(`the downloader was called with an unexpected url: ${archive.downloadUrl}`);
             }
             return { downloadedFilePath: base.archivePath };
         };
@@ -686,6 +710,24 @@ describe("release with asset diff bases", () => {
             staged.bundleFileName,
             `${staged.bundleFileName}${BINARY_PATCH_ARCHIVE_SUFFIX}`,
             diffFileName,
+        ]);
+        expect(uploads.map(({ artifact }) => artifact)).toEqual([
+            {
+                type: 'full-bundle',
+                targetBinaryVersion: BINARY_VERSION,
+                packageHash: staged.bundleFileName,
+            },
+            {
+                type: 'binary-patch',
+                targetBinaryVersion: BINARY_VERSION,
+                packageHash: staged.bundleFileName,
+            },
+            {
+                type: 'asset-diff',
+                targetBinaryVersion: BINARY_VERSION,
+                packageHash: staged.bundleFileName,
+                basePackageHash: base.packageHash,
+            },
         ]);
         expect(downloads).toEqual([base.downloadUrl]);
         // Every artifact is uploaded before the history points at any of them.
