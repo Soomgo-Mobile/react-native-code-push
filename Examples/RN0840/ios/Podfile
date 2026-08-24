@@ -15,6 +15,11 @@ if linkage != nil
 end
 
 target 'RN0840' do
+  # Activates the CodePush pod's unit tests. Autolinking skips a pod that is
+  # already declared, so this replaces the generated declaration and points it
+  # at the repository checkout, where the test sources live.
+  pod 'CodePush', :path => '../../..', :testspecs => ['Tests']
+
   config = use_native_modules!
 
   use_react_native!(

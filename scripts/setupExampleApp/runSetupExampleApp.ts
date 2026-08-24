@@ -282,6 +282,38 @@ async function configureIosVersioning(context: SetupContext): Promise<void> {
       "Podfile platform"
     )
   );
+
+  configureCodePushTestSpec(context);
+}
+
+function configureCodePushTestSpec(context: SetupContext): void {
+  const podfilePath = path.join(context.projectPath, "ios", "Podfile");
+  const testSpecPodLine = [
+    "  # Activates the CodePush pod's unit tests. Autolinking skips a pod that is",
+    "  # already declared, so this replaces the generated declaration and points it",
+    "  # at the repository checkout, where the test sources live.",
+    "  pod 'CodePush', :path => '../../..', :testspecs => ['Tests']",
+    ""
+  ]
+    .map((line) => `${line}\n`)
+    .join("");
+
+  updateTextFile(podfilePath, (content) => {
+    if (content.includes(":testspecs => ['Tests']")) {
+      return content;
+    }
+
+    // replaceAllOrThrow substitutes through a callback, so a `$1` backreference
+    // would land in the Podfile verbatim. Carry the matched line over instead.
+    const targetBlockPattern = /^target '.*' do\n/m;
+    const targetBlockLine = content.match(targetBlockPattern)?.[0] ?? "";
+    return replaceAllOrThrow(
+      content,
+      targetBlockPattern,
+      `${targetBlockLine}${testSpecPodLine}`,
+      "Podfile target block"
+    );
+  });
 }
 
 async function configureAndroidVersioning(context: SetupContext): Promise<void> {

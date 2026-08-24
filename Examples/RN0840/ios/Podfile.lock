@@ -1,5 +1,12 @@
 PODS:
-  - CodePush (13.0.0):
+  - CodePush (13.1.0.4):
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
+    - SSZipArchive (~> 2.5.5)
+  - CodePush/Tests (13.1.0.4):
     - RCTRequired
     - RCTTypeSafety
     - React-Core
@@ -1865,7 +1872,8 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
-  - "CodePush (from `../node_modules/@bravemobile/react-native-code-push`)"
+  - CodePush (from `../../..`)
+  - CodePush/Tests (from `../../..`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
@@ -1948,7 +1956,7 @@ SPEC REPOS:
 
 EXTERNAL SOURCES:
   CodePush:
-    :path: "../node_modules/@bravemobile/react-native-code-push"
+    :path: "../../.."
   FBLazyVector:
     :path: "../node_modules/react-native/Libraries/FBLazyVector"
   hermes-engine:
@@ -2100,7 +2108,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  CodePush: 43cb436504305ff35f9c9a0dae804d82bbe05294
+  CodePush: f3b475f11ba84c010c83a1be5510b69ef3a53a1d
   FBLazyVector: c12d2108050e27952983d565a232f6f7b1ad5e69
   hermes-engine: 29cff50d2e023efa10c2207eca3a1446cfd31bdc
   RCTDeprecation: 3280799c14232a56e5a44f92981a8ee33bc69fd9
@@ -2177,6 +2185,6 @@ SPEC CHECKSUMS:
   SSZipArchive: c69881e8ac5521f0e622291387add5f60f30f3c4
   Yoga: 772166513f9cd2d61a6251d0dacbbfaa5b537479
 
-PODFILE CHECKSUM: 9c5003cc697b12834ac65a6b886dda6fff0282b1
+PODFILE CHECKSUM: d2d9cd5e86b8d498917d5daa7ac9c5a39736b92f
 
 COCOAPODS: 1.15.2

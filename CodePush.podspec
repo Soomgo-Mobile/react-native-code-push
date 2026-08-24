@@ -36,6 +36,11 @@ Pod::Spec.new do |s|
   ]
   s.public_header_files = ['ios/CodePush/CodePush.h']
 
+  s.test_spec 'Tests' do |test_spec|
+    test_spec.source_files = 'ios/CodePushTests/**/*.{h,m}'
+    test_spec.resources = 'cli/fixtures/binary-patch/*'
+  end
+
   binary_patch_header_search_paths = '"$(PODS_TARGET_SRCROOT)/cpp/binarypatch" "$(PODS_TARGET_SRCROOT)/cpp/binarypatch/vendor/HDiffPatch" "$(PODS_TARGET_SRCROOT)/cpp/binarypatch/vendor/zstd"'
   # ZSTD_DISABLE_ASM: the assembly fast path is intentionally not vendored.
   # _IS_USED_MULTITHREAD=0: patches are applied on the thread that downloads them.

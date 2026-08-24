@@ -31,6 +31,31 @@ Follow these steps to test your modifications to the plugin manually:
 - configure the plugin using the steps in the README.md
 - build and run your app on an emulator or device
 
+## Native unit tests
+
+Both test suites live in this repository and run against the RN0840 example app.
+Sync the library into the example app first:
+
+    cd Examples/RN0840 && npm install
+
+### Android
+
+    cd Examples/RN0840/android && ./gradlew :bravemobile_react-native-code-push:cleanTestDebugUnitTest :bravemobile_react-native-code-push:testDebugUnitTest
+
+The clean task matters: Gradle otherwise reports a stale UP-TO-DATE result.
+
+### iOS
+
+The tests are declared as a `test_spec` of the CodePush pod and read their
+sources from `ios/CodePushTests/` in this checkout, so there is nothing to
+sync for them. Install pods once, then run:
+
+    cd Examples/RN0840/ios && bundle exec pod install
+    xcodebuild test -workspace RN0840.xcworkspace -scheme CodePush \
+      -destination 'platform=iOS Simulator,name=<an available iPhone>'
+
+Neither suite runs in CI.
+
 ## Test
 
 ### Environment setup
