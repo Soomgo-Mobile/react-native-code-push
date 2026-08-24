@@ -94,6 +94,16 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 
 patch 설치와 full archive fallback은 같은 내용을 설치하므로 화면만으로는 구분되지 않습니다. 둘을 가르는 것은 앱이 서버에 요청한 archive의 순서이며, 모든 시나리오가 이를 검증합니다: patch 설치는 `[patch]`, fallback은 `[patch, full]`, patch 없이 배포된 릴리스는 `[full]`입니다.
 
+### Phase 7 — Asset Diff 업데이트 (`flows-asset-diff/`)
+
+16. **베이스 업데이트 설치** — 바이너리 패치와 asset을 포함한 베이스 버전을 릴리스하고, Phase 6의 설치 플로우로 기기에 설치합니다. 이 phase의 모든 릴리스는 서로 공유하는 64KB asset 하나와 자기만의 작은 asset 하나를 함께 싣습니다. 따라서 베이스와 업데이트는 언제나 asset 하나를 공유하고, 하나는 서로 다르며, 하나는 업데이트에서 사라집니다.
+17. **업데이트와 asset diff 발행** — 다음 릴리스는 같은 히스토리에 합류합니다. 로컬 설정이 `bundleDownloader`를 제공하므로, 릴리스는 베이스의 full archive를 내려받아 full·patch archive와 함께 asset diff archive를 발행하고, 히스토리에 `diffPackages`로 기록합니다. 러너는 설치 전에 diff archive 자체를 검증합니다: 공유 asset은 빠져 있고, 새 asset은 실려 있으며, 삭제 manifest(`hotcodepush.json`)가 업데이트에서 사라진 asset을 지목하는지 확인합니다.
+   - `1.4.1 → 1.4.2` — 베이스를 실행 중인 클라이언트가 `01-update-from-installed`로 업데이트를 설치하며, diff archive만 내려받습니다. 병합된 내용물이 릴리스된 package hash를 그대로 재현해야 하므로, 이 성공이 곧 삭제와 덮어쓰기가 기기에서 실제로 수행되었다는 증거가 됩니다.
+   - 바이너리에서 `1.4.2` 설치 — diff 릴리스가 그대로 있는 상태에서, 바이너리부터 다시 시작하는 클라이언트는 설치된 업데이트가 없으므로 diff가 발행된 적 없다는 듯 patch archive로 설치합니다.
+   - `1.4.3 → 1.4.4` — 실려 있는 asset이 손상된 diff는 다운로드와 병합까지 진행되지만 package 검증에 실패하고, full archive로 fallback합니다.
+
+diff 설치와 그 fallback 역시 같은 내용을 설치하므로, 모든 시나리오가 내려받은 archive를 다시 검증합니다: diff 설치는 `[diff]`, diff가 서빙할 수 없는 클라이언트는 `[patch]`, fallback은 `[diff, full]`입니다.
+
 ## 아키텍처
 
 ```
@@ -113,12 +123,15 @@ e2e/
 │   ├── download-order.ts   # 서버 요청 기록을 앱이 내려받은 archive 순서로 변환
 │   ├── binary-patch-fixtures.ts  # 베이스 번들 추출과 손상된 patch archive
 │   ├── binary-patch-phase.ts     # 바이너리 패치 시나리오 매트릭스
+│   ├── asset-diff-fixtures.ts    # 발행된 diff archive 검증과 손상 픽스처
+│   ├── asset-diff-phase.ts       # Asset diff 시나리오 매트릭스
 │   └── embedded-bundle-export.ts # export 훅이 바이너리에 담긴 번들을 내보냈는지 검증
 ├── flows/                  # Phase 1: 기본 플로우
 ├── flows-rollback/         # Phase 2: 바이너리로 롤백
 ├── flows-partial-rollback/ # Phase 3: 부분 롤백 (v1.0.2 → v1.0.1)
 ├── flows-optional/         # Phase 4: optional 설치 모드 검증
 ├── flows-binary-patch/     # Phase 6: 바이너리 패치 설치와 fallback
+├── flows-asset-diff/       # Phase 7: 설치된 업데이트 위에 asset diff 설치
 └── scripts/
     └── sleep.js            # Maestro runScript 대기 헬퍼
 ```

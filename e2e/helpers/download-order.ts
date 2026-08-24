@@ -9,8 +9,13 @@ import { clearRequestLog, getRequestLog } from "../mock-server/server";
  * which archives were requested: a patch install fetches the patch alone, a fallback
  * fetches the patch and then the full archive, and a release without a patch fetches the
  * full archive alone.
+ *
+ * An asset diff archive is a third form of the same contents, offered to a client whose
+ * installed update is the base it was built against, and told apart the same way: a diff
+ * install fetches the diff alone, and a diff that cannot be installed falls back to the
+ * full archive.
  */
-export type DownloadedArchive = "patch" | "full";
+export type DownloadedArchive = "patch" | "diff" | "full";
 
 export function startRecordingDownloads(): void {
   clearRequestLog();
@@ -20,7 +25,11 @@ export function startRecordingDownloads(): void {
 export function getDownloadedArchives(): DownloadedArchive[] {
   return getRequestLog()
     .filter((request) => request.method === "GET" && request.url.startsWith("/bundles/"))
-    .map((request) => (request.url.includes("/binary-patch/") ? "patch" : "full"));
+    .map((request) => {
+      if (request.url.includes("/binary-patch/")) return "patch";
+      if (request.url.includes("/asset-diff/")) return "diff";
+      return "full";
+    });
 }
 
 export function assertDownloadedArchives(scenario: string, expected: DownloadedArchive[]): void {
@@ -35,11 +44,11 @@ export function assertDownloadedArchives(scenario: string, expected: DownloadedA
   console.log(`[assert] ${scenario}: downloaded [${actual.join(", ")}]`);
 }
 
-/** Asserts that no patch archive was offered to the app, let alone downloaded. */
+/** Asserts that no patch or diff archive was offered to the app, let alone downloaded. */
 export function assertNoPatchDownloads(scenario: string): void {
   const archives = getDownloadedArchives();
 
-  if (archives.includes("patch")) {
+  if (archives.some((archive) => archive !== "full")) {
     throw new Error(`${scenario}: expected full archives only, but the app downloaded [${archives.join(", ")}]`);
   }
   if (archives.length === 0) {

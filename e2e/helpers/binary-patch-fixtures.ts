@@ -123,7 +123,12 @@ export function readReleaseHistory(
   platform: Platform,
   identifier: string,
   binaryVersion: string,
-): Record<string, { downloadUrl: string; packageHash: string; binaryPatchDownloadUrl?: string }> {
+): Record<string, {
+  downloadUrl: string;
+  packageHash: string;
+  binaryPatchDownloadUrl?: string;
+  diffPackages?: Record<string, string>;
+}> {
   return JSON.parse(fs.readFileSync(getHistoryFilePath(platform, identifier, binaryVersion), "utf8"));
 }
 
@@ -234,10 +239,15 @@ export function findFullArchive(platform: Platform, identifier: string): string 
   return findArchive(platform, identifier, "full-bundle");
 }
 
+/** The one asset diff archive in the served data, stored under its asset-diff artifact type. */
+export function findAssetDiffArchive(platform: Platform, identifier: string): string {
+  return findArchive(platform, identifier, "asset-diff");
+}
+
 function findArchive(
   platform: Platform,
   identifier: string,
-  artifactType: "full-bundle" | "binary-patch",
+  artifactType: "full-bundle" | "binary-patch" | "asset-diff",
 ): string {
   const bundleDir = path.join(MOCK_DATA_DIR, "bundles", platform, identifier);
   const archivePaths = findFiles(bundleDir)
@@ -253,7 +263,7 @@ function findArchive(
   return archivePaths[0];
 }
 
-function findFiles(dir: string): string[] {
+export function findFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) {
     return [];
   }
@@ -292,7 +302,7 @@ export function extractBundleFromArchive(archivePath: string, bundleName: string
  * Rewrites an archive in place, leaving its name - and so the download URL the release
  * history already points at - untouched.
  */
-function rewriteArchive(archivePath: string, mutate: (contentsDir: string) => void): void {
+export function rewriteArchive(archivePath: string, mutate: (contentsDir: string) => void): void {
   fs.mkdirSync(WORK_DIR, { recursive: true });
   const stagingDir = fs.mkdtempSync(path.join(WORK_DIR, "archive-"));
 
@@ -301,7 +311,12 @@ function rewriteArchive(archivePath: string, mutate: (contentsDir: string) => vo
     mutate(resolveContentsDir(stagingDir));
 
     fs.rmSync(archivePath);
-    execFileSync("zip", ["-q", "-r", "-X", archivePath, ...fs.readdirSync(stagingDir)], { cwd: stagingDir });
+    // Archives are stored under their extensionless package hash, and zip appends ".zip"
+    // to a target without an extension - so the archive is written under a name zip will
+    // leave alone, then moved onto the name the download URL points at.
+    const rezipPath = `${archivePath}.rezip.zip`;
+    execFileSync("zip", ["-q", "-r", "-X", rezipPath, ...fs.readdirSync(stagingDir)], { cwd: stagingDir });
+    fs.renameSync(rezipPath, archivePath);
   } finally {
     fs.rmSync(stagingDir, { recursive: true, force: true });
   }

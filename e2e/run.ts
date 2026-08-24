@@ -11,6 +11,7 @@ import { assertArtifactStorageLayout, clearArtifactLog } from "./helpers/artifac
 import { assertNoPatchDownloads, startRecordingDownloads } from "./helpers/download-order";
 import { assertReleaseOffersNoPatch } from "./helpers/binary-patch-fixtures";
 import { runBinaryPatchPhase } from "./helpers/binary-patch-phase";
+import { runAssetDiffPhase } from "./helpers/asset-diff-phase";
 import { assertExportedBundleMatchesBinary } from "./helpers/embedded-bundle-export";
 
 interface CliOptions {
@@ -351,6 +352,19 @@ async function main() {
       releaseIdentifier,
       appId,
       excludeTimingSensitive: options.excludeTimingSensitive ?? false,
+      cleanMockData,
+      runMaestro: (flowPath, flowEnv) => runMaestro(flowPath, options.platform, appId, flowEnv),
+      withRetry: (label, action) => withRetry(label, options.retryCount, retryDelayMs, action),
+    });
+
+    // 14. Run Maestro — Phase 7: asset diff updates
+    console.log("\n=== [run-maestro: phase 7 (asset diff updates)] ===");
+    await runAssetDiffPhase({
+      appPath,
+      platform: options.platform,
+      framework: options.framework,
+      releaseIdentifier,
+      appId,
       cleanMockData,
       runMaestro: (flowPath, flowEnv) => runMaestro(flowPath, options.platform, appId, flowEnv),
       withRetry: (label, action) => withRetry(label, options.retryCount, retryDelayMs, action),

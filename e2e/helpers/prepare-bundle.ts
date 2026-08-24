@@ -1,7 +1,16 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { ARTIFACT_LOG_PATH, MOCK_DATA_DIR, getMockServerHost } from "../config";
+
+/** An image asset the released bundle carries. Same label, byte-identical file. */
+export interface AssetMarker {
+  /** Names the asset file, so releases naming the same label share the asset. */
+  label: string;
+  /** Pads the image to this size, for an asset whose size has to decide something. */
+  byteSize?: number;
+}
 
 interface PrepareBundleOptions {
   releaseVersion?: string;
@@ -10,8 +19,10 @@ interface PrepareBundleOptions {
   crashOnStartVersion?: string;
   /** Releases a binary patch against this JS bundle alongside the full bundle. */
   binaryBundlePath?: string;
-  /** Adds an image asset to the released bundle, so the update carries more than JS. */
-  assetMarkerVersion?: string;
+  /** Adds image assets to the released bundle, so the update carries more than JS. */
+  assetMarkers?: AssetMarker[];
+  /** Skipped when the release should join the history that is already being served. */
+  createHistory?: boolean;
 }
 
 export function setReleasingBundle(appPath: string, value: boolean): void {
@@ -77,34 +88,63 @@ export function clearCrashOnStartMarker(appPath: string): void {
   fs.writeFileSync(appTsxPath, content, "utf8");
 }
 
-const ASSET_MARKER_PATTERN = /^global\.__E2E_ASSET__ = require\("\.\/e2e-asset-.*\.png"\);$/m;
+const ASSET_MARKER_PATTERN = /^global\.__E2E_ASSETS__ = \[.*\];$/m;
 const ASSET_MARKER_FILE_PREFIX = "e2e-asset-";
 // Smallest valid PNG, so Metro reads its dimensions and packs it like any other image.
 const ASSET_MARKER_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 /**
- * Adds an image asset to the released bundle.
+ * Adds image assets to the released bundle.
  *
  * An update is not only its JS bundle, and a binary patch only replaces the bundle: the
  * assets have to travel in the patch archive untouched for the restored contents to be
- * the update. Requiring the image is enough to put it in the update - Metro copies every
- * asset the module graph reaches, whether or not the app draws it.
+ * the update. Requiring the images is enough to put them in the update - Metro copies
+ * every asset the module graph reaches, whether or not the app draws it.
  */
-export function setAssetMarker(appPath: string, version: string): void {
-  const assetFileName = `${ASSET_MARKER_FILE_PREFIX}${version}.png`;
-  fs.writeFileSync(path.join(appPath, assetFileName), Buffer.from(ASSET_MARKER_PNG_BASE64, "base64"));
+export function setAssetMarker(appPath: string, markers: AssetMarker[]): void {
+  const requires = markers.map((marker) => {
+    const assetFileName = `${ASSET_MARKER_FILE_PREFIX}${marker.label}.png`;
+    fs.writeFileSync(path.join(appPath, assetFileName), assetMarkerPng(marker.label, marker.byteSize));
+    return `require("./${assetFileName}")`;
+  });
 
   const appTsxPath = path.join(appPath, "App.tsx");
   let content = fs.readFileSync(appTsxPath, "utf8");
-  // Assigned to a global so that no minifier can decide the asset is unused.
-  const marker = `global.__E2E_ASSET__ = require("./${assetFileName}");`;
+  // Assigned to a global so that no minifier can decide the assets are unused.
+  const marker = `global.__E2E_ASSETS__ = [${requires.join(", ")}];`;
   if (ASSET_MARKER_PATTERN.test(content)) {
     content = content.replace(ASSET_MARKER_PATTERN, marker);
   } else {
     content = `${marker}\n${content}`;
   }
   fs.writeFileSync(appTsxPath, content, "utf8");
+}
+
+/**
+ * The marker image, padded to `byteSize` for an asset whose size matters.
+ *
+ * The padding sits after the IEND chunk, where image decoders stop reading, so Metro
+ * still reads the 1x1 dimensions from the header. It is derived from the label alone,
+ * because both of its uses need it reproducible: two releases only share the asset if
+ * each writes the same bytes, and hash chains do not compress, so the padded size
+ * survives into the zip archives whose sizes are compared when a diff is published.
+ */
+function assetMarkerPng(label: string, byteSize?: number): Buffer {
+  const png = Buffer.from(ASSET_MARKER_PNG_BASE64, "base64");
+  if (!byteSize || byteSize <= png.length) {
+    return png;
+  }
+
+  const blocks: Buffer[] = [png];
+  let length = png.length;
+  let block = crypto.createHash("sha256").update(`${ASSET_MARKER_FILE_PREFIX}${label}`).digest();
+  while (length < byteSize) {
+    blocks.push(block);
+    length += block.length;
+    block = crypto.createHash("sha256").update(block).digest();
+  }
+  return Buffer.concat(blocks).subarray(0, byteSize);
 }
 
 export function clearAssetMarker(appPath: string): void {
@@ -131,7 +171,7 @@ export async function prepareBundle(
   const mandatory = options.mandatory ?? true;
   const releaseMarkerVersion = options.releaseMarkerVersion;
   const crashOnStartVersion = options.crashOnStartVersion;
-  const assetMarkerVersion = options.assetMarkerVersion;
+  const assetMarkers = options.assetMarkers;
 
   setReleasingBundle(appPath, true);
 
@@ -142,17 +182,19 @@ export async function prepareBundle(
     if (crashOnStartVersion) {
       setCrashOnStartMarker(appPath, crashOnStartVersion);
     }
-    if (assetMarkerVersion) {
-      setAssetMarker(appPath, assetMarkerVersion);
+    if (assetMarkers?.length) {
+      setAssetMarker(appPath, assetMarkers);
     }
 
-    await runCodePushCommand(appPath, platform, [
-      "create-history",
-      "-c", "code-push.config.local.ts",
-      "-b", "1.0.0",
-      "-p", platform,
-      "-i", appName,
-    ]);
+    if (options.createHistory ?? true) {
+      await runCodePushCommand(appPath, platform, [
+        "create-history",
+        "-c", "code-push.config.local.ts",
+        "-b", "1.0.0",
+        "-p", platform,
+        "-i", appName,
+      ]);
+    }
     await runCodePushRelease(
       appPath,
       platform,
@@ -169,7 +211,7 @@ export async function prepareBundle(
     if (crashOnStartVersion) {
       clearCrashOnStartMarker(appPath);
     }
-    if (assetMarkerVersion) {
+    if (assetMarkers?.length) {
       clearAssetMarker(appPath);
     }
     setReleasingBundle(appPath, false);

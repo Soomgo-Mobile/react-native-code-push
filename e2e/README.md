@@ -94,6 +94,16 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 
 A patch install and a fallback to the full archive install the same contents, so they look identical on screen. What tells them apart is which archives the app asked the mock server for, which every scenario asserts: `[patch]` for a patch install, `[patch, full]` for a fallback, `[full]` for a release published without a patch.
 
+### Phase 7 — Asset Diff Updates (`flows-asset-diff/`)
+
+16. **Install the base update** — Releases a base version with a binary patch and assets, and installs it with the Phase 6 install flow. Every release in this phase ships a 64KB asset shared by all of them plus one small asset of its own, so a base and its update always share one asset, differ in one, and drop one.
+17. **Publish the update and its asset diff** — The next release joins the same history. The local config provides `bundleDownloader`, so the release downloads the base's full archive and publishes an asset diff archive alongside the full and patch archives, recording it in the history as `diffPackages`. Before anything is installed, the runner asserts the diff at the artifact level: the shared asset stayed out, the new asset travels in it, and the deletion manifest (`hotcodepush.json`) names the asset the update dropped.
+   - `1.4.1 → 1.4.2` — A client running the base installs the update with `01-update-from-installed`, downloading the diff archive alone. The merged contents have to reproduce the released package hash, which is what proves the deletion and the overlay actually happened on the device.
+   - `1.4.2` from the binary — With the diff release still standing, a client starting over from the binary holds no installed update, so it installs through the patch archive as if the diff had never been published.
+   - `1.4.3 → 1.4.4` — A diff whose shipped asset is corrupted downloads and merges, fails the package verification, and falls back to the full archive.
+
+A diff install and its fallback also install the same contents, so every scenario again asserts the downloaded archives: `[diff]` for a diff install, `[patch]` for a client the diff cannot serve, `[diff, full]` for a fallback.
+
 ## Architecture
 
 ```
@@ -113,12 +123,15 @@ e2e/
 │   ├── download-order.ts   # Turns the server's request log into the archives the app downloaded
 │   ├── binary-patch-fixtures.ts  # Base bundle extraction and broken patch archives
 │   ├── binary-patch-phase.ts     # Binary patch scenario matrix
+│   ├── asset-diff-fixtures.ts    # Published diff archive assertions and corruption
+│   ├── asset-diff-phase.ts       # Asset diff scenario matrix
 │   └── embedded-bundle-export.ts # Asserts the export hooks wrote the bundle the binary ships
 ├── flows/                  # Phase 1: basic flows
 ├── flows-rollback/         # Phase 2: rollback to binary
 ├── flows-partial-rollback/ # Phase 3: partial rollback (v1.0.2 → v1.0.1)
 ├── flows-optional/         # Phase 4: optional install mode verification
 ├── flows-binary-patch/     # Phase 6: binary patch install and fallback
+├── flows-asset-diff/       # Phase 7: asset diff install on top of an installed update
 └── scripts/
     └── sleep.js            # Maestro runScript helper for deterministic waits
 ```
