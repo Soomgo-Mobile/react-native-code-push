@@ -334,7 +334,7 @@ npx code-push show-history -b 1.0.0 -p ios
 `binaryPatchDownloadUrl`은 `--binary-bundle-path`로 배포한 릴리스에만 기록됩니다. 그 외의
 릴리스에는 이 필드가 없으며, binary patch 이전에 작성된 히스토리도 그대로 유효합니다.
 
-`diffPackages`는 그런 릴리스가 [asset diff archive](#asset-diff-archive)까지 배포했을 때만
+`diffPackages`는 binary patch 릴리스가 [asset diff archive](#asset-diff-archive)까지 배포했을 때만
 기록되며, archive마다 한 항목씩 담습니다. 키는 diff 대상 릴리스의 `packageHash`, 값은 그
 archive를 내려받을 수 있는 URL입니다. diff archive 없이 배포한 릴리스에는 이 필드도 없습니다.
 

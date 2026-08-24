@@ -334,7 +334,7 @@ The release history is a JSON object keyed by app version. For example, the hist
 `--binary-bundle-path`. Every other release leaves the field out, and a history written
 before binary patches existed stays valid as it is.
 
-`diffPackages` is only written when such a release also published
+`diffPackages` is only written when a binary patch release also published
 [asset diff archives](#asset-diff-archives), and holds one entry per archive: the
 `packageHash` of the release the archive was diffed against, and the URL the archive can be
 downloaded from. A release published without them leaves the field out the same way.
