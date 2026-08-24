@@ -301,7 +301,12 @@ function rewriteArchive(archivePath: string, mutate: (contentsDir: string) => vo
     mutate(resolveContentsDir(stagingDir));
 
     fs.rmSync(archivePath);
-    execFileSync("zip", ["-q", "-r", "-X", archivePath, ...fs.readdirSync(stagingDir)], { cwd: stagingDir });
+    // Archives are stored under their extensionless package hash, and zip appends ".zip"
+    // to a target without an extension - so the archive is written under a name zip will
+    // leave alone, then moved onto the name the download URL points at.
+    const rezipPath = `${archivePath}.rezip.zip`;
+    execFileSync("zip", ["-q", "-r", "-X", rezipPath, ...fs.readdirSync(stagingDir)], { cwd: stagingDir });
+    fs.renameSync(rezipPath, archivePath);
   } finally {
     fs.rmSync(stagingDir, { recursive: true, force: true });
   }
