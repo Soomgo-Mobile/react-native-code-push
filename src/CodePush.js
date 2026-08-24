@@ -174,6 +174,12 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
         const [latestVersion, latestReleaseInfo] = versioning.findLatestRelease();
         const isMandatory = versioning.checkIsMandatory(runtimeVersion);
 
+        // A diff archive is a patch archive computed against one specific earlier release,
+        // so it only applies when that exact release is the one installed right now.
+        const diffPackageDownloadUrl = localPackage && localPackage.packageHash
+          ? latestReleaseInfo.diffPackages?.[localPackage.packageHash]
+          : undefined;
+
         /**
          * Convert the update information decided from `ReleaseHistoryInterface` to be passed to the library core (original CodePush library).
          *
@@ -185,7 +191,7 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
            * Only released updates that were published with a binary patch carry this.
            * When it is missing, the update is downloaded in full from `download_url`.
            */
-          binary_patch_download_url: latestReleaseInfo.binaryPatchDownloadUrl,
+          binary_patch_download_url: diffPackageDownloadUrl || latestReleaseInfo.binaryPatchDownloadUrl,
           // (`enabled` will always be true in the release information obtained from the previous process.)
           is_available: latestReleaseInfo.enabled,
           package_hash: latestReleaseInfo.packageHash,
