@@ -168,7 +168,7 @@ Called periodically when an available update is being downloaded from the CodePu
 
 * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
 
-Each download reports a progress stream of its own: `receivedBytes` counts from zero against that download's own `totalBytes`. When a release ships with a binary patch that cannot be applied, the update is downloaded again in full, so one update can report two streams - the second with the full download's larger `totalBytes`.
+Each download reports a progress stream of its own: `receivedBytes` counts from zero against that download's own `totalBytes`. When an archive of a release published with a binary patch cannot be applied, the next archive is downloaded, so one update can report more than one stream - each against its own `totalBytes`, the full download's being the largest.
 
 #### codePush.allowRestart
 
@@ -541,8 +541,9 @@ The `RemotePackage` inherits all of the same properties as the `LocalPackage`, b
 
 - __downloadUrl__: The URL at which the package is available for download. This property is only needed for advanced usage, since the `download` method will automatically handle the acquisition of updates for you. *(String)*
 - __binaryPatchDownloadUrl__: The URL at which a binary patch archive of the package is available for download. It is only present when the release was published together with such a patch, and the package is downloaded in full from `downloadUrl` otherwise. *(String, optional)*
+- __assetDiffDownloadUrl__: The URL of the asset diff archive built against the update currently installed on the device. It is only present when the release publishes a diff against exactly that update, and it always stands next to `binaryPatchDownloadUrl`. *(String, optional)*
 
-A release that was also published with asset diff archives records them in its release history entry as __diffPackages__: an object keyed by the `packageHash` of the release each archive was diffed against, whose values are the URLs those archives can be downloaded from. When the update currently installed on the device is one of those releases, `binaryPatchDownloadUrl` is the URL of the diff archive built against it instead of the plain patch archive's; a device running the bundle inside the binary, or an update this release was not diffed against, gets the plain patch archive. Like `binaryPatchDownloadUrl`, `diffPackages` is left out of the history entry of a release published without the archives. One attempt downloads one archive either way, so the progress reporting described above is unchanged - a second stream still means the full download that follows a fallback.
+A release that was also published with asset diff archives records them in its release history entry as __diffPackages__: an object keyed by the `packageHash` of the release each archive was diffed against, whose values are the URLs those archives can be downloaded from. When the update currently installed on the device is one of those releases, the diff archive's URL travels as `assetDiffDownloadUrl` and is the archive downloaded first; a device running the bundle inside the binary, or an update this release was not diffed against, gets the plain patch archive alone. Like `binaryPatchDownloadUrl`, `diffPackages` is left out of the history entry of a release published without the archives. A diff that fails on its asset side falls back to the patch archive, and any failure in the bundle patch both archives carry falls back to the full download, so one update can report up to three of the progress streams described above.
 
 ###### Methods
 
