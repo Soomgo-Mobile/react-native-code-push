@@ -1,5 +1,7 @@
 # Diff Updates
 
+[한국어](diff-updates.ko.md)
+
 A release can offer the client the difference between the update and a bundle the client
 already holds, in place of the whole thing. There are two kinds of difference, and an asset
 diff is only published on a release that carries a binary patch:
