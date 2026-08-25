@@ -122,13 +122,31 @@ The `codePush` decorator accepts an "options" object that allows you to customiz
 
 * __deploymentKey__ *(String)* - Specifies the deployment key you want to query for an update against. By default, this value is derived from the `Info.plist` file (iOS) and `MainActivity.java` file (Android), but this option allows you to override it from the script-side if you need to dynamically use a different deployment.
 
+* __ignoreFailedUpdates__ *(never)* - Not accepted by the decorator. `CodePushOptions` types this option as `never`, so it can only be passed to an individual [`sync`](#codepushsync) call, and it is described in the [`SyncOptions`](#syncoptions) reference.
+
 * __installMode__ *(codePush.InstallMode)* - Specifies when you would like to install optional updates (i.e. those that aren't marked as mandatory). Defaults to `codePush.InstallMode.ON_NEXT_RESTART`. Refer to the [`InstallMode`](#installmode) enum reference for a description of the available options and what they do.
 
 * __mandatoryInstallMode__ *(codePush.InstallMode)* - Specifies when you would like to install updates which are marked as mandatory. Defaults to `codePush.InstallMode.IMMEDIATE`. Refer to the [`InstallMode`](#installmode) enum reference for a description of the available options and what they do.
 
 * __minimumBackgroundDuration__ *(Number)* - Specifies the minimum number of seconds that the app needs to have been in the background before restarting the app. This property only applies to updates which are installed using `InstallMode.ON_NEXT_RESUME` or `InstallMode.ON_NEXT_SUSPEND`, and can be useful for getting your update in front of end users sooner, without being too obtrusive. Defaults to `0`, which has the effect of applying the update immediately after a resume or unless the app suspension is long enough to not matter, regardless how long it was in the background.
 
-* __onUpdateArchiveResult__ *((label: String, result: UpdateArchiveResult) => void)* - Called once for an update that was published with a binary patch, after that update has been downloaded and before it is installed. It receives the label of the release the update carries and an `UpdateArchiveResult` reporting whether one of the update's patch archives produced it or the full archive had to be downloaded instead, which archive the last attempt was against, and why each archive that was given up on was. A fallback is not an error: the update arrives either way. The callback is purely for observation - the library neither stores the result nor sends it anywhere, registering no callback changes nothing about the update, and one that throws is logged rather than failing the download it is reporting on. Refer to the `UpdateArchiveResult` type in [typings/react-native-code-push.d.ts](../typings/react-native-code-push.d.ts) for the shape of the result.
+* __onDownloadStart__ *((label: String) => void)* - Called when the download of an available update begins, with the label of the release being downloaded.
+
+* __onDownloadSuccess__ *((label: String) => void)* - Called when the download of an update has completed successfully, with the label of the release that was downloaded. The install happens afterwards, so this says nothing about whether the update could be installed.
+
+* __onRolloutSkipped__ *((label: String) => void)* - Called when the device falls outside the latest release's active rollout, with the label of that release. The update check then leaves that release out of the candidates: it either resolves against the release below it, or - when the release left as the latest one is the binary version - clears the downloaded updates and restarts the app onto the binary. *NOTE: the typings declare a second `error` parameter, but the runtime only ever passes the label.*
+
+* __onSyncError__ *((label: String, error: Error) => void)* - Called when the sync process fails with an unknown error, i.e. it ends in the [`SyncStatus.UNKNOWN_ERROR`](#syncstatus) state. It receives the label of the release being synced - `"unknown"` when the sync failed before a release was resolved - and the error that ended it.
+
+* __onUpdateArchiveResult__ *((label: String, result: UpdateArchiveResult) => void)* - Called once for an update that was published with a binary patch, after that update has been downloaded and before it is installed, with the label of the release it carries. The `UpdateArchiveResult` reports which archive the update came from and why each archive that was given up on was; refer to the `UpdateArchiveResult` type in [typings/react-native-code-push.d.ts](../typings/react-native-code-push.d.ts) for its shape. A fallback is not an error: the update arrives either way. The callback is purely for observation - the library neither stores the result nor sends it anywhere, registering no callback changes nothing about the update, and one that throws is logged rather than failing the download it is reporting on.
+
+* __onUpdateRollback__ *((label: String) => void)* - Called when an installed update failed to run and was rolled back to the previous version, with the label of the release that was rolled back. Like `onUpdateSuccess`, it is reported when the app next confirms its state through `notifyAppReady`.
+
+* __onUpdateSuccess__ *((label: String) => void)* - Called when an installed update has run successfully, with the label of the release that ran. The report is sent when [`notifyAppReady`](#codepushnotifyappready) marks the update successful, which [`sync`](#codepushsync) does for you.
+
+* __releaseHistoryFetcher__ *((updateRequest: UpdateCheckRequest) => Promise&lt;ReleaseHistoryInterface&gt;)* - **Required.** Specifies the function that supplies the release history an update is picked from. It receives an `UpdateCheckRequest` describing the running app - its binary version, package hash, currently running label and client id - and must resolve to a `ReleaseHistoryInterface` for that binary version. There is no default: configuring the plugin without one throws. Refer to ["CodePush-ify" Your App](../README.md#4-codepush-ify-your-app) for an example implementation, and to the `ReleaseHistoryInterface` type in [typings/react-native-code-push.d.ts](../typings/react-native-code-push.d.ts) for what it has to return.
+
+* __updateChecker__ *((updateRequest: UpdateCheckRequest) => Promise&lt;{ update_info: UpdateCheckResponse }&gt;)* - *Deprecated.* Specifies a function that performs the update check itself, so it can be self-hosted. It will be removed in the next major version - `releaseHistoryFetcher` replaces it. Setting it takes that function out of the path entirely: it is never called, though it is still required, so pass a no-op such as `async () => ({})`. No rollout evaluation is applied to what the checker returns.
 
 * __updateDialog__ *(UpdateDialogOptions)* - An "options" object used to determine whether a confirmation dialog should be displayed to the end user when an update is available, and if so, what strings to use. Defaults to `null`, which has the effect of disabling the dialog completely. Setting this to `true` will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as overriding one or more of the default strings. Before enabling this option within an App Store-distributed app, please refer to [this note](https://github.com/microsoft/react-native-code-push#app-store).
 
@@ -412,9 +430,11 @@ codePush.sync({ updateDialog: true, installMode: codePush.InstallMode.IMMEDIATE 
 
 ##### SyncOptions
 
-While the `sync` method tries to make it easy to perform silent and active updates with little configuration, it accepts an "options" object that allows you to customize numerous aspects of the default behavior mentioned above. The options available are identical to the [CodePushOptions](#codepushoptions), with the exception of the `checkFrequency` option:
+While the `sync` method tries to make it easy to perform silent and active updates with little configuration, it accepts an "options" object that allows you to customize numerous aspects of the default behavior mentioned above. The options available are identical to the [CodePushOptions](#codepushoptions), with the exception of the `checkFrequency` option, which only the decorator accepts, and the `ignoreFailedUpdates` option, which only `sync` accepts:
 
 * __deploymentKey__ *(String)* - Refer to [`CodePushOptions`](#codepushoptions).
+
+* __ignoreFailedUpdates__ *(Boolean)* - Specifies whether to skip an update whose installation has already failed on this device and been rolled back. Defaults to `true`, so such a release is never offered again. Setting it to `false` makes `sync` retry that release on every call, which - depending on how you release - can leave the app in an endless retry loop if the release cannot be installed at all. This option is only accepted here: [`CodePushOptions`](#codepushoptions) types it as `never`, so the decorator cannot set it.
 
 * __installMode__ *(codePush.InstallMode)* - Refer to [`CodePushOptions`](#codepushoptions).
 
@@ -423,6 +443,8 @@ While the `sync` method tries to make it easy to perform silent and active updat
 * __minimumBackgroundDuration__ *(Number)* - Refer to [`CodePushOptions`](#codepushoptions).
 
 * __onUpdateArchiveResult__ *((label: String, result: UpdateArchiveResult) => void)* - Refer to [`CodePushOptions`](#codepushoptions).
+
+* __rollbackRetryOptions__ *(RollbackRetryOptions)* - Refer to [`CodePushOptions`](#codepushoptions).
 
 * __updateDialog__ *(UpdateDialogOptions)* - Refer to [`CodePushOptions`](#codepushoptions).
 
