@@ -346,9 +346,11 @@ copies the update it already has installed, applies those, and ends up holding e
 contents of the full archive.
 
 So one release has a full archive, a patch archive and up to `--diff-base-count` diff
-archives, and a client downloads one of them per attempt: the diff archive built against
-the update it is running, when the release has one, and the patch archive when it is
-running the bundle in the binary or an update this release was not diffed against.
+archives, and a client starts from the smallest one it can use: the diff archive built
+against the update it is running, when the release has one, and the patch archive when it
+is running the bundle in the binary or an update this release was not diffed against. Each
+attempt downloads one archive, and an archive that cannot be installed falls back to the
+next.
 
 Diff archives are published only when all three of these hold:
 - the release is a binary patch release (`release --binary-bundle-path`),

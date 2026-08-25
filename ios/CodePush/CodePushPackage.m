@@ -290,9 +290,9 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
  * Downloads an update from one of its archives and installs it.
  *
  * isBinaryPatchUpdate says whether the archive holds a binary patch of the JS bundle,
- * which has to be applied before the contents are the update. Only an archive downloaded
- * from the binary patch URL is treated that way, so an update being downloaded in full
- * can never end up on the patch path.
+ * which has to be applied before the contents are the update. Both the asset diff and the
+ * patch archive are downloaded that way; the full archive never is, so an update being
+ * downloaded in full can never end up on the patch path.
  *
  * patchAppliedCallback is called with how long the apply took the moment the bundle has
  * been restored, which is before the update is known to install. It is nil for a full
@@ -548,7 +548,7 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
 
                                                     } else {
                                                         if (isBinaryPatchUpdate) {
-                                                            // Whatever the patch URL served, it is not a patch archive - an error page
+                                                            // Whatever the archive URL served, it is not an update archive - an error page
                                                             // answered with a 200 looks like this too. Moving it into place would
                                                             // install bytes no hash has ever been checked against, so the full archive
                                                             // is downloaded instead.

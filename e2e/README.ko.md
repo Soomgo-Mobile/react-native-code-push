@@ -117,7 +117,7 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # 파일시스템 기반 CodePush 설정
 ├── helpers/
-│   ├── prepare-config.ts   # App.tsx 패치(호스트, E2E 버튼, patch 결과 프로브), 설정 복사
+│   ├── prepare-config.ts   # App.tsx 패치(호스트, E2E 버튼, archive 결과 프로브), 설정 복사
 │   ├── prepare-bundle.ts   # code-push CLI로 번들 생성
 │   ├── build-app.ts        # iOS/Android Release 빌드
 │   ├── artifact-storage.ts # CLI가 번들과 릴리스 히스토리를 저장한 위치 검증

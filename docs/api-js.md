@@ -547,7 +547,7 @@ A release that was also published with asset diff archives records them in its r
 
 ###### Methods
 
-- __download(downloadProgressCallback?: Function): Promise&lt;LocalPackage&gt;__: Downloads the available update from the CodePush service. If a `downloadProgressCallback` is specified, it will be called periodically with a `DownloadProgress` object (`{ totalBytes: Number, receivedBytes: Number }`) that reports the progress of the download until it completes. Returns a Promise that resolves with the `LocalPackage`.
+- __download(downloadProgressCallback?: Function, updateArchiveResultCallback?: Function): Promise&lt;LocalPackage&gt;__: Downloads the available update from the CodePush service. If a `downloadProgressCallback` is specified, it will be called periodically with a `DownloadProgress` object (`{ totalBytes: Number, receivedBytes: Number }`) that reports the progress of the download until it completes. If an `updateArchiveResultCallback` is specified, it will be called once with an `UpdateArchiveResult` object when the update was published with a binary patch, reporting which archive the update was installed from and why each archive that was given up on was. It says nothing about whether the download succeeded: an archive that could not be applied is reported there and the update is downloaded in full. Returns a Promise that resolves with the `LocalPackage`.
 
 #### Enums
 

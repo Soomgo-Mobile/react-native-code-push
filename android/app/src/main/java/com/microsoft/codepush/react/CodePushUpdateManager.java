@@ -157,8 +157,8 @@ public class CodePushUpdateManager {
     }
 
     /**
-     * @return what the attempts at installing the update from its binary patch archives ended
-     *         in, or null when the update had no such archive to attempt. The result belongs
+     * @return what the attempts at installing the update from its patch archives ended in,
+     *         or null when the update had no such archive to attempt. The result belongs
      *         to this download alone: the metadata written for the update never carries it.
      */
     public JSONObject downloadPackage(JSONObject updatePackage, String expectedBundleFileName,
@@ -167,15 +167,15 @@ public class CodePushUpdateManager {
         // the same update. The asset diff is the smallest and is tried first, the patch
         // archive stands in when the diff fails on its asset side, and the full archive is
         // always there when none of it works out.
-        String binaryPatchDownloadUrl = updatePackage.optString(CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY, null);
-        String assetDiffDownloadUrl = updatePackage.optString(CodePushConstants.ASSET_DIFF_DOWNLOAD_URL_KEY, null);
+        String binaryPatchDownloadUrl = optArchiveDownloadUrl(updatePackage, CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY);
+        String assetDiffDownloadUrl = optArchiveDownloadUrl(updatePackage, CodePushConstants.ASSET_DIFF_DOWNLOAD_URL_KEY);
 
         ArchiveAttemptLog patchAttempt = null;
         boolean patchArchiveWorthTrying = binaryPatchDownloadUrl != null;
         if (assetDiffDownloadUrl != null) {
             patchAttempt = new ArchiveAttemptLog();
             patchAttempt.beginAttempt(ArchiveAttemptLog.ARCHIVE_ASSET_DIFF);
-            if (tryDownloadBinaryPatchPackage(updatePackage, expectedBundleFileName, progressCallback,
+            if (tryDownloadArchivePackage(updatePackage, expectedBundleFileName, progressCallback,
                     assetDiffDownloadUrl, patchAttempt)) {
                 return patchAttempt.result();
             }
@@ -193,7 +193,7 @@ public class CodePushUpdateManager {
                 patchAttempt = new ArchiveAttemptLog();
             }
             patchAttempt.beginAttempt(ArchiveAttemptLog.ARCHIVE_BINARY_PATCH);
-            if (tryDownloadBinaryPatchPackage(updatePackage, expectedBundleFileName, progressCallback,
+            if (tryDownloadArchivePackage(updatePackage, expectedBundleFileName, progressCallback,
                     binaryPatchDownloadUrl, patchAttempt)) {
                 return patchAttempt.result();
             }
@@ -206,7 +206,17 @@ public class CodePushUpdateManager {
     }
 
     /**
-     * Installs the update from one of its binary patch archives.
+     * @return the URL one of the update's archives is offered at, or null when the update
+     *         does not offer that archive. An empty string is not a URL: it stands for the
+     *         same absent archive as a missing key, which is what iOS makes of it too.
+     */
+    private static String optArchiveDownloadUrl(JSONObject updatePackage, String downloadUrlKey) {
+        String downloadUrl = updatePackage.optString(downloadUrlKey, null);
+        return downloadUrl == null || downloadUrl.isEmpty() ? null : downloadUrl;
+    }
+
+    /**
+     * Installs the update from one of its patch archives.
      *
      * Every way this can fail ends the same way, with the caller moving on to the next
      * archive, so none of it is reported to the caller as an error. The ladder cannot loop:
@@ -219,12 +229,12 @@ public class CodePushUpdateManager {
      * @return true when the update was installed, false when the caller has to move on to
      *         the next archive
      */
-    private boolean tryDownloadBinaryPatchPackage(JSONObject updatePackage, String expectedBundleFileName,
-                                                  DownloadProgressCallback progressCallback,
-                                                  String binaryPatchDownloadUrl, ArchiveAttemptLog patchAttempt) {
+    private boolean tryDownloadArchivePackage(JSONObject updatePackage, String expectedBundleFileName,
+                                              DownloadProgressCallback progressCallback,
+                                              String archiveDownloadUrl, ArchiveAttemptLog patchAttempt) {
         try {
             ArchiveRestoreResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
-                    progressCallback, binaryPatchDownloadUrl, true, patchAttempt);
+                    progressCallback, archiveDownloadUrl, true, patchAttempt);
             if (patchResult.succeeded()) {
                 return true;
             }
@@ -253,9 +263,9 @@ public class CodePushUpdateManager {
      *
      * @param isBinaryPatchUpdate whether the archive holds a binary patch of the JS bundle,
      *                            which has to be applied before the contents are the update.
-     *                            Only an archive downloaded from the binary patch URL is
-     *                            treated that way, so an update being downloaded in full can
-     *                            never end up on the patch path.
+     *                            Both the asset diff and the patch archive are downloaded
+     *                            that way; the full archive never is, so an update being
+     *                            downloaded in full can never end up on the patch path.
      * @param patchAttempt the record the patch is timed into, or null for a full download,
      *                     which has no patch to time
      * @return the outcome of the patch: a failed result means the update was not installed
@@ -434,7 +444,7 @@ public class CodePushUpdateManager {
             }
         } else {
             if (isBinaryPatchUpdate) {
-                // Whatever the patch URL served, it is not a patch archive - an error page
+                // Whatever the archive URL served, it is not an update archive - an error page
                 // answered with a 200 looks like this too. Moving it into place would
                 // install bytes no hash has ever been checked against, so the full archive
                 // is downloaded instead.

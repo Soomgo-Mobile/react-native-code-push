@@ -3,12 +3,12 @@ import { clearRequestLog, getRequestLog } from "../mock-server/server";
 /**
  * Which archive of an update the app asked the mock server for.
  *
- * A release published with a binary patch offers two archives that install to the same
- * contents, so the app looks and behaves identically whether it applied the patch or
- * downloaded the full update after the patch failed. What the two cases do not share is
- * which archives were requested: a patch install fetches the patch alone, a fallback
- * fetches the patch and then the full archive, and a release without a patch fetches the
- * full archive alone.
+ * A release published with a binary patch offers at least two archives that install to
+ * the same contents, so the app looks and behaves identically whether it applied the
+ * patch or downloaded the full update after the patch failed. What the two cases do not
+ * share is which archives were requested: a patch install fetches the patch alone, a
+ * fallback fetches the patch and then the full archive, and a release without a patch
+ * fetches the full archive alone.
  *
  * An asset diff archive is a third form of the same contents, offered to a client whose
  * installed update is the base it was built against, and told apart the same way: a diff

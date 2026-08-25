@@ -132,7 +132,7 @@ export interface UpdateArchiveAttempt {
 }
 
 /**
- * How installing an update from its binary patch archives went.
+ * How installing an update from its patch archives went.
  */
 export interface UpdateArchiveResult {
     /**
@@ -313,8 +313,12 @@ export interface RemotePackage extends Package {
      * Downloads the available update from the CodePush service.
      *
      * @param downloadProgressCallback An optional callback that allows tracking the progress of the update while it is being downloaded.
+     * @param updateArchiveResultCallback An optional callback for observing how an update published with a binary patch was installed. It is called once when the download had such an archive to try, and says nothing about whether the download succeeded: an archive that could not be applied is reported here and the update is downloaded in full.
      */
-    download(downloadProgressCallback?: DownloadProgressCallback): Promise<LocalPackage>;
+    download(
+        downloadProgressCallback?: DownloadProgressCallback,
+        updateArchiveResultCallback?: (result: UpdateArchiveResult) => void,
+    ): Promise<LocalPackage>;
 
     /**
      * The URL at which the package is available for download.

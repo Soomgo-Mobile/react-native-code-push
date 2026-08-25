@@ -117,7 +117,7 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # Filesystem-based CodePush config
 ├── helpers/
-│   ├── prepare-config.ts   # Patches App.tsx (host, E2E buttons, patch result probe), copies config
+│   ├── prepare-config.ts   # Patches App.tsx (host, E2E buttons, archive result probe), copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
 │   ├── build-app.ts        # Builds iOS/Android in Release mode
 │   ├── artifact-storage.ts # Asserts where the CLI stored bundles and release histories

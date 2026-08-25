@@ -281,6 +281,25 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void installsFromThePatchArchiveWhenTheAssetDiffUrlIsAnEmptyString() throws IOException {
+        // An empty slot is not an archive on offer. Attempting it would fail for want of a
+        // URL and leave no verdict behind, which is what skips the patch archive - so the
+        // update would be downloaded in full with a perfectly good patch archive untried.
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContents()));
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackageWithAssetDiff(mPackageHash, fullUrl, patchUrl, ""), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals("the empty diff slot is not downloaded and does not cost the patch archive its try",
+                Arrays.asList("/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(1, patchResult.optJSONArray("attempts").length());
+        assertInstalledContents();
+    }
+
+    @Test
     public void leavesAFileOutsideThePackageFolderAloneWhenTheAssetDiffManifestNamesIt() throws IOException {
         // A manifest entry that climbs out of the package folder: the client is not the one
         // that wrote it, so it must not act on it.
