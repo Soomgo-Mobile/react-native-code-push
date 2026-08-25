@@ -98,8 +98,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p android \
                       --binary-bundle-path ./binary/index.android.bundle
 ```
 
-`release` also uses the record to verify the base bundle it was handed - see
-[Verifying the base bundle](../cli/README.md#verifying-the-base-bundle) for details.
+`release` also uses the `binary-patch-base.json` record to verify the base bundle it was
+handed - see [Verifying the base bundle](../cli/README.md#verifying-the-base-bundle) for
+details.
 
 ## Asset diff archives
 

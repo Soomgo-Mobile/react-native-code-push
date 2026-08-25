@@ -47,7 +47,7 @@ export 결과는 `$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_N
 
 ### 바이너리 릴리스별로 export 보관하기
 
-스토어 바이너리를 빌드하는 파이프라인은 그 빌드의 export를 바이너리 버전별로 정리해 오래 남는 곳에 보관해야 합니다. 이후 릴리스가 대상 바이너리에 맞는 번들을 가져올 수 있어야 하기 때문입니다.
+스토어 바이너리를 빌드하는 파이프라인은 빌드마다 나온 export를 바이너리 버전별로 정리해 오래 남는 곳에 보관해야 합니다. 이후 릴리스가 대상 바이너리에 맞는 번들을 가져올 수 있어야 하기 때문입니다.
 
 ```bash
 # Android, ./gradlew :app:assembleRelease 실행 후
@@ -71,11 +71,11 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p android \
                       --binary-bundle-path ./binary/index.android.bundle
 ```
 
-`release`는 이 기록으로 전달받은 base 번들이 맞는지 검증하기도 합니다. 자세한 내용은 [base 번들 검증](../cli/README.ko.md#base-번들-검증)을 참고하세요.
+`release`는 export에 함께 담긴 `binary-patch-base.json` 기록으로 전달받은 base 번들이 맞는지 검증하기도 합니다. 자세한 내용은 [base 번들 검증](../cli/README.ko.md#base-번들-검증)을 참고하세요.
 
 ## asset diff 아카이브
 
-binary patch로 배포한 릴리스는 **asset diff 아카이브**도 함께 담을 수 있습니다. 최근에 배포한 버전마다 하나씩입니다. diff 아카이브는 JS 번들의 patch, 그 버전에 아직 없는 asset, 삭제해야 하는 파일 목록 manifest만 담습니다. 클라이언트는 이미 설치한 업데이트를 복사한 뒤 이것들을 적용하고, 결과적으로 full 아카이브와 똑같은 내용을 갖게 됩니다.
+binary patch로 배포한 릴리스는 **asset diff 아카이브**도 함께 담을 수 있습니다. 최근에 배포한 버전마다 하나씩입니다. diff 아카이브는 JS 번들의 patch, 기준이 된 버전에 아직 없는 asset, 삭제해야 하는 파일 목록 manifest만 담습니다. 클라이언트는 이미 설치한 기준 업데이트를 복사한 뒤 patch와 manifest를 적용하고, 결과적으로 full 아카이브와 똑같은 내용을 갖게 됩니다.
 
 클라이언트는 아래 순서로 아카이브를 시도하고, 설치할 수 있는 첫 번째 아카이브에서 멈춥니다.
 
@@ -83,11 +83,11 @@ binary patch로 배포한 릴리스는 **asset diff 아카이브**도 함께 담
 |---|---|---|
 | 1 | asset diff | 클라이언트가 실행 중인 업데이트를 기준으로 릴리스가 diff를 만들어 둔 경우입니다. |
 | 2 | binary patch | 항상 쓸 수 있습니다. 모든 클라이언트가 가진 앱 바이너리의 번들을 기준으로 만들기 때문입니다. |
-| 3 | full | 항상 쓸 수 있습니다. 설치된 것이 없어도 됩니다. |
+| 3 | full | 항상 쓸 수 있습니다. 설치된 업데이트가 없어도 됩니다. |
 
 이 순서에는 예외가 두 가지 있습니다.
 
-**모든 클라이언트가 셋을 다 시도하지는 않습니다.** 쓸 수 있는 asset diff가 없는 클라이언트는 binary patch에서 시작합니다. 앱 바이너리의 번들을 실행 중이거나, 이 릴리스가 diff를 만들지 않은 업데이트를 실행 중인 경우입니다.
+**모든 클라이언트가 셋을 다 시도하지는 않습니다.** 쓸 수 있는 asset diff가 없는 클라이언트는 binary patch에서 시작합니다. 앱 바이너리의 번들을 실행 중이거나, 새 릴리스가 diff를 만들지 않은 업데이트를 실행 중인 경우입니다.
 
 **asset diff가 실패해도 항상 binary patch로 넘어가지는 않습니다.** diff가 asset 영역에서 실패했을 때만 넘어갑니다. 설치된 업데이트와 병합하지 못했거나(`asset_merge_failed`), 병합된 내용이 package hash 검증에 실패한 경우(`package_verification_failed`)입니다. 그 밖의 실패는 두 아카이브가 공유하는 bundle patch에서 일어나므로 binary patch도 같은 방식으로 실패합니다. 이때 클라이언트는 곧바로 full 아카이브를 내려받습니다.
 
