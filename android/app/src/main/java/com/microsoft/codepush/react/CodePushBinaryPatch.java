@@ -26,7 +26,7 @@ import java.io.OutputStream;
  * hashed before the patch is applied and the restored bundle is hashed afterwards, and
  * the restored bytes only reach the update contents once both checks have passed.
  *
- * Every failure is reported as a {@link BinaryPatchResult}, never as an exception: the
+ * Every failure is reported as a {@link ArchiveRestoreResult}, never as an exception: the
  * caller answers all of them the same way, by downloading the full archive instead.
  */
 public class CodePushBinaryPatch {
@@ -74,11 +74,11 @@ public class CodePushBinaryPatch {
      *                             and after the attempt so an interrupted run leaves nothing
      * @param baseBundleFileName   name of the JS bundle inside the app binary
      */
-    public BinaryPatchResult restoreBundle(String unzippedFolderPath, String workingFolderPath, String baseBundleFileName) {
+    public ArchiveRestoreResult restoreBundle(String unzippedFolderPath, String workingFolderPath, String baseBundleFileName) {
         File contentsFolder = resolveContentsFolder(new File(unzippedFolderPath));
         File manifestFile = new File(contentsFolder, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME);
         if (!manifestFile.isFile()) {
-            return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
+            return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_INVALID_MANIFEST);
         }
 
         JSONObject manifest;
@@ -86,12 +86,12 @@ public class CodePushBinaryPatch {
             manifest = CodePushUtils.getJsonObjectFromFile(manifestFile.getAbsolutePath());
         } catch (IOException | CodePushMalformedDataException e) {
             CodePushUtils.log(e);
-            return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
+            return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_INVALID_MANIFEST);
         }
 
         if (manifest.optInt(CodePushConstants.BINARY_PATCH_FORMAT_VERSION_KEY, -1) != CodePushConstants.BINARY_PATCH_FORMAT_VERSION
                 || !CodePushConstants.BINARY_PATCH_ALGORITHM.equals(manifest.optString(CodePushConstants.BINARY_PATCH_ALGORITHM_KEY, null))) {
-            return BinaryPatchResult.failure(BinaryPatchResult.REASON_UNSUPPORTED_FORMAT);
+            return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_UNSUPPORTED_FORMAT);
         }
 
         File targetBundleFile = resolveInsideFolder(contentsFolder, manifest.optString(CodePushConstants.BINARY_PATCH_BUNDLE_PATH_KEY, null));
@@ -102,7 +102,7 @@ public class CodePushBinaryPatch {
         if (targetBundleFile == null || patchFile == null || !patchFile.isFile()
                 || isNullOrEmpty(baseBundleHash) || isNullOrEmpty(targetBundleHash)
                 || targetBundleSize <= 0 || targetBundleSize > CodePushConstants.BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE) {
-            return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
+            return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_INVALID_MANIFEST);
         }
 
         // An earlier attempt that was killed while patching leaves its restored bundle behind.
@@ -110,13 +110,13 @@ public class CodePushBinaryPatch {
         File workingFolder = new File(workingFolderPath);
         if (!workingFolder.mkdirs()) {
             CodePushUtils.log("Unable to create the binary patch working directory at " + workingFolderPath);
-            return BinaryPatchResult.failure(BinaryPatchResult.REASON_PATCH_APPLY_FAILED);
+            return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED);
         }
 
         try {
             if (workingFolder.getUsableSpace() < targetBundleSize) {
                 CodePushUtils.log("Not enough free space to restore a " + targetBundleSize + " byte bundle.");
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_PATCH_APPLY_FAILED);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED);
             }
 
             byte[] baseBundle;
@@ -124,13 +124,13 @@ public class CodePushBinaryPatch {
                 baseBundle = mBaseBundleProvider.readBaseBundle(baseBundleFileName);
             } catch (Exception e) {
                 CodePushUtils.log(e);
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_BASE_BUNDLE_UNAVAILABLE);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_BASE_BUNDLE_UNAVAILABLE);
             }
             if (baseBundle == null) {
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_BASE_BUNDLE_UNAVAILABLE);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_BASE_BUNDLE_UNAVAILABLE);
             }
             if (!baseBundleHash.equals(CodePushUpdateUtils.computeHashForBytes(baseBundle))) {
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_BASE_HASH_MISMATCH);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_BASE_HASH_MISMATCH);
             }
 
             byte[] patch;
@@ -138,38 +138,38 @@ public class CodePushBinaryPatch {
                 patch = readFile(patchFile);
             } catch (IOException e) {
                 CodePushUtils.log(e);
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_PATCH_APPLY_FAILED);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED);
             }
 
             File restoredBundleFile = new File(workingFolder, CodePushConstants.BINARY_PATCH_TARGET_FILE_NAME);
             int resultCode = mPatchApplier.apply(baseBundle, patch, restoredBundleFile.getAbsolutePath(), targetBundleSize);
             if (resultCode != PatchApplier.RESULT_OK) {
                 CodePushUtils.log("The binary patch applier returned " + resultCode + ".");
-                return BinaryPatchResult.failure(reasonForResultCode(resultCode));
+                return ArchiveRestoreResult.failure(reasonForResultCode(resultCode));
             }
 
             if (restoredBundleFile.length() != targetBundleSize) {
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_TARGET_VERIFICATION_FAILED);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_TARGET_VERIFICATION_FAILED);
             }
             String restoredBundleHash;
             try {
                 restoredBundleHash = CodePushUpdateUtils.computeHashForFile(restoredBundleFile);
             } catch (IOException e) {
                 CodePushUtils.log(e);
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_TARGET_VERIFICATION_FAILED);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_TARGET_VERIFICATION_FAILED);
             }
             if (!targetBundleHash.equals(restoredBundleHash)) {
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_TARGET_VERIFICATION_FAILED);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_TARGET_VERIFICATION_FAILED);
             }
 
             if (!moveFile(restoredBundleFile, targetBundleFile) || !patchFile.delete() || !manifestFile.delete()) {
                 // The contents are half restored, so they must not be installed. The full
                 // archive that follows unzips over them, which is what clears them.
                 CodePushUtils.log("Unable to put the restored bundle in place of the patch.");
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_PATCH_APPLY_FAILED);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED);
             }
 
-            return BinaryPatchResult.success();
+            return ArchiveRestoreResult.success();
         } finally {
             FileUtils.deleteDirectoryAtPath(workingFolderPath);
         }
@@ -234,8 +234,8 @@ public class CodePushBinaryPatch {
 
     private static String reasonForResultCode(int resultCode) {
         return resultCode == PatchApplier.RESULT_UNSUPPORTED_COMPRESSION
-                ? BinaryPatchResult.REASON_UNSUPPORTED_FORMAT
-                : BinaryPatchResult.REASON_PATCH_APPLY_FAILED;
+                ? ArchiveRestoreResult.REASON_UNSUPPORTED_FORMAT
+                : ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED;
     }
 
     /** Rename, falling back to a copy for the case where the two paths are on different volumes. */

@@ -92,7 +92,7 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
    - `1.3.7` — 한 번 만든 번들(`bundle` 1회 + `release --skip-bundle` 2회, 한쪽에만 베이스 번들 전달)이 patch URL이 실린 히스토리에서는 patch로, 실리지 않은 히스토리에서는 full로 설치됩니다.
    - `1.3.8` — `02-ui-responsive-during-install`: patch를 내려받아 적용하는 동안에도 앱이 탭에 반응합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
 
-patch 설치와 full archive fallback은 같은 내용을 설치하므로 화면만으로는 구분되지 않습니다. 둘을 가르는 것은 앱이 서버에 요청한 archive의 순서이며, 모든 시나리오가 이를 검증합니다: patch 설치는 `[patch]`, fallback은 `[patch, full]`, patch 없이 배포된 릴리스는 `[full]`입니다.
+patch 설치와 full archive fallback은 같은 내용을 설치하므로 화면만으로는 구분되지 않습니다. 둘을 가르는 것은 앱이 서버에 요청한 archive의 순서이며, 모든 시나리오가 이를 검증합니다: patch 설치는 `[binary-patch]`, fallback은 `[binary-patch, full]`, patch 없이 배포된 릴리스는 `[full]`입니다.
 
 ### Phase 7 — Asset Diff 업데이트 (`flows-asset-diff/`)
 
@@ -100,9 +100,11 @@ patch 설치와 full archive fallback은 같은 내용을 설치하므로 화면
 17. **업데이트와 asset diff 발행** — 다음 릴리스는 같은 히스토리에 합류합니다. 로컬 설정이 `bundleDownloader`를 제공하므로, 릴리스는 베이스의 full archive를 내려받아 full·patch archive와 함께 asset diff archive를 발행하고, 히스토리에 `diffPackages`로 기록합니다. 러너는 설치 전에 diff archive 자체를 검증합니다: 공유 asset은 빠져 있고, 새 asset은 실려 있으며, 삭제 manifest(`hotcodepush.json`)가 업데이트에서 사라진 asset을 지목하는지 확인합니다.
    - `1.4.1 → 1.4.2` — 베이스를 실행 중인 클라이언트가 `01-update-from-installed`로 업데이트를 설치하며, diff archive만 내려받습니다. 병합된 내용물이 릴리스된 package hash를 그대로 재현해야 하므로, 이 성공이 곧 삭제와 덮어쓰기가 기기에서 실제로 수행되었다는 증거가 됩니다.
    - 바이너리에서 `1.4.2` 설치 — diff 릴리스가 그대로 있는 상태에서, 바이너리부터 다시 시작하는 클라이언트는 설치된 업데이트가 없으므로 diff가 발행된 적 없다는 듯 patch archive로 설치합니다.
-   - `1.4.3 → 1.4.4` — 실려 있는 asset이 손상된 diff는 다운로드와 병합까지 진행되지만 package 검증에 실패하고, full archive로 fallback합니다.
+   - `1.4.3 → 1.4.4` — 실려 있는 asset이 손상된 diff는 다운로드와 병합까지 진행되지만 package 검증에 실패하고, patch archive로 fallback합니다. asset 쪽 실패이므로, 모든 asset을 실은 patch archive에는 책임이 없기 때문입니다.
+   - `1.4.5 → 1.4.6` — 번들 patch가 manifest에 약속되지 않은 번들을 복원하는 diff는 두 archive가 바이트 단위로 공유하는 부분에서 실패한 것이므로, patch archive를 건너뛰고 full archive를 내려받습니다.
+   - `1.4.7 → 1.4.8` — 삭제할 파일을 지목하지 않는 manifest는 CLI가 모든 릴리스에 그 키를 쓰기 때문에 병합을 통과시키지 않고 거부합니다. 이 역시 asset 쪽 실패이므로 다음 단은 patch archive입니다.
 
-diff 설치와 그 fallback 역시 같은 내용을 설치하므로, 모든 시나리오가 내려받은 archive를 다시 검증합니다: diff 설치는 `[diff]`, diff가 서빙할 수 없는 클라이언트는 `[patch]`, fallback은 `[diff, full]`입니다.
+diff 설치와 그 fallback들 역시 같은 내용을 설치하므로, 모든 시나리오가 내려받은 archive를 다시 검증합니다: diff 설치는 `[asset-diff]`, diff가 서빙할 수 없는 클라이언트는 `[binary-patch]`, asset 쪽 fallback은 `[asset-diff, binary-patch]`, 번들 쪽 fallback은 `[asset-diff, full]`입니다. 또한 모든 시나리오가 앱의 `onUpdateArchiveResult` 콜백이 전달받은 결과를 시도별 archive와 fallback 사유까지 검증합니다: 준비 단계에서 주입되는 프로브가 결과를 mock 서버에 요청으로 보고하므로, 설치에 뒤따르는 재시작이 결과를 지우지 못합니다.
 
 ## 아키텍처
 
@@ -116,7 +118,7 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # 파일시스템 기반 CodePush 설정
 ├── helpers/
-│   ├── prepare-config.ts   # App.tsx 패치(호스트 + 임시 E2E 버튼), 설정 복사
+│   ├── prepare-config.ts   # App.tsx 패치(호스트, E2E 버튼, archive 결과 프로브), 설정 복사
 │   ├── prepare-bundle.ts   # code-push CLI로 번들 생성
 │   ├── build-app.ts        # iOS/Android Release 빌드
 │   ├── artifact-storage.ts # CLI가 번들과 릴리스 히스토리를 저장한 위치 검증
@@ -144,7 +146,7 @@ e2e/
 
 `code-push.config.local.ts` 템플릿은 모든 CLI 작업(업로드, 히스토리 읽기/쓰기)을 로컬 파일시스템으로 라우팅하며, 앱의 `CODEPUSH_HOST`는 mock 서버를 가리키도록 패치됩니다. 업로더가 전달한 artifact metadata로 스토리지 키를 만들므로 archive 파일명에 의존하지 않습니다.
 
-서버는 응답한 모든 요청을 기록합니다. 러너는 이 기록을 되읽어, 화면으로는 구분할 수 없는 것 — 앱이 어떤 업데이트 archive를 어떤 순서로 내려받았는지 — 를 검증합니다.
+서버는 응답한 모든 요청을 기록합니다. 러너는 이 기록을 되읽어, 화면으로는 구분할 수 없는 것 — 앱이 어떤 업데이트 archive를 어떤 순서로 내려받았는지, 그리고 앱의 `onUpdateArchiveResult` 콜백이 무엇을 전달받았는지 — 를 검증합니다. 콜백 결과는 주입된 프로브가 별도의 요청으로 보고합니다.
 
 `E2E_ARTIFACT_LOG_PATH`가 주어지면 템플릿은 저장한 모든 artifact도 (서빙 디렉터리 바깥에) 기록하며, 러너는 이를 되읽어 번들과 릴리스 히스토리가 metadata 기반 경로에 저장되는지 검증합니다.
 

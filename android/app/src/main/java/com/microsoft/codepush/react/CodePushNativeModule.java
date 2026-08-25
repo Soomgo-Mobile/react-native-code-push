@@ -336,7 +336,7 @@ public class CodePushNativeModule extends NativeCodePushSpec {
             public void run() {
                 try {
                     JSONObject mutableUpdatePackage = CodePushUtils.convertReadableToJsonObject(updatePackage);
-                    JSONObject binaryPatchResult = mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
+                    JSONObject updateArchiveResult = mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
                         private volatile boolean hasScheduledNextFrame = false;
                         private final DownloadProgressEventDispatcher progressEventDispatcher = new DownloadProgressEventDispatcher(
                                 new DownloadProgressEventDispatcher.EventEmitter() {
@@ -389,13 +389,13 @@ public class CodePushNativeModule extends NativeCodePushSpec {
 
                     JSONObject newPackage = mUpdateManager.getPackage(CodePushUtils.tryGetString(updatePackage, CodePushConstants.PACKAGE_HASH_KEY));
                     WritableMap downloadedPackage = CodePushUtils.convertJsonObjectToWritable(newPackage);
-                    if (binaryPatchResult != null) {
+                    if (updateArchiveResult != null) {
                         // The result describes this download rather than the update, so it is
                         // put on what this call resolves with and nowhere else: the metadata
                         // the update manager has already written knows nothing about it, and
                         // whoever asked for the download decides what the result is worth.
-                        downloadedPackage.putMap(CodePushConstants.BINARY_PATCH_RESULT_KEY,
-                                CodePushUtils.convertJsonObjectToWritable(binaryPatchResult));
+                        downloadedPackage.putMap(CodePushConstants.UPDATE_ARCHIVE_RESULT_KEY,
+                                CodePushUtils.convertJsonObjectToWritable(updateArchiveResult));
                     }
 
                     promise.resolve(downloadedPackage);

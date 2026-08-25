@@ -157,20 +157,43 @@ public class CodePushUpdateManager {
     }
 
     /**
-     * @return what the attempt at installing the update from its binary patch archive ended
-     *         in, or null when the update had no patch archive to attempt. The result belongs
+     * @return what the attempts at installing the update from its patch archives ended in,
+     *         or null when the update had no such archive to attempt. The result belongs
      *         to this download alone: the metadata written for the update never carries it.
      */
     public JSONObject downloadPackage(JSONObject updatePackage, String expectedBundleFileName,
                                       DownloadProgressCallback progressCallback) throws IOException {
-        // A release that was published with a binary patch offers two archives of the same
-        // update. The patch is worth trying because it is a fraction of the size, and the
-        // full archive is always there when it does not work out.
-        String binaryPatchDownloadUrl = updatePackage.optString(CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY, null);
-        BinaryPatchAttempt patchAttempt = null;
-        if (binaryPatchDownloadUrl != null) {
-            patchAttempt = new BinaryPatchAttempt();
-            if (tryDownloadBinaryPatchPackage(updatePackage, expectedBundleFileName, progressCallback,
+        // A release that was published with a binary patch offers up to three archives of
+        // the same update. The asset diff is the smallest and is tried first, the patch
+        // archive stands in when the diff fails on its asset side, and the full archive is
+        // always there when none of it works out.
+        String binaryPatchDownloadUrl = optArchiveDownloadUrl(updatePackage, CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY);
+        String assetDiffDownloadUrl = optArchiveDownloadUrl(updatePackage, CodePushConstants.ASSET_DIFF_DOWNLOAD_URL_KEY);
+
+        ArchiveAttemptLog patchAttempt = null;
+        boolean patchArchiveWorthTrying = binaryPatchDownloadUrl != null;
+        if (assetDiffDownloadUrl != null) {
+            patchAttempt = new ArchiveAttemptLog();
+            patchAttempt.beginAttempt(ArchiveAttemptLog.ARCHIVE_ASSET_DIFF);
+            if (tryDownloadArchivePackage(updatePackage, expectedBundleFileName, progressCallback,
+                    assetDiffDownloadUrl, patchAttempt)) {
+                return patchAttempt.result();
+            }
+
+            // A diff that failed before its bundle was restored failed in the bundle patch,
+            // which the patch archive carries byte for byte - it would fail the same way,
+            // and trying it would only put a second doomed download in front of the full
+            // one. A failure after the restore is on the asset side, which the patch
+            // archive does not share.
+            patchArchiveWorthTrying = patchArchiveWorthTrying && patchAttempt.currentAttemptRestoredBundle();
+        }
+
+        if (patchArchiveWorthTrying) {
+            if (patchAttempt == null) {
+                patchAttempt = new ArchiveAttemptLog();
+            }
+            patchAttempt.beginAttempt(ArchiveAttemptLog.ARCHIVE_BINARY_PATCH);
+            if (tryDownloadArchivePackage(updatePackage, expectedBundleFileName, progressCallback,
                     binaryPatchDownloadUrl, patchAttempt)) {
                 return patchAttempt.result();
             }
@@ -183,32 +206,42 @@ public class CodePushUpdateManager {
     }
 
     /**
-     * Installs the update from its binary patch archive.
+     * @return the URL one of the update's archives is offered at, or null when the update
+     *         does not offer that archive. An empty string is not a URL: it stands for the
+     *         same absent archive as a missing key, which is what iOS makes of it too.
+     */
+    private static String optArchiveDownloadUrl(JSONObject updatePackage, String downloadUrlKey) {
+        String downloadUrl = updatePackage.optString(downloadUrlKey, null);
+        return downloadUrl == null || downloadUrl.isEmpty() ? null : downloadUrl;
+    }
+
+    /**
+     * Installs the update from one of its patch archives.
      *
-     * Every way this can fail ends the same way, with the update being downloaded in full
-     * instead, so none of them is reported to the caller as an error. The fallback happens
-     * exactly once without anything having to count it: the full archive is downloaded by
-     * a call that is not allowed to take the patch path, so it has no failure of its own to
-     * fall back from.
+     * Every way this can fail ends the same way, with the caller moving on to the next
+     * archive, so none of it is reported to the caller as an error. The ladder cannot loop:
+     * which archive comes next is the caller's decision alone, and the full archive at its
+     * end is downloaded by a call that is not allowed to take the patch path, so it has no
+     * failure of its own to fall back from.
      *
      * @param patchAttempt records what the attempt ended in, for the caller to hand to
      *                     whoever asked for the download
-     * @return true when the update was installed, false when the caller has to download the
-     *         full archive instead
+     * @return true when the update was installed, false when the caller has to move on to
+     *         the next archive
      */
-    private boolean tryDownloadBinaryPatchPackage(JSONObject updatePackage, String expectedBundleFileName,
-                                                  DownloadProgressCallback progressCallback,
-                                                  String binaryPatchDownloadUrl, BinaryPatchAttempt patchAttempt) {
+    private boolean tryDownloadArchivePackage(JSONObject updatePackage, String expectedBundleFileName,
+                                              DownloadProgressCallback progressCallback,
+                                              String archiveDownloadUrl, ArchiveAttemptLog patchAttempt) {
         try {
-            BinaryPatchResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
-                    progressCallback, binaryPatchDownloadUrl, true, patchAttempt);
+            ArchiveRestoreResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
+                    progressCallback, archiveDownloadUrl, true, patchAttempt);
             if (patchResult.succeeded()) {
                 return true;
             }
 
             patchAttempt.recordFallback(patchResult.getFailureReason());
-            CodePushUtils.log("Binary patch update failed (" + patchResult.getFailureReason()
-                    + "). Downloading the full update instead.");
+            CodePushUtils.log("The " + patchAttempt.currentArchive() + " archive failed ("
+                    + patchResult.getFailureReason() + "). Falling back.");
         } catch (Exception | OutOfMemoryError e) {
             // Applying a patch is the one path that holds a whole bundle in memory, so
             // running out of it is a failure this has to absorb like any other: by the time
@@ -216,7 +249,8 @@ public class CodePushUpdateManager {
             // to disk in chunks rather than held.
             patchAttempt.recordFallbackAfterError();
             CodePushUtils.log(e);
-            CodePushUtils.log("The binary patch update could not be completed. Downloading the full update instead.");
+            CodePushUtils.log("The " + patchAttempt.currentArchive()
+                    + " archive could not be applied. Falling back.");
         } finally {
             FileUtils.deleteDirectoryAtPath(getBinaryPatchFolderPath());
         }
@@ -229,19 +263,19 @@ public class CodePushUpdateManager {
      *
      * @param isBinaryPatchUpdate whether the archive holds a binary patch of the JS bundle,
      *                            which has to be applied before the contents are the update.
-     *                            Only an archive downloaded from the binary patch URL is
-     *                            treated that way, so an update being downloaded in full can
-     *                            never end up on the patch path.
+     *                            Both the asset diff and the patch archive are downloaded
+     *                            that way; the full archive never is, so an update being
+     *                            downloaded in full can never end up on the patch path.
      * @param patchAttempt the record the patch is timed into, or null for a full download,
      *                     which has no patch to time
      * @return the outcome of the patch: a failed result means the update was not installed
-     *         and the caller has to fall back to the full archive. Downloading the full
+     *         and the caller has to move on to the next archive. Downloading the full
      *         archive always succeeds or throws.
      */
-    BinaryPatchResult downloadAndInstallPackage(JSONObject updatePackage, String expectedBundleFileName,
+    ArchiveRestoreResult downloadAndInstallPackage(JSONObject updatePackage, String expectedBundleFileName,
                                                 DownloadProgressCallback progressCallback,
                                                 String downloadUrlString, boolean isBinaryPatchUpdate,
-                                                BinaryPatchAttempt patchAttempt) throws IOException {
+                                                ArchiveAttemptLog patchAttempt) throws IOException {
         String newUpdateHash = updatePackage.optString(CodePushConstants.PACKAGE_HASH_KEY, null);
         String newUpdateFolderPath = getPackageFolderPath(newUpdateHash);
         String newUpdateMetadataPath = CodePushUtils.appendPathComponent(newUpdateFolderPath, CodePushConstants.PACKAGE_FILE_NAME);
@@ -341,7 +375,7 @@ public class CodePushUpdateManager {
             // contents identical to the ones the full archive would have delivered.
             if (isBinaryPatchUpdate) {
                 long patchStartTime = System.currentTimeMillis();
-                BinaryPatchResult patchResult = mBinaryPatch.restoreBundle(unzippedFolderPath,
+                ArchiveRestoreResult patchResult = mBinaryPatch.restoreBundle(unzippedFolderPath,
                         getBinaryPatchFolderPath(), expectedBundleFileName);
                 if (!patchResult.succeeded()) {
                     return patchResult;
@@ -357,10 +391,31 @@ public class CodePushUpdateManager {
                     CodePushConstants.DIFF_MANIFEST_FILE_NAME);
             boolean isDiffUpdate = FileUtils.fileAtPathExists(diffManifestFilePath);
             if (isDiffUpdate) {
-                String currentPackageFolderPath = getCurrentPackageFolderPath();
-                CodePushUpdateUtils.copyNecessaryFilesFromCurrentPackage(diffManifestFilePath, currentPackageFolderPath, newUpdateFolderPath);
-                File diffManifestFile = new File(diffManifestFilePath);
-                diffManifestFile.delete();
+                try {
+                    String currentPackageFolderPath = getCurrentPackageFolderPath();
+                    if (currentPackageFolderPath != null && !FileUtils.fileAtPathExists(currentPackageFolderPath)) {
+                        // The copy below skips a package that is gone and lets the merge
+                        // "complete" without it, which would report the missing package as a
+                        // verification failure of the merged contents. The other platform's
+                        // merge fails reading the missing files, so it is refused here too,
+                        // for the two platforms to report one reason for one state.
+                        throw new IOException("The installed package the diff merges into is gone from " + currentPackageFolderPath);
+                    }
+
+                    CodePushUpdateUtils.copyNecessaryFilesFromCurrentPackage(diffManifestFilePath, currentPackageFolderPath, newUpdateFolderPath);
+                    File diffManifestFile = new File(diffManifestFilePath);
+                    diffManifestFile.delete();
+                } catch (Exception e) {
+                    // A merge that cannot complete has a word of its own, because it says
+                    // the diff went wrong on its asset side - the one failure the patch
+                    // archive, which carries every asset, is not implicated in.
+                    if (isBinaryPatchUpdate) {
+                        CodePushUtils.log(e);
+                        return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_ASSET_MERGE_FAILED);
+                    }
+
+                    throw e;
+                }
             }
 
             FileUtils.copyDirectoryContents(unzippedFolderPath, newUpdateFolderPath);
@@ -389,11 +444,11 @@ public class CodePushUpdateManager {
             }
         } else {
             if (isBinaryPatchUpdate) {
-                // Whatever the patch URL served, it is not a patch archive - an error page
+                // Whatever the archive URL served, it is not an update archive - an error page
                 // answered with a 200 looks like this too. Moving it into place would
                 // install bytes no hash has ever been checked against, so the full archive
                 // is downloaded instead.
-                return BinaryPatchResult.failure(BinaryPatchResult.REASON_INVALID_MANIFEST);
+                return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_INVALID_MANIFEST);
             }
 
             // File is a jsbundle, move it to a folder with the packageHash as its name
@@ -403,7 +458,7 @@ public class CodePushUpdateManager {
         // Save metadata to the folder.
         CodePushUtils.writeJsonToFile(updatePackage, newUpdateMetadataPath);
 
-        return BinaryPatchResult.success();
+        return ArchiveRestoreResult.success();
     }
 
     public void installPackage(JSONObject updatePackage, boolean removePendingUpdate) {

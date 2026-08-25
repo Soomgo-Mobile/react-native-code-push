@@ -36,9 +36,11 @@ export interface ReleaseInfo {
     binaryPatchDownloadUrl?: string;
     /**
      * URLs of patch archives that also carry an asset diff, keyed by the packageHash of the
-     * release each archive was diffed against. A client whose installed update matches one of
-     * these keys downloads that archive instead of `binaryPatchDownloadUrl`; every other client
-     * ignores this field. Only present when the release was published with asset diff archives.
+     * release each archive was diffed against. Give a key to every release worth diffing
+     * against: a client whose installed update matches one downloads that archive first, and
+     * every other client ignores this field. Only present when the release was published with
+     * asset diff archives. `UpdateArchiveResult` describes what a client does with one it
+     * cannot use.
      */
     diffPackages?: Record<string, string>;
     packageHash: string;
@@ -54,6 +56,13 @@ export interface UpdateCheckResponse {
      * that cannot use it downloads the full update from `download_url` instead.
      */
     binary_patch_download_url?: string;
+    /**
+     * The URL of the asset diff archive built against the update the client is running.
+     * It is only present when the release publishes a diff against exactly that update, and
+     * it accompanies `binary_patch_download_url` rather than replacing it: a response can
+     * carry both. `UpdateArchiveResult` describes the order the client tries them in.
+     */
+    asset_diff_download_url?: string;
     description?: string;
     is_available: boolean;
     is_disabled?: boolean;
@@ -71,7 +80,7 @@ export interface UpdateCheckResponse {
  * instead. These are the words every platform's applier reports, so a rollout can be
  * judged by them whichever platform it is running on.
  */
-export type BinaryPatchFallbackReason =
+export type ArchiveFallbackReason =
     /** The bundle inside the app binary could not be opened or read. */
     | "base_bundle_unavailable"
     /** The bundle inside the app binary is not the one the patch was computed against. */
@@ -84,30 +93,88 @@ export type BinaryPatchFallbackReason =
     | "patch_apply_failed"
     /** The restored bundle is not the one the manifest promised. */
     | "target_verification_failed"
+    /** The asset diff could not be merged with the installed update it was built against. */
+    | "asset_merge_failed"
     /** The update restored from the patch did not pass the checks that follow the restore. */
     | "package_verification_failed";
 
 /**
- * How installing an update from its binary patch archive went.
+ * The archives on the patch path; the full archive is not one of them. There are two: the
+ * patch archive built against the app binary's bundle, and an asset diff archive that
+ * additionally leaves out the assets an installed base update already holds.
  */
-export interface BinaryPatchResult {
+export type UpdateArchive = "binary-patch" | "asset-diff";
+
+/**
+ * One archive tried on the patch path: which archive it was, how long the try took, and,
+ * when it was given up on, why.
+ */
+export interface UpdateArchiveAttempt {
+    archive: UpdateArchive;
+
     /**
-     * Whether the update was installed from its patch archive, or had to be downloaded in
-     * full instead. A fallback is not an error: the update is installed either way.
+     * Why this archive was given up on. Absent for the attempt the downloaded update came
+     * from, and also when the attempt ended in an error none of the appliers has a word
+     * for.
+     */
+    fallbackReason?: ArchiveFallbackReason;
+
+    /**
+     * How long this attempt ran, in milliseconds, whichever way it ended: from the archive
+     * starting to download to the try being finished with.
+     */
+    durationMs: number;
+
+    /**
+     * How long the applier took to rebuild the bundle from this archive's patch, in
+     * milliseconds. Absent when the attempt ended before the bundle was restored.
+     */
+    applyDurationMs?: number;
+}
+
+/**
+ * Which of an update's patch archives the download came from, and what the patch path did
+ * on the way there. It is reported once the update has been downloaded and before the
+ * `LocalPackage` it resolved to is installed, so nothing here speaks to how installing goes.
+ */
+export interface UpdateArchiveResult {
+    /**
+     * Whether one of the update's patch archives produced it, or the full archive had to be
+     * downloaded instead. A fallback is not an error: the update arrives either way.
      */
     status: "applied" | "fallback";
 
     /**
-     * Why the full archive had to be downloaded. Absent when the patch was applied, and
-     * also when the attempt ended in an error none of the appliers has a word for.
+     * The archive of the last attempt: the one the downloaded update came from when a patch
+     * archive produced it, and the last one given up on when none did.
      */
-    fallbackReason?: BinaryPatchFallbackReason;
+    archive: UpdateArchive;
 
     /**
-     * How long the patch work took, in milliseconds: applying the patch when it was
-     * applied, and the whole attempt when it was given up on.
+     * Why the full archive had to be downloaded: the reason the last attempt ended in.
+     * Absent when a patch archive produced the update, and also when the attempt ended in
+     * an error none of the appliers has a word for.
      */
-    applyDurationMs: number;
+    fallbackReason?: ArchiveFallbackReason;
+
+    /**
+     * How long the whole patch path took, in milliseconds: from the first archive starting
+     * to download to the last attempt being finished with. The full download that follows a
+     * fallback is not part of it, because that is not time the patch path spent.
+     */
+    totalDurationMs: number;
+
+    /**
+     * Every archive that was tried, in the order it was tried. The full archive is never
+     * among them, because it is downloaded only once the patch path has given up.
+     *
+     * Most downloads leave a single entry. A second one appears when the asset diff failed
+     * after its bundle was restored - an asset-side failure the patch archive is not
+     * implicated in - and the patch archive was tried in its place. A diff that fails before
+     * its bundle is restored skips the patch archive instead, because both archives carry the
+     * same bundle patch and it would fail the same way.
+     */
+    attempts: UpdateArchiveAttempt[];
 }
 
 export interface CodePushOptions extends SyncOptions {
@@ -250,8 +317,12 @@ export interface RemotePackage extends Package {
      * Downloads the available update from the CodePush service.
      *
      * @param downloadProgressCallback An optional callback that allows tracking the progress of the update while it is being downloaded.
+     * @param updateArchiveResultCallback An optional callback for observing which archive an update published with a binary patch was downloaded from. It is called once when the download had such an archive to try, and only after that download has succeeded; what it says nothing about is whether installing the resolved `LocalPackage` succeeds. An archive that could not be applied is reported here and the update is downloaded in full.
      */
-    download(downloadProgressCallback?: DownloadProgressCallback): Promise<LocalPackage>;
+    download(
+        downloadProgressCallback?: DownloadProgressCallback,
+        updateArchiveResultCallback?: (result: UpdateArchiveResult) => void,
+    ): Promise<LocalPackage>;
 
     /**
      * The URL at which the package is available for download.
@@ -265,6 +336,15 @@ export interface RemotePackage extends Package {
      * package is downloaded in full from `downloadUrl`.
      */
     binaryPatchDownloadUrl?: string;
+
+    /**
+     * The URL of the asset diff archive built against the update this app is running.
+     * It is only present when the release publishes a diff against exactly that update, and
+     * it accompanies `binaryPatchDownloadUrl` rather than replacing it, so a package can hold
+     * both. `download` chooses between them and reports the choice as an
+     * `UpdateArchiveResult`.
+     */
+    assetDiffDownloadUrl?: string;
 }
 
 export interface SyncOptions {
@@ -297,8 +377,8 @@ export interface SyncOptions {
 
     /**
      * An "options" object used to determine whether a confirmation dialog should be displayed to the end user when an update is available,
-     * and if so, what strings to use. Defaults to null, which has the effect of disabling the dialog completely. Setting this to any truthy
-     * value will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as
+     * and if so, what strings to use. Defaults to null, which has the effect of disabling the dialog completely. Setting this to `true`
+     * will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as
      * overriding one or more of the default strings.
      */
     updateDialog?: UpdateDialog | true;
@@ -306,24 +386,25 @@ export interface SyncOptions {
     /**
      * The rollback retry mechanism allows the application to attempt to reinstall an update that was previously rolled back (with the restrictions
      * specified in the options). It is an "options" object used to determine whether a rollback retry should occur, and if so, what settings to use
-     * for the rollback retry. This defaults to null, which has the effect of disabling the retry mechanism. Setting this to any truthy value will enable
-     * the retry mechanism with the default settings, and passing an object to this parameter allows enabling the rollback retry as well as overriding
-     * one or more of the default values.
+     * for the rollback retry. This defaults to null, which has the effect of disabling the retry mechanism. Passing an object to this parameter enables
+     * the rollback retry: an empty object retries with the default settings, and each value the object specifies overrides the default for that
+     * setting.
      */
     rollbackRetryOptions?: RollbackRetryOptions;
 
     /**
-     * An optional callback for observing how an update published with a binary patch was
-     * installed: whether it came from the patch archive, why it did not when it did not, and
-     * how long the patch work took. It is called once per download that had a patch to try,
-     * with the label of the release being installed.
+     * An optional callback for observing which archive an update published with a binary
+     * patch was downloaded from: whether it came from one of its patch archives, why each
+     * archive that was given up on was, and how long the patch work took. It is called once
+     * per download that had such an archive to try, after that download has succeeded and
+     * before the update is installed, with the label of the release it carries.
      *
      * Purely for observation. The library neither stores the result nor sends it anywhere -
      * an app that wants it in its telemetry sends it itself - and nothing about the update
      * depends on the callback: registering none changes nothing, and one that throws is
-     * logged and does not fail the install.
+     * logged and does not fail the download it is reporting on.
      */
-    onBinaryPatchResult?: (label: string, result: BinaryPatchResult) => void;
+    onUpdateArchiveResult?: (label: string, result: UpdateArchiveResult) => void;
 
     /**
      * Specifies whether to ignore the update if the installation fails.
@@ -583,13 +664,13 @@ declare namespace CodePush {
         RUNNING,
 
         /**
-         * Indicates than an update has been installed, but the
+         * Indicates that an update has been installed, but the
          * app hasn't been restarted yet in order to apply it.
          */
         PENDING,
 
         /**
-         * Indicates than an update represents the latest available
+         * Indicates that an update represents the latest available
          * release, and can be either currently running or pending.
          */
         LATEST
@@ -625,7 +706,7 @@ declare namespace CodePush {
         ON_APP_RESUME,
 
         /**
-         * Don't automatically check for updates, but only do it when codePush.sync() is manully called inside app code.
+         * Don't automatically check for updates, but only do it when codePush.sync() is manually called inside app code.
          */
         MANUAL
     }

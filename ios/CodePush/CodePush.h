@@ -164,15 +164,15 @@ failCallback:(void (^)(NSError *err))failCallback;
 @interface CodePushPackage : NSObject
 
 /*
- * doneCallback is given what the attempt at installing the update from its binary patch
- * archive ended in, or nil when the update had no patch archive to attempt. The result
+ * doneCallback is given what the attempts at installing the update from its update
+ * archives ended in, or nil when the update had no archive to attempt. The result
  * describes the download and not the update: it is never part of the update's metadata.
  */
 + (void)downloadPackage:(NSDictionary *)updatePackage
  expectedBundleFileName:(NSString *)expectedBundleFileName
          operationQueue:(dispatch_queue_t)operationQueue
        progressCallback:(void (^)(long long, long long))progressCallback
-           doneCallback:(void (^)(NSDictionary *binaryPatchResult))doneCallback
+           doneCallback:(void (^)(NSDictionary *updateArchiveResult))doneCallback
            failCallback:(void (^)(NSError *err))failCallback;
 
 + (NSDictionary *)getCurrentPackage:(NSError **)error;

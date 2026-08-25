@@ -128,7 +128,9 @@ The `codePush` decorator accepts an "options" object that allows you to customiz
 
 * __minimumBackgroundDuration__ *(Number)* - Specifies the minimum number of seconds that the app needs to have been in the background before restarting the app. This property only applies to updates which are installed using `InstallMode.ON_NEXT_RESUME` or `InstallMode.ON_NEXT_SUSPEND`, and can be useful for getting your update in front of end users sooner, without being too obtrusive. Defaults to `0`, which has the effect of applying the update immediately after a resume or unless the app suspension is long enough to not matter, regardless how long it was in the background.
 
-* __updateDialog__ *(UpdateDialogOptions)* - An "options" object used to determine whether a confirmation dialog should be displayed to the end user when an update is available, and if so, what strings to use. Defaults to `null`, which has the effect of disabling the dialog completely. Setting this to any truthy value will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as overriding one or more of the default strings. Before enabling this option within an App Store-distributed app, please refer to [this note](https://github.com/microsoft/react-native-code-push#app-store).
+* __onUpdateArchiveResult__ *((label: String, result: UpdateArchiveResult) => void)* - Called once for an update that was published with a binary patch, after that update has been downloaded and before it is installed. It receives the label of the release the update carries and an `UpdateArchiveResult` reporting whether one of the update's patch archives produced it or the full archive had to be downloaded instead, which archive the last attempt was against, and why each archive that was given up on was. A fallback is not an error: the update arrives either way. The callback is purely for observation - the library neither stores the result nor sends it anywhere, registering no callback changes nothing about the update, and one that throws is logged rather than failing the download it is reporting on. Refer to the `UpdateArchiveResult` type in [typings/react-native-code-push.d.ts](../typings/react-native-code-push.d.ts) for the shape of the result.
+
+* __updateDialog__ *(UpdateDialogOptions)* - An "options" object used to determine whether a confirmation dialog should be displayed to the end user when an update is available, and if so, what strings to use. Defaults to `null`, which has the effect of disabling the dialog completely. Setting this to `true` will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as overriding one or more of the default strings. Before enabling this option within an App Store-distributed app, please refer to [this note](https://github.com/microsoft/react-native-code-push#app-store).
 
     The following list represents the available options and their defaults:
 
@@ -148,7 +150,7 @@ The `codePush` decorator accepts an "options" object that allows you to customiz
 
     * __title__ *(String)* - The text used as the header of an update notification that is displayed to the end user. Defaults to `"Update available"`.
 
-* __rollbackRetryOptions__ *(RollbackRetryOptions)* - The rollback retry mechanism allows the application to attempt to reinstall an update that was previously rolled back (with the restrictions specified in the options). It is an "options" object used to determine whether a rollback retry should occur, and if so, what settings to use for the rollback retry. This defaults to null, which has the effect of disabling the retry mechanism. Setting this to any truthy value will enable the retry mechanism with the default settings, and passing an object to this parameter allows enabling the rollback retry as well as overriding one or more of the default values.
+* __rollbackRetryOptions__ *(RollbackRetryOptions)* - The rollback retry mechanism allows the application to attempt to reinstall an update that was previously rolled back (with the restrictions specified in the options). It is an "options" object used to determine whether a rollback retry should occur, and if so, what settings to use for the rollback retry. This defaults to null, which has the effect of disabling the retry mechanism. Passing an object to this parameter enables the rollback retry: an empty object retries with the default settings, and each value the object specifies overrides the default for that setting.
 
     The following list represents the available options and their defaults:
 
@@ -168,7 +170,7 @@ Called periodically when an available update is being downloaded from the CodePu
 
 * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
 
-Each download reports a progress stream of its own: `receivedBytes` counts from zero against that download's own `totalBytes`. When a release ships with a binary patch that cannot be applied, the update is downloaded again in full, so one update can report two streams - the second with the full download's larger `totalBytes`.
+Each download reports a progress stream of its own: `receivedBytes` counts from zero against that download's own `totalBytes`. When an archive of a release published with a binary patch cannot be applied, the next archive is downloaded, so one update can report more than one stream - each against its own `totalBytes`, the full download's being the largest.
 
 #### codePush.allowRestart
 
@@ -420,6 +422,8 @@ While the `sync` method tries to make it easy to perform silent and active updat
 
 * __minimumBackgroundDuration__ *(Number)* - Refer to [`CodePushOptions`](#codepushoptions).
 
+* __onUpdateArchiveResult__ *((label: String, result: UpdateArchiveResult) => void)* - Refer to [`CodePushOptions`](#codepushoptions).
+
 * __updateDialog__ *(UpdateDialogOptions)* - Refer to [`CodePushOptions`](#codepushoptions).
 
 Example Usage:
@@ -464,7 +468,7 @@ In addition to the options, the `sync` method also accepts several optional func
 
     * __receivedBytes__ *(Number)* - The number of bytes downloaded thus far, which can be used to track download progress.
 
-    See [codePushDownloadDidProgress](#codepushdownloaddidprogress-event-hook) for how a binary patch fallback reports a second download.
+    See [codePushDownloadDidProgress](#codepushdownloaddidprogress-event-hook) for how every archive an update falls back to reports a download of its own.
 
 * __handleBinaryVersionMismatchCallback__ *((update: RemotePackage) => void)* - 
 Called when there are any binary update available. The method is called with a [`RemotePackage`](#remotepackage) object. Refer to [codePush.checkForUpdate](#codepushcheckforupdate) section for more details.
@@ -541,12 +545,17 @@ The `RemotePackage` inherits all of the same properties as the `LocalPackage`, b
 
 - __downloadUrl__: The URL at which the package is available for download. This property is only needed for advanced usage, since the `download` method will automatically handle the acquisition of updates for you. *(String)*
 - __binaryPatchDownloadUrl__: The URL at which a binary patch archive of the package is available for download. It is only present when the release was published together with such a patch, and the package is downloaded in full from `downloadUrl` otherwise. *(String, optional)*
+- __assetDiffDownloadUrl__: The URL of the asset diff archive built against the update currently installed on the device. It is only present when the release publishes a diff against exactly that update, and it accompanies `binaryPatchDownloadUrl` rather than replacing it. *(String, optional)*
 
-A release that was also published with asset diff archives records them in its release history entry as __diffPackages__: an object keyed by the `packageHash` of the release each archive was diffed against, whose values are the URLs those archives can be downloaded from. When the update currently installed on the device is one of those releases, `binaryPatchDownloadUrl` is the URL of the diff archive built against it instead of the plain patch archive's; a device running the bundle inside the binary, or an update this release was not diffed against, gets the plain patch archive. Like `binaryPatchDownloadUrl`, `diffPackages` is left out of the history entry of a release published without the archives. One attempt downloads one archive either way, so the progress reporting described above is unchanged - a second stream still means the full download that follows a fallback.
+A release that was also published with asset diff archives records them in its release history entry as __diffPackages__: an object keyed by the `packageHash` of the release each archive was diffed against, whose values are the URLs those archives can be downloaded from. Like `binaryPatchDownloadUrl`, `diffPackages` is left out of the history entry of a release published without the archives.
+
+Which archive a device starts from follows from that key. When the update currently installed on the device is one of those releases, the diff archive's URL travels as `assetDiffDownloadUrl` and is the archive downloaded first; a device running the bundle inside the binary, or an update this release was not diffed against, gets the plain patch archive alone.
+
+A diff that fails on its asset side falls back to the patch archive, and any failure in the bundle patch both archives carry falls back to the full download. Each fallback downloads another archive, so one update can report up to three of the progress streams described above.
 
 ###### Methods
 
-- __download(downloadProgressCallback?: Function): Promise&lt;LocalPackage&gt;__: Downloads the available update from the CodePush service. If a `downloadProgressCallback` is specified, it will be called periodically with a `DownloadProgress` object (`{ totalBytes: Number, receivedBytes: Number }`) that reports the progress of the download until it completes. Returns a Promise that resolves with the `LocalPackage`.
+- __download(downloadProgressCallback?: Function, updateArchiveResultCallback?: Function): Promise&lt;LocalPackage&gt;__: Downloads the available update from the CodePush service. If a `downloadProgressCallback` is specified, it will be called periodically with a `DownloadProgress` object (`{ totalBytes: Number, receivedBytes: Number }`) that reports the progress of the download until it completes. If an `updateArchiveResultCallback` is specified, it will be called once with an `UpdateArchiveResult` object when the update was published with a binary patch, reporting which archive the update was downloaded from and why each archive that was given up on was. It only runs after the download has succeeded, and what it says nothing about is whether installing the resolved `LocalPackage` succeeds: an archive that could not be applied is reported there and the update is downloaded in full. Returns a Promise that resolves with the `LocalPackage`.
 
 #### Enums
 

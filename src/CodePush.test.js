@@ -60,16 +60,16 @@ function diffRelease() {
 }
 
 /**
- * @param binaryPatchResult what the native side reports the patch attempt ended in, which
- *        only a download that had a patch to try comes back with.
+ * @param updateArchiveResult what the native side reports the archive attempts ended in,
+ *        which only a download that had an archive to try comes back with.
  * @param installedPackage the CodePush update the app is running, if any.
  */
-function createNativeBridge({ binaryPatchResult, installedPackage } = {}) {
+function createNativeBridge({ updateArchiveResult, installedPackage } = {}) {
   return {
     addDownloadProgressListener: jest.fn(() => ({ remove: jest.fn() })),
     downloadUpdate: jest.fn(async (updatePackage) => ({
       ...updatePackage,
-      ...(binaryPatchResult ? { binaryPatchResult } : {}),
+      ...(updateArchiveResult ? { updateArchiveResult } : {}),
     })),
     // Without an installed CodePush update, the app runs the bundle of its binary.
     getUpdateMetadata: jest.fn(async () => installedPackage ?? null),
@@ -89,13 +89,13 @@ function createNativeBridge({ binaryPatchResult, installedPackage } = {}) {
  * native bridge live on the module itself - configured the way an app configures it: the
  * decorator registers the app-wide options, and every sync below is one the app asks for.
  *
- * @param onBinaryPatchResult a callback the app registers on the decorator, as opposed to
+ * @param onUpdateArchiveResult a callback the app registers on the decorator, as opposed to
  *        one it passes to a single `sync()` call.
  */
-function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult, onBinaryPatchResult, installedPackage } = {}) {
+function loadCodePush({ releaseHistory = {}, updateChecker, updateArchiveResult, onUpdateArchiveResult, installedPackage } = {}) {
   jest.resetModules();
   const CodePush = require('./CodePush');
-  const nativeBridge = createNativeBridge({ binaryPatchResult, installedPackage });
+  const nativeBridge = createNativeBridge({ updateArchiveResult, installedPackage });
 
   CodePush.setUpTestDependencies(
     null,
@@ -106,7 +106,7 @@ function loadCodePush({ releaseHistory = {}, updateChecker, binaryPatchResult, o
     checkFrequency: CodePush.CheckFrequency.MANUAL,
     releaseHistoryFetcher: async () => releaseHistory,
     updateChecker,
-    onBinaryPatchResult,
+    onUpdateArchiveResult,
   });
 
   return { CodePush, nativeBridge };
@@ -211,11 +211,13 @@ describe('checkForUpdate without a binary patch in the release history', () => {
 });
 
 /**
- * A diff archive only applies to the one release it was computed against, so which of the
- * two patch urls of a release is downloaded depends on what the app is running right now.
+ * A diff archive only applies to the one release it was computed against, so whether the
+ * diff url is handed to the native side at all depends on what the app is running right
+ * now. The patch url is always handed over with it, because the diff falling back to the
+ * patch archive is the native side's decision to make.
  */
 describe('checkForUpdate with asset diff packages in the release history', () => {
-  it('downloads the diff archive when the installed update matches a diff base', async () => {
+  it('carries the diff url next to the patch url when the installed update matches a diff base', async () => {
     const { CodePush, nativeBridge } = loadCodePush({
       releaseHistory: diffRelease(),
       installedPackage: { packageHash: INSTALLED_HASH },
@@ -226,11 +228,12 @@ describe('checkForUpdate with asset diff packages in the release history', () =>
 
     expect(downloadedPackageMetadata(nativeBridge)).toMatchObject({
       downloadUrl: DOWNLOAD_URL,
-      binaryPatchDownloadUrl: DIFF_URL,
+      binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
+      assetDiffDownloadUrl: DIFF_URL,
     });
   });
 
-  it('downloads the plain patch archive when the installed update matches no diff base', async () => {
+  it('leaves the diff url out when the installed update matches no diff base', async () => {
     const { CodePush, nativeBridge } = loadCodePush({
       releaseHistory: diffRelease(),
       installedPackage: { packageHash: 'other-hash' },
@@ -239,20 +242,20 @@ describe('checkForUpdate with asset diff packages in the release history', () =>
     const remotePackage = await CodePush.checkForUpdate();
     await remotePackage.download();
 
-    expect(downloadedPackageMetadata(nativeBridge)).toMatchObject({
-      binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
-    });
+    const metadata = downloadedPackageMetadata(nativeBridge);
+    expect(metadata).toMatchObject({ binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL });
+    expect(metadata).not.toHaveProperty('assetDiffDownloadUrl');
   });
 
-  it('downloads the plain patch archive when no update is installed', async () => {
+  it('leaves the diff url out when no update is installed', async () => {
     const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: diffRelease() });
 
     const remotePackage = await CodePush.checkForUpdate();
     await remotePackage.download();
 
-    expect(downloadedPackageMetadata(nativeBridge)).toMatchObject({
-      binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL,
-    });
+    const metadata = downloadedPackageMetadata(nativeBridge);
+    expect(metadata).toMatchObject({ binaryPatchDownloadUrl: BINARY_PATCH_DOWNLOAD_URL });
+    expect(metadata).not.toHaveProperty('assetDiffDownloadUrl');
   });
 
   it('does not send the diff package map across the bridge', async () => {
@@ -310,13 +313,33 @@ describe('checkForUpdate through the deprecated updateChecker', () => {
 });
 
 /**
- * How a patch attempt went is reported to the app that asked to hear about it, and to
+ * How the archive attempts went is reported to the app that asked to hear about it, and to
  * nobody else: it is not part of the update, and an app that asked for nothing gets the
  * install it always got.
  */
-describe('the binary patch result of a sync', () => {
-  const APPLIED = { status: 'applied', applyDurationMs: 812 };
-  const FELL_BACK = { status: 'fallback', fallbackReason: 'base_hash_mismatch', applyDurationMs: 1503 };
+describe('the update archive result of a sync', () => {
+  const APPLIED = {
+    status: 'applied',
+    archive: 'binary-patch',
+    totalDurationMs: 812,
+    attempts: [{ archive: 'binary-patch', durationMs: 812, applyDurationMs: 64 }],
+  };
+  const FELL_BACK = {
+    status: 'fallback',
+    archive: 'binary-patch',
+    fallbackReason: 'base_hash_mismatch',
+    totalDurationMs: 1503,
+    attempts: [{ archive: 'binary-patch', fallbackReason: 'base_hash_mismatch', durationMs: 1503 }],
+  };
+  const APPLIED_AFTER_DIFF_FELL_BACK = {
+    status: 'applied',
+    archive: 'binary-patch',
+    totalDurationMs: 1503,
+    attempts: [
+      { archive: 'asset-diff', fallbackReason: 'asset_merge_failed', durationMs: 690, applyDurationMs: 41 },
+      { archive: 'binary-patch', durationMs: 813, applyDurationMs: 58 },
+    ],
+  };
 
   /** The metadata the update is installed from, as the native module is given it. */
   function installedPackageMetadata(nativeBridge) {
@@ -327,46 +350,62 @@ describe('the binary patch result of a sync', () => {
   it('tells the app the update was installed from its patch, and how long that took', async () => {
     const { CodePush, nativeBridge } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: APPLIED,
+      updateArchiveResult: APPLIED,
     });
-    const onBinaryPatchResult = jest.fn();
+    const onUpdateArchiveResult = jest.fn();
 
-    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+    const syncStatus = await CodePush.sync({ onUpdateArchiveResult });
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
-    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, APPLIED);
+    expect(onUpdateArchiveResult).toHaveBeenCalledTimes(1);
+    expect(onUpdateArchiveResult).toHaveBeenCalledWith(LABEL, APPLIED);
     expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('tells the app why the update came from the full archive instead', async () => {
     const { CodePush } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: FELL_BACK,
+      updateArchiveResult: FELL_BACK,
     });
-    const onBinaryPatchResult = jest.fn();
+    const onUpdateArchiveResult = jest.fn();
 
     // A patch that could not be applied is not a failed update: the full archive installs.
-    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+    const syncStatus = await CodePush.sync({ onUpdateArchiveResult });
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, FELL_BACK);
+    expect(onUpdateArchiveResult).toHaveBeenCalledWith(LABEL, FELL_BACK);
+  });
+
+  it("the app is handed each archive's apply time and the whole path's total", async () => {
+    const { CodePush } = loadCodePush({
+      releaseHistory: diffRelease(),
+      installedPackage: { packageHash: INSTALLED_HASH },
+      updateArchiveResult: APPLIED_AFTER_DIFF_FELL_BACK,
+    });
+    const onUpdateArchiveResult = jest.fn();
+
+    await CodePush.sync({ onUpdateArchiveResult });
+
+    expect(onUpdateArchiveResult).toHaveBeenCalledWith(LABEL, APPLIED_AFTER_DIFF_FELL_BACK);
+    const [, result] = onUpdateArchiveResult.mock.calls[0];
+    expect(result.totalDurationMs).toBe(1503);
+    expect(result.attempts.map((attempt) => attempt.applyDurationMs)).toEqual([41, 58]);
   });
 
   it('tells the app that registered the callback on the decorator, even about a sync it asked for itself', async () => {
-    const onBinaryPatchResult = jest.fn();
+    const onUpdateArchiveResult = jest.fn();
     const { CodePush } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: APPLIED,
-      onBinaryPatchResult,
+      updateArchiveResult: APPLIED,
+      onUpdateArchiveResult,
     });
 
     // The decorator checks nothing on its own, so this sync is the app's own call.
     const syncStatus = await CodePush.sync();
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
-    expect(onBinaryPatchResult).toHaveBeenCalledWith(LABEL, APPLIED);
+    expect(onUpdateArchiveResult).toHaveBeenCalledTimes(1);
+    expect(onUpdateArchiveResult).toHaveBeenCalledWith(LABEL, APPLIED);
   });
 
   it('tells only the callback of the sync call when one was passed to it', async () => {
@@ -374,11 +413,11 @@ describe('the binary patch result of a sync', () => {
     const passedToTheSyncCall = jest.fn();
     const { CodePush } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: APPLIED,
-      onBinaryPatchResult: registeredOnTheDecorator,
+      updateArchiveResult: APPLIED,
+      onUpdateArchiveResult: registeredOnTheDecorator,
     });
 
-    const syncStatus = await CodePush.sync({ onBinaryPatchResult: passedToTheSyncCall });
+    const syncStatus = await CodePush.sync({ onUpdateArchiveResult: passedToTheSyncCall });
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
     expect(passedToTheSyncCall).toHaveBeenCalledTimes(1);
@@ -388,65 +427,81 @@ describe('the binary patch result of a sync', () => {
 
   it('says nothing about a download that had no patch to try', async () => {
     const { CodePush } = loadCodePush({ releaseHistory: fullOnlyRelease() });
-    const onBinaryPatchResult = jest.fn();
+    const onUpdateArchiveResult = jest.fn();
 
-    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+    const syncStatus = await CodePush.sync({ onUpdateArchiveResult });
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(onBinaryPatchResult).not.toHaveBeenCalled();
+    expect(onUpdateArchiveResult).not.toHaveBeenCalled();
   });
 
   it('installs the update even when the callback throws', async () => {
     const { CodePush, nativeBridge } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: APPLIED,
+      updateArchiveResult: APPLIED,
     });
-    const onBinaryPatchResult = jest.fn(() => {
+    const onUpdateArchiveResult = jest.fn(() => {
       throw new Error('the telemetry the app sends the result to is down');
     });
 
-    const syncStatus = await CodePush.sync({ onBinaryPatchResult });
+    const syncStatus = await CodePush.sync({ onUpdateArchiveResult });
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(onBinaryPatchResult).toHaveBeenCalledTimes(1);
+    expect(onUpdateArchiveResult).toHaveBeenCalledTimes(1);
     expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the result out of the package the update is installed from', async () => {
     const { CodePush, nativeBridge } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: APPLIED,
+      updateArchiveResult: APPLIED,
     });
 
-    await CodePush.sync({ onBinaryPatchResult: jest.fn() });
+    await CodePush.sync({ onUpdateArchiveResult: jest.fn() });
 
     const installedPackage = installedPackageMetadata(nativeBridge);
     expect(installedPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
-    expect(installedPackage).not.toHaveProperty('binaryPatchResult');
+    expect(installedPackage).not.toHaveProperty('updateArchiveResult');
   });
 
   it('installs the same update, without the result, when no callback is registered', async () => {
     const { CodePush, nativeBridge } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: FELL_BACK,
+      updateArchiveResult: FELL_BACK,
     });
 
     const syncStatus = await CodePush.sync();
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(installedPackageMetadata(nativeBridge)).not.toHaveProperty('binaryPatchResult');
+    expect(installedPackageMetadata(nativeBridge)).not.toHaveProperty('updateArchiveResult');
+  });
+
+  it('resolves a direct download even when the callback passed to it throws', async () => {
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      updateArchiveResult: APPLIED,
+    });
+    const onUpdateArchiveResult = jest.fn(() => {
+      throw new Error('the telemetry the app sends the result to is down');
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    const localPackage = await remotePackage.download(undefined, onUpdateArchiveResult);
+
+    expect(onUpdateArchiveResult).toHaveBeenCalledTimes(1);
+    expect(localPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
   });
 
   it('leaves the result off the package a download resolves with', async () => {
     const { CodePush } = loadCodePush({
       releaseHistory: patchedRelease(),
-      binaryPatchResult: APPLIED,
+      updateArchiveResult: APPLIED,
     });
 
     const remotePackage = await CodePush.checkForUpdate();
     const localPackage = await remotePackage.download();
 
     expect(localPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
-    expect(localPackage).not.toHaveProperty('binaryPatchResult');
+    expect(localPackage).not.toHaveProperty('updateArchiveResult');
   });
 });

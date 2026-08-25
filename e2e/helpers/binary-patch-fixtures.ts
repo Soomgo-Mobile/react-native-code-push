@@ -331,12 +331,28 @@ function resolveContentsDir(extractDir: string): string {
   return extractDir;
 }
 
+/**
+ * Where the patch manifest lives inside an extracted archive. A patch archive keeps it at
+ * the contents root, while an asset diff archive nests the whole contents directory one
+ * level down, beside its own deletion manifest - so the manifest is searched for rather
+ * than assumed.
+ */
+function findManifestPath(contentsDir: string): string {
+  const manifestPath = findFiles(contentsDir).find(
+    (filePath) => path.basename(filePath) === PATCH_MANIFEST_NAME,
+  );
+  if (!manifestPath) {
+    throw new Error(`The archive extracted at "${contentsDir}" carries no ${PATCH_MANIFEST_NAME}`);
+  }
+  return manifestPath;
+}
+
 function readManifestFile(contentsDir: string): BinaryPatchManifest {
-  return JSON.parse(fs.readFileSync(path.join(contentsDir, PATCH_MANIFEST_NAME), "utf8")) as BinaryPatchManifest;
+  return JSON.parse(fs.readFileSync(findManifestPath(contentsDir), "utf8")) as BinaryPatchManifest;
 }
 
 function writeManifestFile(contentsDir: string, manifest: BinaryPatchManifest): void {
-  fs.writeFileSync(path.join(contentsDir, PATCH_MANIFEST_NAME), JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(findManifestPath(contentsDir), JSON.stringify(manifest, null, 2));
 }
 
 /**
@@ -352,7 +368,7 @@ function writeManifestFile(contentsDir: string, manifest: BinaryPatchManifest): 
  */
 export function corruptPatchBody(archivePath: string): void {
   rewriteArchive(archivePath, (contentsDir) => {
-    const patchPath = path.join(contentsDir, readManifestFile(contentsDir).patchFile);
+    const patchPath = path.join(path.dirname(findManifestPath(contentsDir)), readManifestFile(contentsDir).patchFile);
     const patch = fs.readFileSync(patchPath);
 
     if (patch.length < 32) {
@@ -384,7 +400,7 @@ export function breakRestoredBundleExpectation(archivePath: string): void {
 /** Corrupts the header of the patch, so the applier cannot even read what it is. */
 export function corruptPatchHeader(archivePath: string): void {
   rewriteArchive(archivePath, (contentsDir) => {
-    const patchPath = path.join(contentsDir, readManifestFile(contentsDir).patchFile);
+    const patchPath = path.join(path.dirname(findManifestPath(contentsDir)), readManifestFile(contentsDir).patchFile);
     const patch = fs.readFileSync(patchPath);
 
     patch.fill(0, 0, Math.min(8, patch.length));

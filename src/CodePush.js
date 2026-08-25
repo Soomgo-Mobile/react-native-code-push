@@ -189,9 +189,16 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
           download_url: latestReleaseInfo.downloadUrl,
           /**
            * Only released updates that were published with a binary patch carry this.
-           * When it is missing, the update is downloaded in full from `download_url`.
+           * A release offering neither this nor a diff is downloaded in full from
+           * `download_url`.
            */
-          binary_patch_download_url: diffPackageDownloadUrl || latestReleaseInfo.binaryPatchDownloadUrl,
+          binary_patch_download_url: latestReleaseInfo.binaryPatchDownloadUrl,
+          /**
+           * The diff stands next to the patch url rather than in its place, so that the
+           * native side can try the diff first and still hold the patch archive to fall
+           * back on when the diff fails on its asset side.
+           */
+          asset_diff_download_url: diffPackageDownloadUrl,
           // (`enabled` will always be true in the release information obtained from the previous process.)
           is_available: latestReleaseInfo.enabled,
           package_hash: latestReleaseInfo.packageHash,
@@ -293,10 +300,13 @@ function mapToRemotePackageMetadata(updateInfo) {
     packageHash: updateInfo.package_hash ?? '',
     packageSize: updateInfo.package_size ?? 0,
     downloadUrl: updateInfo.download_url ?? '',
-    // The field stays out of the package unless the update really has a binary patch,
+    // The fields stay out of the package unless the update really has these archives,
     // so that the native side sees exactly what it saw before patches existed.
     ...(updateInfo.binary_patch_download_url
       ? { binaryPatchDownloadUrl: updateInfo.binary_patch_download_url }
+      : {}),
+    ...(updateInfo.asset_diff_download_url
+      ? { assetDiffDownloadUrl: updateInfo.asset_diff_download_url }
       : {}),
   };
 }
@@ -551,20 +561,20 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     updateDialog: null,
     // The callback registered on the decorator is the default for every sync, including a
     // manual one; a callback passed to this call overrides it for this call.
-    onBinaryPatchResult: sharedCodePushOptions.onBinaryPatchResult ?? null,
+    onUpdateArchiveResult: sharedCodePushOptions.onUpdateArchiveResult ?? null,
     ...options,
   };
 
   /*
-   * A callback an app registered to observe how a binary patch went must not be able to
-   * cost it an update, so it is isolated the way the other sync callbacks are: whatever it
-   * throws is logged and the install carries on. An app that registered none leaves the
+   * A callback an app registered to observe how the update archives went must not be able
+   * to cost it an update, so it is isolated the way the other sync callbacks are: whatever
+   * it throws is logged and the install carries on. An app that registered none leaves the
    * download exactly as it was before this option existed.
    */
-  const onBinaryPatchResult = typeof syncOptions.onBinaryPatchResult === "function"
+  const onUpdateArchiveResult = typeof syncOptions.onUpdateArchiveResult === "function"
     ? (label, result) => {
       try {
-        syncOptions.onBinaryPatchResult(label, result);
+        syncOptions.onUpdateArchiveResult(label, result);
       } catch (error) {
         log(`An error has occurred : ${error.stack}`);
       }
@@ -624,7 +634,7 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
 
       const localPackage = await remotePackage.download(
         downloadProgressCallback,
-        onBinaryPatchResult && ((result) => onBinaryPatchResult(remotePackageLabel, result)),
+        onUpdateArchiveResult && ((result) => onUpdateArchiveResult(remotePackageLabel, result)),
       );
 
       sharedCodePushOptions.onDownloadSuccess?.(remotePackageLabel);
@@ -760,8 +770,8 @@ let CodePush;
  *   onRolloutSkipped: (label: string, error: Error) => void | undefined,
  *   setOnRolloutSkipped(onRolloutSkippedFunction: (label: string, error: Error) => void | undefined): void,
  *
- *   onBinaryPatchResult: (label: string, result: object) => void | undefined,
- *   setOnBinaryPatchResult(onBinaryPatchResultFunction: (label: string, result: object) => void | undefined): void,
+ *   onUpdateArchiveResult: (label: string, result: object) => void | undefined,
+ *   setOnUpdateArchiveResult(onUpdateArchiveResultFunction: (label: string, result: object) => void | undefined): void,
  * }}
  */
 const sharedCodePushOptions = {
@@ -812,11 +822,11 @@ const sharedCodePushOptions = {
     if (typeof onRolloutSkippedFunction !== 'function') throw new Error('Please pass a function to onRolloutSkipped');
     this.onRolloutSkipped = onRolloutSkippedFunction;
   },
-  onBinaryPatchResult: undefined,
-  setOnBinaryPatchResult(onBinaryPatchResultFunction) {
-    if (!onBinaryPatchResultFunction) return;
-    if (typeof onBinaryPatchResultFunction !== 'function') throw new Error('Please pass a function to onBinaryPatchResult');
-    this.onBinaryPatchResult = onBinaryPatchResultFunction;
+  onUpdateArchiveResult: undefined,
+  setOnUpdateArchiveResult(onUpdateArchiveResultFunction) {
+    if (!onUpdateArchiveResultFunction) return;
+    if (typeof onUpdateArchiveResultFunction !== 'function') throw new Error('Please pass a function to onUpdateArchiveResult');
+    this.onUpdateArchiveResult = onUpdateArchiveResultFunction;
   },
 }
 
@@ -854,7 +864,7 @@ function codePushify(options = {}) {
   sharedCodePushOptions.setOnDownloadSuccess(options.onDownloadSuccess);
   sharedCodePushOptions.setOnSyncError(options.onSyncError);
   sharedCodePushOptions.setOnRolloutSkipped(options.onRolloutSkipped);
-  sharedCodePushOptions.setOnBinaryPatchResult(options.onBinaryPatchResult);
+  sharedCodePushOptions.setOnUpdateArchiveResult(options.onUpdateArchiveResult);
 
   const decorator = (RootComponent) => {
     class CodePushComponent extends React.Component {

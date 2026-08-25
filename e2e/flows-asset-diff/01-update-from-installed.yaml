@@ -22,8 +22,8 @@ appId: ${APP_ID}
 - tapOn: "Check for updates"
 - waitForAnimationToEnd:
     timeout: 30000
-# An update that cannot be installed from its diff is downloaded again in full, which
-# takes a second pass over the network before the app restarts.
+# An update that cannot be installed from its diff falls back to its patch archive or
+# to the full one, which takes a second pass over the network before the app restarts.
 - runScript:
     file: ../scripts/sleep.js
     env:

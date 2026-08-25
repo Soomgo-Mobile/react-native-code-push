@@ -292,29 +292,34 @@ export default CodePush({
 
 #### 4-1. Telemetry Callbacks
 
-Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-native-code-push/blob/f0d26f7614af41c6dd4daecd9f7146e2383b2b0d/typings/react-native-code-push.d.ts#L76-L95) type for more details.
+Please refer to the `CodePushOptions` type in [typings/react-native-code-push.d.ts](typings/react-native-code-push.d.ts) for more details.
 - **onUpdateSuccess:** Triggered when the update bundle is executed successfully.
 - **onUpdateRollback:** Triggered when there is an issue executing the update bundle, leading to a rollback.
 - **onDownloadStart:** Triggered when the bundle download begins.
 - **onDownloadSuccess:** Triggered when the bundle download completes successfully.
 - **onSyncError:** Triggered when an unknown error occurs during the update process. (`CodePush.SyncStatus.UNKNOWN_ERROR` status)
-- **onBinaryPatchResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the patch went. Unlike the callbacks above, this one can also be passed to a single `sync()` call - see below.
+- **onUpdateArchiveResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the update archives went. Unlike the callbacks above, this one can also be passed to a single `sync()` call - see below.
 
-`onBinaryPatchResult` is called with `{ status: "applied" | "fallback", fallbackReason?: string, applyDurationMs: number }`.
+`onUpdateArchiveResult` is called with `{ status: "applied" | "fallback", archive: "binary-patch" | "asset-diff", fallbackReason?: string, totalDurationMs: number, attempts: [...] }`.
+`archive` names the archive of the last attempt - the one the downloaded update came from, or the one given up on last -
+and `attempts` retells every archive that was tried, in order, as `{ archive, fallbackReason?, durationMs, applyDurationMs? }`.
+`totalDurationMs` times the whole patch path, from the first archive starting to download to the last attempt being
+finished with, and an attempt's `applyDurationMs` times the applier rebuilding the bundle from that archive's patch -
+absent when the attempt ended before the bundle was restored.
 A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
 is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
 its telemetry sends it itself. A callback that throws never fails the update - the error is only logged to the console.
-A fallback also shows in `downloadProgressCallback`: the full download reports a second progress stream that counts
-`receivedBytes` from zero again, against its own, larger `totalBytes`.
+A fallback also shows in `downloadProgressCallback`: each following download reports a progress stream of its own that
+counts `receivedBytes` from zero again, against its own `totalBytes`.
 
-Register `onBinaryPatchResult` on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
+Register `onUpdateArchiveResult` on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
 and including the `CodePush.sync()` calls you make yourself.
 
 ```typescript
 export default CodePush({
   checkFrequency: CodePush.CheckFrequency.MANUAL, // or something else
   releaseHistoryFetcher: releaseHistoryFetcher,
-  onBinaryPatchResult: (label, result) => {
+  onUpdateArchiveResult: (label, result) => {
     // Send it to your own telemetry, if you want it there.
   },
 })(MyApp);
@@ -325,7 +330,7 @@ for instance.
 
 ```typescript
 CodePush.sync({
-  onBinaryPatchResult: (label, result) => {
+  onUpdateArchiveResult: (label, result) => {
     // Send it to your own telemetry, if you want it there.
   },
 });
@@ -341,9 +346,11 @@ copies the update it already has installed, applies those, and ends up holding e
 contents of the full archive.
 
 So one release has a full archive, a patch archive and up to `--diff-base-count` diff
-archives, and a client downloads one of them per attempt: the diff archive built against
-the update it is running, when the release has one, and the patch archive when it is
-running the bundle in the binary or an update this release was not diffed against.
+archives, and a client starts from the smallest one it can use: the diff archive built
+against the update it is running, when the release has one, and the patch archive when it
+is running the bundle in the binary or an update this release was not diffed against. Each
+attempt downloads one archive, and an archive that cannot be applied falls back to the
+next.
 
 Diff archives are published only when all three of these hold:
 - the release is a binary patch release (`release --binary-bundle-path`),
@@ -359,9 +366,13 @@ bundleDownloader: async (archive, platform, identifier = 'staging') => {
 },
 ```
 
-Rebuilding the update from a diff archive falls back the way a patch does: the update is
-downloaded in full instead, and `onBinaryPatchResult` reports it as
-`{ status: "fallback", fallbackReason: "package_verification_failed" }`. See
+A diff that cannot be applied falls back by where it failed. A failure on its asset
+side - the merge with the installed update failing (`"asset_merge_failed"`), or the merged
+contents failing the package hash (`"package_verification_failed"`) - moves on to the
+patch archive, which carries every asset and depends on nothing installed. A failure in
+the bundle patch both archives carry skips the patch archive for the full download
+instead, so a client is never walked through two downloads that can only fail the same
+way. Either way `onUpdateArchiveResult` reports the whole ladder in its `attempts`. See
 [Asset diff archives](cli/README.md#asset-diff-archives) for what the release publishes.
 
 

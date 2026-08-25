@@ -12,6 +12,7 @@ const ALERT_DIALOG_IGNORE_BUTTON = "Ignore update";
 const ALERT_DIALOG_INSTALL_BUTTON = "Install update";
 const HANDLE_SYNC_PATTERN = /const handleSync = useCallback\(\(\) => \{\n[\s\S]*?\n {2}\}, \[\]\);/;
 const DEFAULT_SYNC_BUTTON_PATTERN = /^(\s*)<Button title="Check for updates" onPress={handleSync} \/>$/m;
+const DEFAULT_SYNC_OPTIONS_PATTERN = /(const handleSync = useCallback\(\(\) => \{\n\s*CodePush\.sync\(\n)(\s*)\{\},/;
 
 export function prepareConfig(appPath: string, platform: "ios" | "android"): void {
   patchAppTsx(appPath, platform);
@@ -42,6 +43,7 @@ function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
     /const IS_RELEASING_BUNDLE = (true|false)/,
     "const IS_RELEASING_BUNDLE = false",
   );
+  content = injectUpdateArchiveResultProbe(content);
   content = injectResumeSyncSupport(content);
   fs.writeFileSync(appTsxPath, content, "utf8");
   console.log("App.tsx patched: CODEPUSH_HOST, IS_RELEASING_BUNDLE, E2E sync option buttons");
@@ -76,6 +78,38 @@ function replaceOrThrow(
     throw new Error(`Could not patch App.tsx with pattern: ${pattern.toString()}`);
   }
   return content.replace(pattern, replacement);
+}
+
+/**
+ * Reports how the update archives of a download went to the mock server, whose request log
+ * the runner reads back - the same oracle that tells the downloaded archives apart. The
+ * report rides in the query string of a GET, so it is in the log the moment the request
+ * arrives: the restart that follows a mandatory install can kill the app without taking
+ * the report with it, which is also why no screen state could carry this.
+ */
+function injectUpdateArchiveResultProbe(content: string): string {
+  if (content.includes("onUpdateArchiveResult")) {
+    return content;
+  }
+
+  let probeInjected = false;
+  content = content.replace(DEFAULT_SYNC_OPTIONS_PATTERN, (_match: string, prefix: string, indent: string) => {
+    probeInjected = true;
+    return [
+      `${prefix}${indent}{`,
+      `${indent}  onUpdateArchiveResult: (label, result) => {`,
+      `${indent}    const report = encodeURIComponent(JSON.stringify({ label, result }));`,
+      `${indent}    fetch(CODEPUSH_HOST + '/e2e/update-archive-result?data=' + report).catch(() => {});`,
+      `${indent}  },`,
+      `${indent}},`,
+    ].join("\n");
+  });
+
+  if (!probeInjected) {
+    throw new Error("Could not inject the update archive result probe into App.tsx");
+  }
+
+  return content;
 }
 
 function injectResumeSyncSupport(content: string): string {

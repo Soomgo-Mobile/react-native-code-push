@@ -14,13 +14,14 @@
 #include "binarypatch_zstd_decompressor.h"
 #include "libHDiffPatch/HPatch/patch.h"
 
-NSString *const CodePushBinaryPatchReasonBaseBundleUnavailable = @"base_bundle_unavailable";
-NSString *const CodePushBinaryPatchReasonBaseHashMismatch = @"base_hash_mismatch";
-NSString *const CodePushBinaryPatchReasonInvalidManifest = @"invalid_manifest";
-NSString *const CodePushBinaryPatchReasonUnsupportedFormat = @"unsupported_format";
-NSString *const CodePushBinaryPatchReasonPatchApplyFailed = @"patch_apply_failed";
-NSString *const CodePushBinaryPatchReasonTargetVerificationFailed = @"target_verification_failed";
-NSString *const CodePushBinaryPatchReasonPackageVerificationFailed = @"package_verification_failed";
+NSString *const CodePushArchiveFallbackReasonBaseBundleUnavailable = @"base_bundle_unavailable";
+NSString *const CodePushArchiveFallbackReasonBaseHashMismatch = @"base_hash_mismatch";
+NSString *const CodePushArchiveFallbackReasonInvalidManifest = @"invalid_manifest";
+NSString *const CodePushArchiveFallbackReasonUnsupportedFormat = @"unsupported_format";
+NSString *const CodePushArchiveFallbackReasonPatchApplyFailed = @"patch_apply_failed";
+NSString *const CodePushArchiveFallbackReasonTargetVerificationFailed = @"target_verification_failed";
+NSString *const CodePushArchiveFallbackReasonAssetMergeFailed = @"asset_merge_failed";
+NSString *const CodePushArchiveFallbackReasonPackageVerificationFailed = @"package_verification_failed";
 
 #pragma mark - Private constants
 
@@ -205,7 +206,7 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
     NSString *contentsFolderPath = [self contentsFolderInUnzippedFolder:unzippedFolderPath];
     NSString *manifestFilePath = [contentsFolderPath stringByAppendingPathComponent:BinaryPatchManifestFileName];
     if (![self isFileAtPath:manifestFilePath]) {
-        return [self failWithReason:CodePushBinaryPatchReasonInvalidManifest
+        return [self failWithReason:CodePushArchiveFallbackReasonInvalidManifest
                    outFailureReason:failureReason];
     }
 
@@ -219,13 +220,13 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
                                : nil;
     if (![manifest isKindOfClass:[NSDictionary class]]) {
         CPLog(@"The binary patch manifest could not be read: %@", error);
-        return [self failWithReason:CodePushBinaryPatchReasonInvalidManifest
+        return [self failWithReason:CodePushArchiveFallbackReasonInvalidManifest
                    outFailureReason:failureReason];
     }
 
     if ([[self numberInManifest:manifest forKey:BinaryPatchFormatVersionKey] integerValue] != BinaryPatchFormatVersion
         || ![BinaryPatchAlgorithm isEqualToString:[self stringInManifest:manifest forKey:BinaryPatchAlgorithmKey]]) {
-        return [self failWithReason:CodePushBinaryPatchReasonUnsupportedFormat
+        return [self failWithReason:CodePushArchiveFallbackReasonUnsupportedFormat
                    outFailureReason:failureReason];
     }
 
@@ -239,7 +240,7 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
     if (targetBundleFilePath == nil || patchFilePath == nil || ![self isFileAtPath:patchFilePath]
         || baseBundleHash.length == 0 || targetBundleHash.length == 0
         || targetBundleSize <= 0 || targetBundleSize > BinaryPatchMaxTargetBundleSize) {
-        return [self failWithReason:CodePushBinaryPatchReasonInvalidManifest
+        return [self failWithReason:CodePushArchiveFallbackReasonInvalidManifest
                    outFailureReason:failureReason];
     }
 
@@ -250,7 +251,7 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
                                  attributes:nil
                                       error:&error]) {
         CPLog(@"Unable to create the binary patch working directory at %@: %@", workingFolderPath, error);
-        return [self failWithReason:CodePushBinaryPatchReasonPatchApplyFailed
+        return [self failWithReason:CodePushArchiveFallbackReasonPatchApplyFailed
                    outFailureReason:failureReason];
     }
 
@@ -296,13 +297,13 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
                                                               error:nil][NSFileSystemFreeSize];
     if (freeSize != nil && freeSize.longLongValue < targetBundleSize) {
         CPLog(@"Not enough free space to restore a %lld byte bundle.", targetBundleSize);
-        return CodePushBinaryPatchReasonPatchApplyFailed;
+        return CodePushArchiveFallbackReasonPatchApplyFailed;
     }
 
     NSString *baseBundlePath = [baseBundleURL path];
     if (baseBundlePath == nil) {
         CPLog(@"The app binary carries no JS bundle to patch against.");
-        return CodePushBinaryPatchReasonBaseBundleUnavailable;
+        return CodePushArchiveFallbackReasonBaseBundleUnavailable;
     }
 
     NSError *error = nil;
@@ -318,10 +319,10 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
                                                                                          error:&error];
     if (baseBundle == nil) {
         CPLog(@"Unable to read the JS bundle inside the app binary: %@", error);
-        return CodePushBinaryPatchReasonBaseBundleUnavailable;
+        return CodePushArchiveFallbackReasonBaseBundleUnavailable;
     }
     if (![baseBundleHash isEqualToString:[CodePushUpdateUtils computeHashForData:baseBundle]]) {
-        return CodePushBinaryPatchReasonBaseHashMismatch;
+        return CodePushArchiveFallbackReasonBaseHashMismatch;
     }
 
     __attribute__((objc_precise_lifetime)) NSData *patch = [NSData dataWithContentsOfFile:patchFilePath
@@ -329,7 +330,7 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
                                                                                    error:&error];
     if (patch == nil) {
         CPLog(@"Unable to read the binary patch: %@", error);
-        return CodePushBinaryPatchReasonPatchApplyFailed;
+        return CodePushArchiveFallbackReasonPatchApplyFailed;
     }
 
     NSString *restoredBundleFilePath = [workingFolderPath stringByAppendingPathComponent:BinaryPatchTargetFileName];
@@ -342,20 +343,20 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
     if (applyResult != CodePushBinaryPatchApplyResultOK) {
         CPLog(@"The binary patch applier returned %ld.", (long)applyResult);
         return applyResult == CodePushBinaryPatchApplyResultUnsupportedCompression
-            ? CodePushBinaryPatchReasonUnsupportedFormat
-            : CodePushBinaryPatchReasonPatchApplyFailed;
+            ? CodePushArchiveFallbackReasonUnsupportedFormat
+            : CodePushArchiveFallbackReasonPatchApplyFailed;
     }
 
     NSDictionary *restoredBundleAttributes = [fileManager attributesOfItemAtPath:restoredBundleFilePath
                                                                            error:&error];
     if (restoredBundleAttributes == nil || (long long)[restoredBundleAttributes fileSize] != targetBundleSize) {
         CPLog(@"The restored bundle is not %lld bytes long: %@", targetBundleSize, error);
-        return CodePushBinaryPatchReasonTargetVerificationFailed;
+        return CodePushArchiveFallbackReasonTargetVerificationFailed;
     }
 
     NSString *restoredBundleHash = [CodePushUpdateUtils computeHashForFileAtPath:restoredBundleFilePath];
     if (restoredBundleHash == nil || ![targetBundleHash isEqualToString:restoredBundleHash]) {
-        return CodePushBinaryPatchReasonTargetVerificationFailed;
+        return CodePushArchiveFallbackReasonTargetVerificationFailed;
     }
 
     if (![self moveItemAtPath:restoredBundleFilePath toPath:targetBundleFilePath]
@@ -365,7 +366,7 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
         // that follows empties the unzipped archive before it replaces it, which is what
         // clears them.
         CPLog(@"Unable to put the restored bundle in place of the patch: %@", error);
-        return CodePushBinaryPatchReasonPatchApplyFailed;
+        return CodePushArchiveFallbackReasonPatchApplyFailed;
     }
 
     return nil;

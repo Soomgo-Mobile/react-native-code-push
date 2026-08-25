@@ -55,7 +55,7 @@ public class CodePushBinaryPatchTest {
     public void appliesAPatchAndLeavesTheContentsOfAFullArchiveBehind() throws IOException {
         FakePatchApplier applier = new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_OK, TARGET_BUNDLE);
 
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE, applier);
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE, applier);
 
         assertTrue(result.succeeded());
         assertArrayEquals(TARGET_BUNDLE, readFile(mBundleFile));
@@ -77,7 +77,7 @@ public class CodePushBinaryPatchTest {
         assertTrue(mManifestFile.renameTo(new File(archiveRoot, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME)));
         assertTrue(mPatchFile.renameTo(new File(archiveRoot, PATCH_FILE_NAME)));
 
-        BinaryPatchResult result = new CodePushBinaryPatch(providerOf(BASE_BUNDLE), succeedingApplier())
+        ArchiveRestoreResult result = new CodePushBinaryPatch(providerOf(BASE_BUNDLE), succeedingApplier())
                 .restoreBundle(unzippedFolder.getAbsolutePath(), mWorkingFolder.getAbsolutePath(), BUNDLE_FILE_NAME);
 
         assertTrue(result.succeeded());
@@ -101,7 +101,7 @@ public class CodePushBinaryPatchTest {
         File assetFile = new File(contentsFolder, "logo.png");
         writeFile(assetFile, bytes("an asset the diff brought along"));
 
-        BinaryPatchResult result = new CodePushBinaryPatch(providerOf(BASE_BUNDLE), succeedingApplier())
+        ArchiveRestoreResult result = new CodePushBinaryPatch(providerOf(BASE_BUNDLE), succeedingApplier())
                 .restoreBundle(unzippedFolder.getAbsolutePath(), mWorkingFolder.getAbsolutePath(), BUNDLE_FILE_NAME);
 
         assertTrue(result.succeeded());
@@ -117,7 +117,7 @@ public class CodePushBinaryPatchTest {
     public void keepsARootHoldingLooseFilesBesidesTheDiffManifestAsItsOwnContentsRoot() throws IOException {
         writeFile(new File(mContentsFolder, CodePushConstants.DIFF_MANIFEST_FILE_NAME), bytes("{\"deletedFiles\":[]}"));
 
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE, succeedingApplier());
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE, succeedingApplier());
 
         assertTrue(result.succeeded());
         assertArrayEquals(TARGET_BUNDLE, readFile(mBundleFile));
@@ -129,7 +129,7 @@ public class CodePushBinaryPatchTest {
         assertTrue(mWorkingFolder.mkdirs());
         writeFile(new File(mWorkingFolder, CodePushConstants.BINARY_PATCH_TARGET_FILE_NAME), bytes("half a bundle"));
 
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE,
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE,
                 new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_OK, TARGET_BUNDLE));
 
         assertTrue(result.succeeded());
@@ -141,14 +141,14 @@ public class CodePushBinaryPatchTest {
     public void reportsAnInvalidManifestWhenThereIsNone() {
         assertTrue(mManifestFile.delete());
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
     public void reportsAnInvalidManifestWhenItIsNotJson() throws IOException {
         writeFile(mManifestFile, bytes("not json at all"));
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
@@ -156,14 +156,14 @@ public class CodePushBinaryPatchTest {
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_FORMAT_VERSION_KEY,
                 CodePushConstants.BINARY_PATCH_FORMAT_VERSION + 1));
 
-        assertFailure(BinaryPatchResult.REASON_UNSUPPORTED_FORMAT, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_UNSUPPORTED_FORMAT, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
     public void reportsAnUnsupportedFormatForAnotherAlgorithm() throws IOException {
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_ALGORITHM_KEY, "bsdiff-bz2"));
 
-        assertFailure(BinaryPatchResult.REASON_UNSUPPORTED_FORMAT, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_UNSUPPORTED_FORMAT, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
@@ -171,7 +171,7 @@ public class CodePushBinaryPatchTest {
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_BUNDLE_PATH_KEY,
                 "../" + BUNDLE_FILE_NAME));
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
         assertFalse(new File(mTemporaryFolder.getRoot(), BUNDLE_FILE_NAME).exists());
     }
 
@@ -180,7 +180,7 @@ public class CodePushBinaryPatchTest {
         writeFile(new File(mTemporaryFolder.getRoot(), PATCH_FILE_NAME), PATCH);
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_FILE_KEY, "../" + PATCH_FILE_NAME));
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
@@ -188,21 +188,21 @@ public class CodePushBinaryPatchTest {
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_BUNDLE_PATH_KEY,
                 new File(mTemporaryFolder.getRoot(), BUNDLE_FILE_NAME).getAbsolutePath()));
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
     public void reportsAnInvalidManifestWhenTheArchiveHasNoPatchFile() {
         assertTrue(mPatchFile.delete());
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
     public void reportsAnInvalidManifestWhenTheTargetSizeIsEmpty() throws IOException {
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_TARGET_BUNDLE_SIZE_KEY, 0));
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
@@ -210,7 +210,7 @@ public class CodePushBinaryPatchTest {
         writeManifest(putValue(validManifest(), CodePushConstants.BINARY_PATCH_TARGET_BUNDLE_SIZE_KEY,
                 CodePushConstants.BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE + 1));
 
-        assertFailure(BinaryPatchResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
+        assertFailure(ArchiveRestoreResult.REASON_INVALID_MANIFEST, restoreBundle(BASE_BUNDLE, succeedingApplier()));
     }
 
     @Test
@@ -222,50 +222,50 @@ public class CodePushBinaryPatchTest {
             }
         }, succeedingApplier());
 
-        assertFailure(BinaryPatchResult.REASON_BASE_BUNDLE_UNAVAILABLE, restoreBundle(binaryPatch));
+        assertFailure(ArchiveRestoreResult.REASON_BASE_BUNDLE_UNAVAILABLE, restoreBundle(binaryPatch));
     }
 
     @Test
     public void reportsABaseHashMismatchWhenTheBinaryHoldsAnotherBundle() {
         FakePatchApplier applier = new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_OK, TARGET_BUNDLE);
 
-        BinaryPatchResult result = restoreBundle(bytes("a bundle from another app build"), applier);
+        ArchiveRestoreResult result = restoreBundle(bytes("a bundle from another app build"), applier);
 
-        assertFailure(BinaryPatchResult.REASON_BASE_HASH_MISMATCH, result);
+        assertFailure(ArchiveRestoreResult.REASON_BASE_HASH_MISMATCH, result);
         assertEquals("a patch is not applied to a base it was not computed against", 0, applier.invocationCount);
     }
 
     @Test
     public void reportsAnUnsupportedFormatWhenTheApplierRejectsTheCodec() {
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE,
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE,
                 new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_UNSUPPORTED_COMPRESSION, null));
 
-        assertFailure(BinaryPatchResult.REASON_UNSUPPORTED_FORMAT, result);
+        assertFailure(ArchiveRestoreResult.REASON_UNSUPPORTED_FORMAT, result);
     }
 
     @Test
     public void reportsAFailedApplyWhenThePatchHeaderIsCorrupt() {
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE,
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE,
                 new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_INVALID_HEADER, null));
 
-        assertFailure(BinaryPatchResult.REASON_PATCH_APPLY_FAILED, result);
+        assertFailure(ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED, result);
         assertNoRestoredBundleInTheContents();
     }
 
     @Test
     public void reportsAFailedApplyWhenTheNativeLibraryIsMissing() {
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE,
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE,
                 new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_LIBRARY_UNAVAILABLE, null));
 
-        assertFailure(BinaryPatchResult.REASON_PATCH_APPLY_FAILED, result);
+        assertFailure(ArchiveRestoreResult.REASON_PATCH_APPLY_FAILED, result);
     }
 
     @Test
     public void reportsAFailedVerificationWhenTheRestoredBundleHasAnotherSize() {
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE,
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE,
                 new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_OK, bytes("too short")));
 
-        assertFailure(BinaryPatchResult.REASON_TARGET_VERIFICATION_FAILED, result);
+        assertFailure(ArchiveRestoreResult.REASON_TARGET_VERIFICATION_FAILED, result);
         assertNoRestoredBundleInTheContents();
     }
 
@@ -276,23 +276,23 @@ public class CodePushBinaryPatchTest {
         byte[] wrongBundle = TARGET_BUNDLE.clone();
         wrongBundle[0] = (byte) (wrongBundle[0] ^ 0xFF);
 
-        BinaryPatchResult result = restoreBundle(BASE_BUNDLE,
+        ArchiveRestoreResult result = restoreBundle(BASE_BUNDLE,
                 new FakePatchApplier(CodePushBinaryPatch.PatchApplier.RESULT_OK, wrongBundle));
 
-        assertFailure(BinaryPatchResult.REASON_TARGET_VERIFICATION_FAILED, result);
+        assertFailure(ArchiveRestoreResult.REASON_TARGET_VERIFICATION_FAILED, result);
         assertNoRestoredBundleInTheContents();
     }
 
-    private BinaryPatchResult restoreBundle(byte[] baseBundle, CodePushBinaryPatch.PatchApplier applier) {
+    private ArchiveRestoreResult restoreBundle(byte[] baseBundle, CodePushBinaryPatch.PatchApplier applier) {
         return restoreBundle(new CodePushBinaryPatch(providerOf(baseBundle), applier));
     }
 
-    private BinaryPatchResult restoreBundle(CodePushBinaryPatch binaryPatch) {
+    private ArchiveRestoreResult restoreBundle(CodePushBinaryPatch binaryPatch) {
         return binaryPatch.restoreBundle(mContentsFolder.getAbsolutePath(), mWorkingFolder.getAbsolutePath(),
                 BUNDLE_FILE_NAME);
     }
 
-    private void assertFailure(String expectedReason, BinaryPatchResult result) {
+    private void assertFailure(String expectedReason, ArchiveRestoreResult result) {
         assertFalse(result.succeeded());
         assertEquals(expectedReason, result.getFailureReason());
         assertNoTemporaryFilesLeft();

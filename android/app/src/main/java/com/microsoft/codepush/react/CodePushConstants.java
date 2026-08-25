@@ -1,6 +1,7 @@
 package com.microsoft.codepush.react;
 
 public class CodePushConstants {
+    public static final String ASSET_DIFF_DOWNLOAD_URL_KEY = "assetDiffDownloadUrl";
     public static final String ASSETS_BUNDLE_PREFIX = "assets://";
     // The binary patch values below are the client half of the contract the CLI writes
     // into a patch archive. The CLI is TypeScript, so its constants cannot be imported
@@ -23,7 +24,7 @@ public class CodePushConstants {
     public static final long BINARY_PATCH_MAX_TARGET_BUNDLE_SIZE = 128L * 1024 * 1024;
     // Not part of the CLI's contract: the field a download that tried a patch reports its
     // outcome under, on the package it resolves with and on no package it stores.
-    public static final String BINARY_PATCH_RESULT_KEY = "binaryPatchResult";
+    public static final String UPDATE_ARCHIVE_RESULT_KEY = "updateArchiveResult";
     public static final String BINARY_PATCH_TARGET_BUNDLE_HASH_KEY = "targetBundleHash";
     public static final String BINARY_PATCH_TARGET_BUNDLE_SIZE_KEY = "targetBundleSize";
     public static final String BINARY_PATCH_TARGET_FILE_NAME = "target.bundle";

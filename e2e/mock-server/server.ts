@@ -39,6 +39,13 @@ export function startMockServer(): Promise<Server> {
       next();
     });
 
+    // The app reports how a download's update archives went here. The report travels in
+    // the query string, so recording the request above is what stores it - this handler
+    // only keeps the answer from being a 404.
+    app.get("/e2e/update-archive-result", (_req: express.Request, res: express.Response) => {
+      res.status(204).end();
+    });
+
     app.use(express.static(MOCK_DATA_DIR));
 
     app.use((_req: express.Request, res: express.Response) => {
