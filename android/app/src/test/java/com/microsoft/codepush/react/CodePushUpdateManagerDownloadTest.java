@@ -5,6 +5,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -90,7 +91,7 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
-    public void installsAnUpdateFromItsBinaryPatchArchive() throws IOException {
+    public void installsAnUpdateFromItsBinaryPatchArchive() throws IOException, JSONException {
         String patchUrl = serve("/patch.zip", zipOf(patchArchiveContents()));
         String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
 
@@ -102,7 +103,12 @@ public class CodePushUpdateManagerDownloadTest {
         assertInstalledContents();
         assertEquals("applied", patchResult.optString("status", null));
         assertFalse("an applied patch has nothing to report a reason for", patchResult.has("fallbackReason"));
-        assertTrue("the apply is timed", patchResult.optLong("applyDurationMs", -1) >= 0);
+        assertTrue("the whole path is timed", patchResult.optLong("totalDurationMs", -1) >= 0);
+        assertFalse("the result no longer carries a top level apply time", patchResult.has("applyDurationMs"));
+
+        JSONObject appliedAttempt = patchResult.getJSONArray("attempts").getJSONObject(0);
+        assertTrue("an applied attempt carries its apply time", appliedAttempt.has("applyDurationMs"));
+        assertTrue(appliedAttempt.optLong("applyDurationMs", -1) >= 0);
     }
 
     @Test
@@ -116,19 +122,19 @@ public class CodePushUpdateManagerDownloadTest {
 
         assertEquals(Arrays.asList("/patch.zip", "/full.zip"), mServer.requestedPaths());
         assertInstalledContents();
-        assertFallbackResult(patchResult, BinaryPatchResult.REASON_INVALID_MANIFEST);
+        assertFallbackResult(patchResult, ArchiveRestoreResult.REASON_INVALID_MANIFEST);
     }
 
     @Test
     public void reportsAnInvalidManifestWhenThePatchUrlDoesNotServeAnArchive() throws IOException {
         String patchUrl = serve("/patch.zip", ERROR_PAGE);
 
-        BinaryPatchResult result = updateManager(applierWriting(TARGET_BUNDLE)).downloadAndInstallPackage(
+        ArchiveRestoreResult result = updateManager(applierWriting(TARGET_BUNDLE)).downloadAndInstallPackage(
                 updatePackage("https://example.test/unused.zip", patchUrl), BUNDLE_FILE_NAME, ignoreProgress(),
-                patchUrl, true, new BinaryPatchAttempt());
+                patchUrl, true, new ArchiveAttemptLog());
 
         assertFalse(result.succeeded());
-        assertEquals(BinaryPatchResult.REASON_INVALID_MANIFEST, result.getFailureReason());
+        assertEquals(ArchiveRestoreResult.REASON_INVALID_MANIFEST, result.getFailureReason());
         assertFalse("bytes that are not an update must not reach the package folder", mPackageFolder.exists());
     }
 
@@ -167,7 +173,7 @@ public class CodePushUpdateManagerDownloadTest {
 
         assertEquals(Arrays.asList("/patch.zip", "/full.zip"), mServer.requestedPaths());
         assertInstalledContents();
-        assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
+        assertFallbackResult(patchResult, ArchiveRestoreResult.REASON_PACKAGE_VERIFICATION_FAILED);
     }
 
     @Test
@@ -204,7 +210,7 @@ public class CodePushUpdateManagerDownloadTest {
                 .downloadPackage(updatePackage(updateHash, fullUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
         assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/full.zip"), mServer.requestedPaths());
-        assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
+        assertFallbackResult(patchResult, ArchiveRestoreResult.REASON_PACKAGE_VERIFICATION_FAILED);
         assertInstalledContents(updateHash, updateContents);
     }
 
@@ -221,7 +227,56 @@ public class CodePushUpdateManagerDownloadTest {
                 .downloadPackage(updatePackage(updateHash, fullUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
         assertEquals(Arrays.asList("/diff.zip", "/full.zip"), mServer.requestedPaths());
-        assertFallbackResult(patchResult, BinaryPatchResult.REASON_PACKAGE_VERIFICATION_FAILED);
+        assertFallbackResult(patchResult, ArchiveRestoreResult.REASON_PACKAGE_VERIFICATION_FAILED);
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void fallsBackToThePatchArchiveWhenTheInstalledPackageIsGoneFromDisk() throws IOException {
+        // The metadata still names the installed update, but its files are gone: the merge
+        // has nothing to read, which is a failure of the merge itself rather than of its
+        // result - and the one failure the patch archive, carrying every asset, is not
+        // implicated in.
+        installBaseUpdate();
+        FileUtils.deleteDirectoryAtPath(new File(
+                new File(mDocumentsDirectory, CodePushConstants.CODE_PUSH_FOLDER_PREFIX),
+                packageHashOf(installedArchiveContents())).getAbsolutePath());
+
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH)));
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(ArchiveRestoreResult.REASON_ASSET_MERGE_FAILED,
+                patchResult.optJSONArray("attempts").optJSONObject(0).optString("fallbackReason", null));
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void skipsThePatchArchiveWhenTheAssetDiffCannotBeDownloaded() throws IOException {
+        // A diff that never arrived left no verdict at all: nothing says the patch archive
+        // is any better off, and the full download is the one that cannot fail - so a
+        // client is never walked through two doomed downloads on its way there.
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = mServer.urlOf("/missing-diff.zip");
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/missing-diff.zip", "/full.zip"), mServer.requestedPaths());
+        assertFallbackResult(patchResult, null);
+        assertEquals("asset-diff", patchResult.optString("archive", null));
+        assertEquals(1, patchResult.optJSONArray("attempts").length());
         assertInstalledContents(updateHash, updateContents);
     }
 
@@ -287,7 +342,8 @@ public class CodePushUpdateManagerDownloadTest {
     private static void assertFallbackResult(JSONObject patchResult, String expectedReason) {
         assertEquals("fallback", patchResult.optString("status", null));
         assertEquals(expectedReason, patchResult.optString("fallbackReason", null));
-        assertTrue("the attempt is timed", patchResult.optLong("applyDurationMs", -1) >= 0);
+        assertTrue("the whole path is timed", patchResult.optLong("totalDurationMs", -1) >= 0);
+        assertFalse("the result no longer carries a top level apply time", patchResult.has("applyDurationMs"));
     }
 
     /** The installed update is the full archive's contents, whichever archive it came from. */
@@ -307,7 +363,7 @@ public class CodePushUpdateManagerDownloadTest {
         // How the update was downloaded says nothing about the update, so it is not part of
         // what the update is installed from and outlives the download in no file.
         assertFalse("the patch attempt reached the stored metadata",
-                metadata.has(CodePushConstants.BINARY_PATCH_RESULT_KEY));
+                metadata.has(CodePushConstants.UPDATE_ARCHIVE_RESULT_KEY));
 
         File binaryPatchFolder = new File(
                 new File(mDocumentsDirectory, CodePushConstants.CODE_PUSH_FOLDER_PREFIX),
@@ -453,6 +509,13 @@ public class CodePushUpdateManagerDownloadTest {
         return contents;
     }
 
+    /** The patch archive of the release the asset diff belongs to: every asset, no merge. */
+    private Map<String, byte[]> patchArchiveContentsForAssetDiffTarget() {
+        Map<String, byte[]> contents = patchArchiveContents();
+        contents.put(CONTENTS_DIR_NAME + "/" + ADDED_ASSET_PATH, ADDED_ASSET);
+        return contents;
+    }
+
     /** What an asset diff has to add up to: the contents of the update's full archive. */
     private Map<String, byte[]> assetDiffTargetContents() {
         Map<String, byte[]> contents = fullArchiveContents();
@@ -467,6 +530,14 @@ public class CodePushUpdateManagerDownloadTest {
     private JSONObject updatePackage(String packageHash, String downloadUrl, String binaryPatchDownloadUrl) {
         JSONObject updatePackage = fullUpdatePackage(packageHash, downloadUrl);
         CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY, binaryPatchDownloadUrl);
+        return updatePackage;
+    }
+
+    /** A release offering all three archives, the diff in the slot of its own the JS fills. */
+    private JSONObject updatePackageWithAssetDiff(String packageHash, String downloadUrl,
+                                                  String binaryPatchDownloadUrl, String assetDiffDownloadUrl) {
+        JSONObject updatePackage = updatePackage(packageHash, downloadUrl, binaryPatchDownloadUrl);
+        CodePushUtils.setJSONValueForKey(updatePackage, CodePushConstants.ASSET_DIFF_DOWNLOAD_URL_KEY, assetDiffDownloadUrl);
         return updatePackage;
     }
 
@@ -508,6 +579,11 @@ public class CodePushUpdateManagerDownloadTest {
 
         synchronized String serve(String path, byte[] body) {
             mBodies.put(path, body);
+            return urlOf(path);
+        }
+
+        /** The URL of a path this server answers - with a 404, when nothing is served there. */
+        String urlOf(String path) {
             return "http://127.0.0.1:" + mSocket.getLocalPort() + path;
         }
 

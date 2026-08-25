@@ -1,14 +1,14 @@
 package com.microsoft.codepush.react;
 
 /**
- * Outcome of restoring an update from its binary patch archive.
+ * Outcome of restoring an update from one of its update archives.
  *
  * A failed result is not an error the user hears about: it is the signal to download the
  * update's full archive instead. The reason strings are the vocabulary the appliers of
  * every platform report, and the logs a rollout is judged from are read for exactly these
  * words, so they must not be reworded.
  */
-public class BinaryPatchResult {
+public class ArchiveRestoreResult {
 
     /** The bundle inside the app binary could not be opened or read. */
     public static final String REASON_BASE_BUNDLE_UNAVAILABLE = "base_bundle_unavailable";
@@ -29,6 +29,16 @@ public class BinaryPatchResult {
     public static final String REASON_TARGET_VERIFICATION_FAILED = "target_verification_failed";
 
     /**
+     * The asset diff could not be merged with the installed update it was built against.
+     *
+     * Reported by the caller too, from the merge that follows the restore: the diff archive
+     * only carries what the installed update does not, so this covers reading the installed
+     * update's files, applying the deletion manifest, and everything else that stitches the
+     * two back together.
+     */
+    public static final String REASON_ASSET_MERGE_FAILED = "asset_merge_failed";
+
+    /**
      * The update restored from the patch did not pass the checks every update passes before
      * it is installed - the folder hash above all.
      *
@@ -40,17 +50,17 @@ public class BinaryPatchResult {
     private final boolean mSucceeded;
     private final String mFailureReason;
 
-    private BinaryPatchResult(boolean succeeded, String failureReason) {
+    private ArchiveRestoreResult(boolean succeeded, String failureReason) {
         mSucceeded = succeeded;
         mFailureReason = failureReason;
     }
 
-    public static BinaryPatchResult success() {
-        return new BinaryPatchResult(true, null);
+    public static ArchiveRestoreResult success() {
+        return new ArchiveRestoreResult(true, null);
     }
 
-    public static BinaryPatchResult failure(String failureReason) {
-        return new BinaryPatchResult(false, failureReason);
+    public static ArchiveRestoreResult failure(String failureReason) {
+        return new ArchiveRestoreResult(false, failureReason);
     }
 
     public boolean succeeded() {
