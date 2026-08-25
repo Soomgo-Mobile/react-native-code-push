@@ -19,6 +19,7 @@ import {
   assertDiffArchiveShape,
   assertReleaseOffersDiff,
   corruptDiffArchiveAsset,
+  dropDiffArchiveManifestDeletions,
 } from "./asset-diff-fixtures";
 import {
   assertReleaseOffersPatch,
@@ -189,5 +190,20 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
     breakDiff: () => breakRestoredBundleExpectation(findAssetDiffArchive(platform, releaseIdentifier)),
     expectedDownloads: ["asset-diff", "full"],
     expectedArchiveResult: "fallback:asset-diff:asset-diff=target_verification_failed",
+  });
+
+  // A manifest that names no files to delete is not one with nothing to delete - the CLI
+  // writes the key on every release, an empty list included. Merging past its absence would
+  // keep the asset the update dropped and install contents the release never published, so
+  // both clients refuse the merge outright rather than let the package hash speak for it.
+  // That verdict is reached after the bundle patch has already been applied, on the asset
+  // side the patch archive does not share, so the patch archive is the next rung.
+  await runDiffScenario({
+    name: "diff whose manifest names no files to delete falls back to the patch archive",
+    baseVersion: "1.4.7",
+    updateVersion: "1.4.8",
+    breakDiff: () => dropDiffArchiveManifestDeletions(findAssetDiffArchive(platform, releaseIdentifier)),
+    expectedDownloads: ["asset-diff", "binary-patch"],
+    expectedArchiveResult: "applied:binary-patch:asset-diff=asset_merge_failed:binary-patch=applied",
   });
 }

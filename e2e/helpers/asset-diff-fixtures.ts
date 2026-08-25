@@ -140,3 +140,31 @@ export function corruptDiffArchiveAsset(archivePath: string): void {
     fs.writeFileSync(assetPath, asset);
   });
 }
+
+/**
+ * Takes the deletion list out of the diff archive's manifest, leaving everything else as
+ * published.
+ *
+ * The manifest still parses, so what this stands on is the contract the CLI writes it
+ * under: `deletedFiles` is on every manifest, an empty list included. A client that merged
+ * past its absence would keep the file the update dropped and install contents the release
+ * was never published with, so the merge is refused instead - which is the verdict this
+ * corruption isolates, together with the fallback to the patch archive behind it.
+ */
+export function dropDiffArchiveManifestDeletions(archivePath: string): void {
+  rewriteArchive(archivePath, (contentsDir) => {
+    const manifestPath = findFiles(contentsDir)
+      .find((filePath) => path.basename(filePath) === ASSET_DIFF_MANIFEST_NAME);
+    if (!manifestPath) {
+      throw new Error(`The diff archive at "${archivePath}" carries no ${ASSET_DIFF_MANIFEST_NAME} to strip`);
+    }
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    if (!Array.isArray(manifest.deletedFiles)) {
+      throw new Error(`The manifest in "${archivePath}" names no files to delete to begin with`);
+    }
+
+    delete manifest.deletedFiles;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  });
+}
