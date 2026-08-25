@@ -212,10 +212,16 @@ static NSData *CPTestBytes(NSString *text) {
  * not shipped at all - the client copies it over.
  */
 - (NSString *)stageAssetDiffArchiveContentsDeleting:(NSArray<NSString *> *)deletedFiles {
+    return [self stageAssetDiffArchiveContentsWithManifest:
+            [NSJSONSerialization dataWithJSONObject:@{ @"deletedFiles": deletedFiles }
+                                            options:kNilOptions
+                                              error:nil]];
+}
+
+/* The same archive carrying a manifest of its own, which is how one the CLI did not write arrives. */
+- (NSString *)stageAssetDiffArchiveContentsWithManifest:(NSData *)manifest {
     return [self stageContents:@{
-        @"hotcodepush.json": [NSJSONSerialization dataWithJSONObject:@{ @"deletedFiles": deletedFiles }
-                                                             options:kNilOptions
-                                                               error:nil],
+        @"hotcodepush.json": manifest,
         @"CodePush/codepush-binary-patch.json": [self patchManifest],
         @"CodePush/main.jsbundle.patch": CPTestFixture(@"update.patch"),
         @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
@@ -546,6 +552,83 @@ static NSData *CPTestBytes(NSString *text) {
     XCTAssertEqualObjects(result[@"status"], @"applied");
     XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
     XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonAssetMergeFailed);
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testReportsAnAssetMergeFailureWhenTheAssetDiffManifestCannotBeParsed {
+    // Bytes that are not JSON leave nothing to read the deletions out of, so the merge has
+    // no way to know what it was supposed to delete - a failure of the merge itself.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+    NSString *diffStaging = [self stageAssetDiffArchiveContentsWithManifest:CPTestBytes(@"{\"deletedFiles\":")];
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:diffStaging named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
+    XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonAssetMergeFailed);
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testReportsAnAssetMergeFailureWhenTheAssetDiffManifestDoesNotNameTheFilesToDelete {
+    // A manifest without the key is not a manifest with nothing to delete: the CLI always
+    // writes it, an empty list included, so its absence says the manifest is not the one the
+    // release published - and merging past it would leave behind files the update dropped.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+    NSString *diffStaging = [self stageAssetDiffArchiveContentsWithManifest:CPTestBytes(@"{}")];
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:diffStaging named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
+    XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonAssetMergeFailed);
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testMergesAnAssetDiffWhoseManifestDeletesNothing {
+    // The shape a release that drops no file is published with, and the one the guard above
+    // must let through: the merge keeps everything the installed package had.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageContents:@{
+        @"CodePush/main.jsbundle": CPTestFixture(@"target.bundle"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+        @"CodePush/assets/legacy.png": CPTestBytes(@"an image the newer update leaves behind"),
+        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
+    }];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[]]
+                                              named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"asset-diff");
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 

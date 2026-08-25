@@ -260,6 +260,53 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void fallsBackToThePatchArchiveWhenTheAssetDiffManifestCannotBeParsed() throws IOException {
+        // Bytes that are not JSON leave nothing to read the deletions out of, so the merge
+        // has no way to know what it was supposed to delete - a failure of the merge itself.
+        installBaseUpdate();
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip",
+                zipOf(assetDiffArchiveContentsWithManifest(bytes("{\"deletedFiles\":"))));
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(ArchiveRestoreResult.REASON_ASSET_MERGE_FAILED,
+                patchResult.optJSONArray("attempts").optJSONObject(0).optString("fallbackReason", null));
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void fallsBackToThePatchArchiveWhenTheAssetDiffManifestDoesNotNameTheFilesToDelete() throws IOException {
+        // A manifest without the key is not a manifest with nothing to delete: the CLI always
+        // writes it, an empty list included, so its absence says the manifest is not the one
+        // the release published - and merging past it would leave behind files the update
+        // dropped.
+        installBaseUpdate();
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContentsWithManifest(bytes("{}"))));
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(ArchiveRestoreResult.REASON_ASSET_MERGE_FAILED,
+                patchResult.optJSONArray("attempts").optJSONObject(0).optString("fallbackReason", null));
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
     public void skipsThePatchArchiveWhenTheAssetDiffCannotBeDownloaded() throws IOException {
         // A diff that never arrived left no verdict at all: nothing says the patch archive
         // is any better off, and the full download is the one that cannot fail - so a
@@ -512,11 +559,16 @@ public class CodePushUpdateManagerDownloadTest {
      * holds unchanged is not shipped at all - the client copies it over.
      */
     private Map<String, byte[]> assetDiffArchiveContents(String deletedAssetPath) {
+        return assetDiffArchiveContentsWithManifest(
+                bytes("{\"deletedFiles\":[\"" + CONTENTS_DIR_NAME + "/" + deletedAssetPath + "\"]}"));
+    }
+
+    /** The same archive carrying a manifest of its own, which is how one the CLI did not write arrives. */
+    private Map<String, byte[]> assetDiffArchiveContentsWithManifest(byte[] manifest) {
         Map<String, byte[]> contents = patchArchiveContents();
         contents.remove(CONTENTS_DIR_NAME + "/" + ASSET_PATH);
         contents.put(CONTENTS_DIR_NAME + "/" + ADDED_ASSET_PATH, ADDED_ASSET);
-        contents.put(CodePushConstants.DIFF_MANIFEST_FILE_NAME,
-                bytes("{\"deletedFiles\":[\"" + CONTENTS_DIR_NAME + "/" + deletedAssetPath + "\"]}"));
+        contents.put(CodePushConstants.DIFF_MANIFEST_FILE_NAME, manifest);
         return contents;
     }
 

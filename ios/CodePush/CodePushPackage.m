@@ -461,7 +461,26 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                                             NSDictionary *manifestJSON = [NSJSONSerialization JSONObjectWithData:data
                                                                                                                          options:kNilOptions
                                                                                                                            error:&error];
-                                                            NSArray *deletedFiles = manifestJSON[@"deletedFiles"];
+                                                            if (error) {
+                                                                mergeFailCallback(error);
+                                                                return;
+                                                            }
+
+                                                            // A manifest that does not name the files to delete is not a manifest
+                                                            // with nothing to delete - the CLI writes the key on every release, an
+                                                            // empty list included. Iterating what is not there would skip every
+                                                            // deletion and merge on, so it is refused here, the way the other
+                                                            // platform's merge refuses it, for the two platforms to report one
+                                                            // reason for one state.
+                                                            NSArray *deletedFiles = [manifestJSON isKindOfClass:[NSDictionary class]]
+                                                                ? manifestJSON[@"deletedFiles"]
+                                                                : nil;
+                                                            if (![deletedFiles isKindOfClass:[NSArray class]]) {
+                                                                error = [CodePushErrorUtils errorWithMessage:[NSString stringWithFormat:@"The asset diff manifest at %@ does not name the files to delete.", diffManifestFilePath]];
+                                                                mergeFailCallback(error);
+                                                                return;
+                                                            }
+
                                                             for (NSString *deletedFileName in deletedFiles) {
                                                                 // The manifest is untrusted input, so an entry that reaches outside the
                                                                 // package folder is ignored rather than followed. Whether skipping it
