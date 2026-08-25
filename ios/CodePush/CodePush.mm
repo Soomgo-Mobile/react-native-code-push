@@ -63,7 +63,7 @@ static NSString *const PackageIsPendingKey = @"isPending";
 
 // Not one of those keys: the field a download that tried a binary patch reports its outcome
 // under, on the package it resolves with and on no package it stores.
-static NSString *const BinaryPatchResultKey = @"binaryPatchResult";
+static NSString *const UpdateArchiveResultKey = @"updateArchiveResult";
 
 #pragma mark - Static variables
 
@@ -740,8 +740,8 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
         // The download is progressing forward
         progressCallback:^(long long expectedContentLength, long long receivedContentLength) {
             // Received bytes only run backwards when a new download starts a stream of its
-            // own - the full archive after a binary patch fallback. The pause left over
-            // from the finished patch download would swallow that whole stream, so frame
+            // own - the next archive after a binary patch fallback. The pause left over
+            // from the finished download would swallow that whole stream, so frame
             // observation resumes here and the throttle forgets the previous stream.
             if (notifyProgress && receivedContentLength < _latestReceivedConentLength) {
                 self.paused = NO;
@@ -767,7 +767,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
             }
         }
         // The download completed
-        doneCallback:^(NSDictionary *binaryPatchResult) {
+        doneCallback:^(NSDictionary *updateArchiveResult) {
             NSError *err;
             NSDictionary *newPackage = [CodePushPackage getPackage:mutableUpdatePackage[PackageHashKey] error:&err];
 
@@ -775,13 +775,13 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
                 return reject([NSString stringWithFormat: @"%lu", (long)err.code], err.localizedDescription, err);
             }
 
-            if (binaryPatchResult) {
+            if (updateArchiveResult) {
                 // The result describes this download rather than the update, so it is put on
                 // what this call resolves with and nowhere else: the metadata that was
                 // written for the update knows nothing about it, and whoever asked for the
                 // download decides what the result is worth.
                 NSMutableDictionary *downloadedPackage = [newPackage mutableCopy];
-                downloadedPackage[BinaryPatchResultKey] = binaryPatchResult;
+                downloadedPackage[UpdateArchiveResultKey] = updateArchiveResult;
                 return resolve(downloadedPackage);
             }
 

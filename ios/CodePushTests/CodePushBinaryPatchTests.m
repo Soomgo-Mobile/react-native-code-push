@@ -298,28 +298,28 @@ static NSString *const BundleFileName = @"main.jsbundle";
 
 - (void)testReportsAnInvalidManifestWhenThereIsNone {
     [self removeFileAtPath:[self contentsPath:BinaryPatchManifestFileName]];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 - (void)testReportsAnInvalidManifestWhenItIsNotJson {
     CPTestWriteFile([self contentsPath:BinaryPatchManifestFileName],
                     [@"not json at all" dataUsingEncoding:NSUTF8StringEncoding]);
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 - (void)testReportsAnUnsupportedFormatForAnotherFormatVersion {
     [self writePatchManifestWithValue:@2 forKey:@"formatVersion"];
-    [self assertFailureReason:CodePushBinaryPatchReasonUnsupportedFormat];
+    [self assertFailureReason:CodePushArchiveFallbackReasonUnsupportedFormat];
 }
 
 - (void)testReportsAnUnsupportedFormatForAnotherAlgorithm {
     [self writePatchManifestWithValue:@"bsdiff-bz2" forKey:@"algorithm"];
-    [self assertFailureReason:CodePushBinaryPatchReasonUnsupportedFormat];
+    [self assertFailureReason:CodePushArchiveFallbackReasonUnsupportedFormat];
 }
 
 - (void)testReportsAnInvalidManifestWhenTheBundlePathLeavesTheArchive {
     [self writePatchManifestWithValue:@"../main.jsbundle" forKey:@"bundlePath"];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
     XCTAssertFalse([self fileExists:[self.root stringByAppendingPathComponent:BundleFileName]],
                    @"a bundle was restored outside the archive");
 }
@@ -328,39 +328,39 @@ static NSString *const BundleFileName = @"main.jsbundle";
     CPTestWriteFile([self.root stringByAppendingPathComponent:BinaryPatchFileName],
                     CPTestFixture(@"update.patch"));
     [self writePatchManifestWithValue:@"../main.jsbundle.patch" forKey:@"patchFile"];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 - (void)testReportsAnInvalidManifestWhenTheBundlePathIsAbsolute {
     [self writePatchManifestWithValue:[self contentsPath:BundleFileName] forKey:@"bundlePath"];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 - (void)testReportsAnInvalidManifestWhenTheArchiveHasNoPatchFile {
     [self removeFileAtPath:[self contentsPath:BinaryPatchFileName]];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 - (void)testReportsAnInvalidManifestWhenTheTargetSizeIsEmpty {
     [self writePatchManifestWithValue:@0 forKey:@"targetBundleSize"];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 - (void)testReportsAnInvalidManifestWhenTheTargetSizeIsBeyondTheLimit {
     [self writePatchManifestWithValue:@(128LL * 1024 * 1024 + 1) forKey:@"targetBundleSize"];
-    [self assertFailureReason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFailureReason:CodePushArchiveFallbackReasonInvalidManifest];
 }
 
 #pragma mark - Refusing the base bundle
 
 - (void)testReportsAnUnavailableBaseBundleWhenTheBinaryBundleCannotBeRead {
     self.baseBundlePath = [self.root stringByAppendingPathComponent:@"no-such.bundle"];
-    [self assertFailureReason:CodePushBinaryPatchReasonBaseBundleUnavailable];
+    [self assertFailureReason:CodePushArchiveFallbackReasonBaseBundleUnavailable];
 }
 
 - (void)testReportsABaseHashMismatchWhenTheBinaryHoldsAnotherBundle {
     CPTestWriteFile(self.baseBundlePath, [@"another bundle entirely" dataUsingEncoding:NSUTF8StringEncoding]);
-    [self assertFailureReason:CodePushBinaryPatchReasonBaseHashMismatch];
+    [self assertFailureReason:CodePushArchiveFallbackReasonBaseHashMismatch];
     XCTAssertFalse([self fileExists:[self contentsPath:BundleFileName]],
                    @"a bundle was restored from a base bundle that was never checked");
 }
@@ -373,13 +373,13 @@ static NSString *const BundleFileName = @"main.jsbundle";
     // header readable, so all that is left to refuse is the codec itself.
     [patch replaceBytesInRange:NSMakeRange(8, 4) withBytes:"lzma" length:4];
     CPTestWriteFile([self contentsPath:BinaryPatchFileName], patch);
-    [self assertFailureReason:CodePushBinaryPatchReasonUnsupportedFormat];
+    [self assertFailureReason:CodePushArchiveFallbackReasonUnsupportedFormat];
 }
 
 - (void)testReportsAFailedApplyWhenThePatchHeaderIsCorrupt {
     CPTestWriteFile([self contentsPath:BinaryPatchFileName],
                     [@"the difference between the two" dataUsingEncoding:NSUTF8StringEncoding]);
-    [self assertFailureReason:CodePushBinaryPatchReasonPatchApplyFailed];
+    [self assertFailureReason:CodePushArchiveFallbackReasonPatchApplyFailed];
     XCTAssertFalse([self fileExists:[self contentsPath:BundleFileName]],
                    @"a bundle was restored from a patch that could not be read");
 }
@@ -387,7 +387,7 @@ static NSString *const BundleFileName = @"main.jsbundle";
 - (void)testReportsAFailedApplyWhenTheManifestPromisesAnotherSize {
     long long targetBundleSize = [self.manifest[@"targetBundleSize"] longLongValue];
     [self writePatchManifestWithValue:@(targetBundleSize - 1) forKey:@"targetBundleSize"];
-    [self assertFailureReason:CodePushBinaryPatchReasonPatchApplyFailed];
+    [self assertFailureReason:CodePushArchiveFallbackReasonPatchApplyFailed];
 }
 
 #pragma mark - Refusing the restored bundle
@@ -399,7 +399,7 @@ static NSString *const BundleFileName = @"main.jsbundle";
                                                                                withString:[firstCharacter isEqualToString:@"a"] ? @"b" : @"a"]
                                forKey:@"targetBundleHash"];
 
-    [self assertFailureReason:CodePushBinaryPatchReasonTargetVerificationFailed];
+    [self assertFailureReason:CodePushArchiveFallbackReasonTargetVerificationFailed];
     XCTAssertFalse([self fileExists:[self contentsPath:BundleFileName]],
                    @"a bundle that failed verification was put among the update contents");
     XCTAssertTrue([self fileExists:[self contentsPath:BinaryPatchFileName]],

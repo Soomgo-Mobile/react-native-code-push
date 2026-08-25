@@ -118,8 +118,8 @@ static NSData *CPTestBytes(NSString *text) {
                     progressCallback:^(long long expected, long long received) {
                         [events addObject:@[@(expected), @(received)]];
                     }
-                        doneCallback:^(NSDictionary *binaryPatchResult) {
-                            patchResult = binaryPatchResult;
+                        doneCallback:^(NSDictionary *updateArchiveResult) {
+                            patchResult = updateArchiveResult;
                             [finished fulfill];
                         }
                         failCallback:^(NSError *error) {
@@ -195,6 +195,16 @@ static NSData *CPTestBytes(NSString *text) {
     }];
 }
 
+/* The patch archive of the release the asset diff belongs to: every asset, no merge. */
+- (NSString *)stagePatchArchiveContentsForAssetDiffTarget {
+    return [self stageContents:@{
+        @"CodePush/codepush-binary-patch.json": [self patchManifest],
+        @"CodePush/main.jsbundle.patch": CPTestFixture(@"update.patch"),
+        @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
+        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
+    }];
+}
+
 /*
  * An asset diff archive: the patch archive carrying only the assets the update changes, plus
  * the manifest of the files to delete at the archive root, beside the contents directory the
@@ -262,7 +272,8 @@ static NSData *CPTestBytes(NSString *text) {
 - (void)assertFallbackResult:(NSDictionary *)result reason:(NSString *)expectedReason {
     XCTAssertEqualObjects(result[@"status"], @"fallback");
     XCTAssertEqualObjects(result[@"fallbackReason"], expectedReason);
-    XCTAssertGreaterThanOrEqual([result[@"applyDurationMs"] doubleValue], 0, @"the attempt is timed");
+    XCTAssertGreaterThanOrEqual([result[@"totalDurationMs"] doubleValue], 0, @"the whole path is timed");
+    XCTAssertNil(result[@"applyDurationMs"], @"the result no longer carries a top level apply time");
 }
 
 /* Where a patch attempt does its work, which no attempt may leave behind. */
@@ -318,7 +329,12 @@ static NSData *CPTestBytes(NSString *text) {
     XCTAssertNil(error);
     XCTAssertEqualObjects(result[@"status"], @"applied");
     XCTAssertNil(result[@"fallbackReason"], @"an applied patch has nothing to report a reason for");
-    XCTAssertGreaterThanOrEqual([result[@"applyDurationMs"] doubleValue], 0, @"the apply is timed");
+    XCTAssertGreaterThanOrEqual([result[@"totalDurationMs"] doubleValue], 0, @"the whole path is timed");
+    XCTAssertNil(result[@"applyDurationMs"], @"the result no longer carries a top level apply time");
+
+    NSDictionary *appliedAttempt = [result[@"attempts"] lastObject];
+    XCTAssertNotNil(appliedAttempt[@"applyDurationMs"], @"an applied attempt carries its apply time");
+    XCTAssertGreaterThanOrEqual([appliedAttempt[@"applyDurationMs"] doubleValue], 0);
     [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
     [self assertBinaryPatchFolderRemoved];
 }
@@ -339,7 +355,7 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonInvalidManifest];
+    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonInvalidManifest];
     [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
 }
 
@@ -376,7 +392,7 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonPatchApplyFailed];
+    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonPatchApplyFailed];
     [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
 }
 
@@ -397,7 +413,7 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonPackageVerificationFailed];
+    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonPackageVerificationFailed];
     [self assertInstalledContentsOf:packageHash matchStaging:fullStaging];
 }
 
@@ -439,7 +455,149 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    [self assertFallbackResult:result reason:CodePushBinaryPatchReasonPackageVerificationFailed];
+    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonPackageVerificationFailed];
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+#pragma mark - The archive ladder of a diff served next to its patch
+
+- (void)testInstallsAnAssetDiffUpdateFromItsOwnUrlNextToThePatchUrl {
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[@"CodePush/assets/legacy.png"]]
+                                              named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"asset-diff");
+    XCTAssertEqual([result[@"attempts"] count], (NSUInteger)1, @"the patch archive was never needed");
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testFallsBackToThePatchArchiveWhenTheAssetDiffFailsAfterItsBundleWasRestored {
+    // A manifest that deletes an asset the update keeps: the merge completes into contents
+    // that are not the released package. That is a failure on the asset side of the diff,
+    // which the patch archive does not share, so the patch is the next rung.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[@"CodePush/assets/logo.png"]]
+                                              named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
+    NSArray *attempts = result[@"attempts"];
+    XCTAssertEqual(attempts.count, (NSUInteger)2);
+    XCTAssertEqualObjects(attempts[0][@"archive"], @"asset-diff");
+    XCTAssertEqualObjects(attempts[0][@"fallbackReason"], CodePushArchiveFallbackReasonPackageVerificationFailed);
+    XCTAssertEqualObjects(attempts[1][@"archive"], @"binary-patch");
+    XCTAssertNil(attempts[1][@"fallbackReason"], @"the attempt the update was installed from has no reason");
+
+    // The path runs to the end, not to the moment the diff was given up on. The three times
+    // are rounded independently, so the sum is compared with a couple of milliseconds of slack.
+    double totalDurationMs = [result[@"totalDurationMs"] doubleValue];
+    XCTAssertGreaterThanOrEqual(totalDurationMs, [attempts[1][@"durationMs"] doubleValue],
+                                @"the total covers the attempt that installed");
+    XCTAssertGreaterThanOrEqual(totalDurationMs,
+                                [attempts[0][@"durationMs"] doubleValue] + [attempts[1][@"durationMs"] doubleValue] - 2,
+                                @"the total covers both attempts");
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testReportsAnAssetMergeFailureWhenTheInstalledPackageIsGoneFromDisk {
+    // The metadata still names the installed update, but its files are gone: the merge has
+    // nothing to read, which is a failure of the merge itself rather than of its result.
+    NSString *installedHash = [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    [[NSFileManager defaultManager] removeItemAtPath:[CodePushPackage getPackageFolderPath:installedHash]
+                                               error:nil];
+
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:[self stageAssetDiffArchiveContentsDeleting:@[@"CodePush/assets/legacy.png"]]
+                                              named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
+    XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonAssetMergeFailed);
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testSkipsThePatchArchiveWhenTheAssetDiffCannotBeDownloaded {
+    // A diff that never arrived left no verdict at all: nothing says the patch archive is
+    // any better off, and the full download is the one that cannot fail - so a client is
+    // never walked through two doomed downloads on its way there.
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self urlOfMissingFileNamed:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    [self assertFallbackResult:result reason:nil];
+    XCTAssertEqualObjects(result[@"archive"], @"asset-diff");
+    XCTAssertEqual([result[@"attempts"] count], (NSUInteger)1, @"the patch archive was passed over");
+    [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
+}
+
+- (void)testSkipsThePatchArchiveWhenTheAssetDiffFailsInTheBundlePatchBothArchivesCarry {
+    [self installPackageWithContents:[self stageInstalledArchiveContents]];
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
+    NSString *packageHash = CPTestFolderHash(updateStaging);
+    NSString *diffStaging = [self stageAssetDiffArchiveContentsDeleting:@[@"CodePush/assets/legacy.png"]];
+    CPTestWriteFile([diffStaging stringByAppendingPathComponent:@"CodePush/main.jsbundle.patch"],
+                    CPTestBytes(@"the difference between the two"));
+
+    NSError *error = nil;
+    NSDictionary *result = [self downloadPackage:@{
+        @"packageHash": packageHash,
+        @"downloadUrl": [self serveArchive:updateStaging named:@"full.zip"],
+        @"binaryPatchDownloadUrl": [self serveArchive:[self stagePatchArchiveContentsForAssetDiffTarget]
+                                                named:@"patch.zip"],
+        @"assetDiffDownloadUrl": [self serveArchive:diffStaging named:@"diff.zip"],
+    } error:&error];
+
+    XCTAssertNil(error);
+    // Both archives carry the same bundle patch, so the patch archive could only fail the
+    // same way and is passed over for the full one.
+    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonPatchApplyFailed];
+    XCTAssertEqualObjects(result[@"archive"], @"asset-diff");
+    XCTAssertEqual([result[@"attempts"] count], (NSUInteger)1, @"the patch archive was passed over");
+    XCTAssertNil(result[@"attempts"][0][@"applyDurationMs"],
+                 @"an attempt that never restored the bundle has no apply to report");
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 

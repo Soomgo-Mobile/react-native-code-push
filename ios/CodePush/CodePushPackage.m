@@ -10,15 +10,22 @@
 
 #pragma mark - Private constants
 
+static NSString *const AssetDiffDownloadUrlKey = @"assetDiffDownloadUrl";
+static NSString *const UpdateArchiveAssetDiff = @"asset-diff";
+static NSString *const UpdateArchiveBinaryPatch = @"binary-patch";
 static NSString *const BinaryPatchDownloadUrlKey = @"binaryPatchDownloadUrl";
 static NSString *const BinaryPatchFolderName = @"binary-patch";
 // The fields of what a download that tried a patch reports back with. They are read by the
 // app that asked for the download and by nothing else, so they never reach a file.
-static NSString *const BinaryPatchResultApplyDurationMsKey = @"applyDurationMs";
-static NSString *const BinaryPatchResultFallbackReasonKey = @"fallbackReason";
-static NSString *const BinaryPatchResultStatusKey = @"status";
-static NSString *const BinaryPatchResultStatusApplied = @"applied";
-static NSString *const BinaryPatchResultStatusFallback = @"fallback";
+static NSString *const UpdateArchiveAttemptApplyDurationMsKey = @"applyDurationMs";
+static NSString *const UpdateArchiveAttemptDurationMsKey = @"durationMs";
+static NSString *const UpdateArchiveResultArchiveKey = @"archive";
+static NSString *const UpdateArchiveResultAttemptsKey = @"attempts";
+static NSString *const UpdateArchiveResultFallbackReasonKey = @"fallbackReason";
+static NSString *const UpdateArchiveResultStatusKey = @"status";
+static NSString *const UpdateArchiveResultTotalDurationMsKey = @"totalDurationMs";
+static NSString *const UpdateArchiveResultStatusApplied = @"applied";
+static NSString *const UpdateArchiveResultStatusFallback = @"fallback";
 static NSString *const DiffManifestFileName = @"hotcodepush.json";
 static NSString *const DownloadFileName = @"download.zip";
 static NSString *const DownloadUrlKey = @"downloadUrl";
@@ -58,10 +65,28 @@ static NSString *const UnzippedFolderName = @"unzipped";
  expectedBundleFileName:(NSString *)expectedBundleFileName
          operationQueue:(dispatch_queue_t)operationQueue
        progressCallback:(void (^)(long long, long long))progressCallback
-           doneCallback:(void (^)(NSDictionary *binaryPatchResult))doneCallback
+           doneCallback:(void (^)(NSDictionary *updateArchiveResult))doneCallback
            failCallback:(void (^)(NSError *err))failCallback
 {
-    void (^downloadFullPackage)(NSDictionary *) = ^(NSDictionary *binaryPatchResult) {
+    // A release that was published with a binary patch offers up to three archives of the
+    // same update. The asset diff is the smallest and is tried first, the patch archive
+    // stands in when the diff fails on its asset side, and the full archive is always
+    // there when none of it works out.
+    NSMutableArray<NSDictionary *> *archivesToTry = [NSMutableArray array];
+    NSString *assetDiffDownloadUrl = updatePackage[AssetDiffDownloadUrlKey];
+    if ([assetDiffDownloadUrl isKindOfClass:[NSString class]] && [assetDiffDownloadUrl length] > 0) {
+        [archivesToTry addObject:@{ UpdateArchiveResultArchiveKey: UpdateArchiveAssetDiff,
+                                    DownloadUrlKey: assetDiffDownloadUrl }];
+    }
+
+    NSString *binaryPatchDownloadUrl = updatePackage[BinaryPatchDownloadUrlKey];
+    if ([binaryPatchDownloadUrl isKindOfClass:[NSString class]] && [binaryPatchDownloadUrl length] > 0) {
+        [archivesToTry addObject:@{ UpdateArchiveResultArchiveKey: UpdateArchiveBinaryPatch,
+                                    DownloadUrlKey: binaryPatchDownloadUrl }];
+    }
+
+    if ([archivesToTry count] == 0) {
+        // A download that never had a patch to try has nothing to report about one.
         [self downloadAndInstallPackage:updatePackage
                  expectedBundleFileName:expectedBundleFileName
                          operationQueue:operationQueue
@@ -69,94 +94,193 @@ static NSString *const UnzippedFolderName = @"unzipped";
                     isBinaryPatchUpdate:NO
                        progressCallback:progressCallback
                            doneCallback:^{
-                               doneCallback(binaryPatchResult);
+                               doneCallback(nil);
+                           }
+                           failCallback:failCallback
+                   patchAppliedCallback:nil
+                  patchFallbackCallback:nil];
+        return;
+    }
+
+    [self tryNextArchive:archivesToTry
+           attemptsSoFar:[NSMutableArray array]
+   firstAttemptStartTime:[NSDate date]
+           updatePackage:updatePackage
+  expectedBundleFileName:expectedBundleFileName
+          operationQueue:operationQueue
+        progressCallback:progressCallback
+            doneCallback:doneCallback
+            failCallback:failCallback];
+}
+
+/*
+ * Tries the first archive of the queue, and decides what a failure of it means for the
+ * rest. A failure after the bundle was restored is on the asset side of the archive, so
+ * the next archive - which does not share it - is worth trying. A failure before that
+ * point is in the bundle patch every archive carries byte for byte, or is something no
+ * verdict exists for, and either way the remaining archives are passed over: they could
+ * only fail the same way, and trying them would put more doomed downloads in front of the
+ * full one.
+ *
+ * Every way the ladder can end, the update is installed - by an archive of the queue or
+ * by the full download behind it - so no failure here reaches the caller as an error, and
+ * the result retells the attempts one by one.
+ */
++ (void)tryNextArchive:(NSArray<NSDictionary *> *)archivesToTry
+         attemptsSoFar:(NSMutableArray<NSDictionary *> *)attempts
+ firstAttemptStartTime:(NSDate *)firstAttemptStartTime
+         updatePackage:(NSDictionary *)updatePackage
+expectedBundleFileName:(NSString *)expectedBundleFileName
+        operationQueue:(dispatch_queue_t)operationQueue
+      progressCallback:(void (^)(long long, long long))progressCallback
+          doneCallback:(void (^)(NSDictionary *updateArchiveResult))doneCallback
+          failCallback:(void (^)(NSError *err))failCallback
+{
+    NSString *archive = archivesToTry[0][UpdateArchiveResultArchiveKey];
+    NSArray<NSDictionary *> *remainingArchives = [archivesToTry subarrayWithRange:NSMakeRange(1, [archivesToTry count] - 1)];
+    NSDate *attemptStartTime = [NSDate date];
+
+    // Set once the applier has restored the bundle, which is also what tells a failure
+    // that follows apart from one that came before.
+    __block NSNumber *applyDurationMs = nil;
+
+    void (^giveUpAttempt)(NSString *failureReason) = ^(NSString *failureReason) {
+        [self deleteBinaryPatchFolder];
+        [attempts addObject:[self archiveAttemptEntry:archive
+                                        failureReason:failureReason
+                                      applyDurationMs:applyDurationMs
+                                     attemptStartTime:attemptStartTime]];
+
+        if (applyDurationMs != nil && [remainingArchives count] > 0) {
+            [self tryNextArchive:remainingArchives
+                   attemptsSoFar:attempts
+           firstAttemptStartTime:firstAttemptStartTime
+                   updatePackage:updatePackage
+          expectedBundleFileName:expectedBundleFileName
+                  operationQueue:operationQueue
+                progressCallback:progressCallback
+                    doneCallback:doneCallback
+                    failCallback:failCallback];
+            return;
+        }
+
+        // Timed before the full download starts, because that is not time the patch
+        // path spent.
+        NSDictionary *fallbackResult = [self archiveFallbackResult:failureReason
+                                                           archive:archive
+                                                          attempts:attempts
+                                             firstAttemptStartTime:firstAttemptStartTime];
+        [self downloadAndInstallPackage:updatePackage
+                 expectedBundleFileName:expectedBundleFileName
+                         operationQueue:operationQueue
+                            downloadUrl:updatePackage[DownloadUrlKey]
+                    isBinaryPatchUpdate:NO
+                       progressCallback:progressCallback
+                           doneCallback:^{
+                               doneCallback(fallbackResult);
                            }
                            failCallback:failCallback
                    patchAppliedCallback:nil
                   patchFallbackCallback:nil];
     };
 
-    // A release that was published with a binary patch offers two archives of the same
-    // update. The patch is worth trying because it is a fraction of the size, and the
-    // full archive is always there when it does not work out.
-    NSString *binaryPatchDownloadUrl = updatePackage[BinaryPatchDownloadUrlKey];
-    if (![binaryPatchDownloadUrl isKindOfClass:[NSString class]] || [binaryPatchDownloadUrl length] == 0) {
-        // A download that never had a patch to try has nothing to report about one.
-        return downloadFullPackage(nil);
-    }
-
-    // Every way the patch can fail ends the same way, with the update being downloaded in
-    // full instead, so none of them reaches the caller as an error. The fallback happens
-    // exactly once without anything having to count it: the full archive is downloaded by
-    // a call that is not allowed to take the patch path, so it has no failure of its own
-    // to fall back from.
-    NSDate *patchAttemptStartTime = [NSDate date];
-    // Set once the applier has restored the bundle, which is also what tells a failure
-    // that follows apart from one that came before.
-    __block NSNumber *applyDurationMs = nil;
     [self downloadAndInstallPackage:updatePackage
              expectedBundleFileName:expectedBundleFileName
                      operationQueue:operationQueue
-                        downloadUrl:binaryPatchDownloadUrl
+                        downloadUrl:archivesToTry[0][DownloadUrlKey]
                 isBinaryPatchUpdate:YES
                    progressCallback:progressCallback
                        doneCallback:^{
                            [self deleteBinaryPatchFolder];
-                           doneCallback([self appliedBinaryPatchResult:applyDurationMs]);
+                           [attempts addObject:[self archiveAttemptEntry:archive
+                                                           failureReason:nil
+                                                         applyDurationMs:applyDurationMs
+                                                        attemptStartTime:attemptStartTime]];
+                           doneCallback([self appliedArchiveResult:archive
+                                                          attempts:attempts
+                                             firstAttemptStartTime:firstAttemptStartTime]);
                        }
                        failCallback:^(NSError *err) {
-                           [self deleteBinaryPatchFolder];
-                           CPLog(@"The binary patch update could not be completed (%@). Downloading the full update instead.", err.localizedDescription);
+                           CPLog(@"The %@ archive could not be applied (%@). Falling back.", archive, err.localizedDescription);
                            // An error raised after the bundle was restored is the restored
                            // update failing the checks every update passes before it is
                            // installed. Before that point the appliers have no word for what
-                           // happened - the patch archive not being downloadable, say - and
+                           // happened - the archive not being downloadable, say - and
                            // inventing one here would put a value on the wire that no
                            // platform reports, so the fallback is reported without a reason.
-                           NSString *failureReason = applyDurationMs == nil
+                           giveUpAttempt(applyDurationMs == nil
                                ? nil
-                               : CodePushBinaryPatchReasonPackageVerificationFailed;
-                           downloadFullPackage([self binaryPatchFallbackResult:failureReason
-                                                              attemptStartTime:patchAttemptStartTime]);
+                               : CodePushArchiveFallbackReasonPackageVerificationFailed);
                        }
                patchAppliedCallback:^(double durationMs) {
                    applyDurationMs = @(durationMs);
                }
               patchFallbackCallback:^(NSString *failureReason) {
-                  [self deleteBinaryPatchFolder];
-                  CPLog(@"Binary patch update failed (%@). Downloading the full update instead.", failureReason);
-                  downloadFullPackage([self binaryPatchFallbackResult:failureReason
-                                                     attemptStartTime:patchAttemptStartTime]);
+                  CPLog(@"The %@ archive failed (%@). Falling back.", archive, failureReason);
+                  giveUpAttempt(failureReason);
               }];
 }
 
 /*
- * The result of a patch attempt the update was installed from, timed over the apply itself.
+ * One archive the ladder tried: which archive it was, why it was given up on when it was,
+ * how long the try ran whichever way it ended, and how long its apply took when it got that
+ * far.
  */
-+ (NSDictionary *)appliedBinaryPatchResult:(NSNumber *)applyDurationMs
++ (NSDictionary *)archiveAttemptEntry:(NSString *)archive
+                        failureReason:(NSString *)failureReason
+                      applyDurationMs:(NSNumber *)applyDurationMs
+                     attemptStartTime:(NSDate *)attemptStartTime
+{
+    NSMutableDictionary *entry = [NSMutableDictionary dictionaryWithDictionary:@{
+        UpdateArchiveResultArchiveKey: archive,
+        UpdateArchiveAttemptDurationMsKey: @(round([[NSDate date] timeIntervalSinceDate:attemptStartTime] * 1000)),
+    }];
+    if (failureReason) {
+        entry[UpdateArchiveResultFallbackReasonKey] = failureReason;
+    }
+    // An attempt that never restored the bundle has no apply to report.
+    if (applyDurationMs) {
+        entry[UpdateArchiveAttemptApplyDurationMsKey] = applyDurationMs;
+    }
+
+    return entry;
+}
+
+/*
+ * The result of an archive the update was installed from, timed over the whole path.
+ */
++ (NSDictionary *)appliedArchiveResult:(NSString *)archive
+                              attempts:(NSArray<NSDictionary *> *)attempts
+                 firstAttemptStartTime:(NSDate *)firstAttemptStartTime
 {
     return @{
-        BinaryPatchResultStatusKey: BinaryPatchResultStatusApplied,
-        BinaryPatchResultApplyDurationMsKey: applyDurationMs ?: @0,
+        UpdateArchiveResultStatusKey: UpdateArchiveResultStatusApplied,
+        UpdateArchiveResultArchiveKey: archive,
+        UpdateArchiveResultTotalDurationMsKey: @(round([[NSDate date] timeIntervalSinceDate:firstAttemptStartTime] * 1000)),
+        UpdateArchiveResultAttemptsKey: [attempts copy],
     };
 }
 
 /*
- * The result of a patch attempt the update had to be downloaded in full after.
+ * The result of a patch path the update had to be downloaded in full after.
  *
- * There is no completed apply to time here, so the attempt itself is what is timed: from the
- * patch archive being asked for to the moment the attempt was given up on. The reason is left
- * out when the attempt ended in an error none of the appliers has a word for.
+ * There is no completed apply to time here, so the path itself is what is timed: from the
+ * first archive being asked for to the moment the last one was given up on. The reason is
+ * left out when the last attempt ended in an error none of the appliers has a word for.
  */
-+ (NSDictionary *)binaryPatchFallbackResult:(NSString *)failureReason
-                           attemptStartTime:(NSDate *)attemptStartTime
++ (NSDictionary *)archiveFallbackResult:(NSString *)failureReason
+                                archive:(NSString *)archive
+                               attempts:(NSArray<NSDictionary *> *)attempts
+                  firstAttemptStartTime:(NSDate *)firstAttemptStartTime
 {
     NSMutableDictionary *result = [NSMutableDictionary dictionaryWithDictionary:@{
-        BinaryPatchResultStatusKey: BinaryPatchResultStatusFallback,
-        BinaryPatchResultApplyDurationMsKey: @(round([[NSDate date] timeIntervalSinceDate:attemptStartTime] * 1000)),
+        UpdateArchiveResultStatusKey: UpdateArchiveResultStatusFallback,
+        UpdateArchiveResultArchiveKey: archive,
+        UpdateArchiveResultTotalDurationMsKey: @(round([[NSDate date] timeIntervalSinceDate:firstAttemptStartTime] * 1000)),
+        UpdateArchiveResultAttemptsKey: [attempts copy],
     }];
     if (failureReason) {
-        result[BinaryPatchResultFallbackReasonKey] = failureReason;
+        result[UpdateArchiveResultFallbackReasonKey] = failureReason;
     }
 
     return result;
@@ -175,8 +299,8 @@ static NSString *const UnzippedFolderName = @"unzipped";
  * download, which has no patch to apply.
  *
  * patchFallbackCallback is called instead of doneCallback when the patch cannot be
- * applied: the update was not installed, and the caller has to download the full archive.
- * It is nil for a full download, which has nothing to fall back to.
+ * applied: the update was not installed, and the caller has to move on to the next
+ * archive. It is nil for a full download, which has nothing to fall back to.
  */
 + (void)downloadAndInstallPackage:(NSDictionary *)updatePackage
            expectedBundleFileName:(NSString *)expectedBundleFileName
@@ -270,13 +394,23 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                         BOOL isDiffUpdate = [[NSFileManager defaultManager] fileExistsAtPath:diffManifestFilePath];
                                                         
                                                         if (isDiffUpdate) {
+                                                            // A merge that cannot complete has a word of its own, because it says
+                                                            // the diff went wrong on its asset side - the one failure the patch
+                                                            // archive, which carries every asset, is not implicated in. A diff
+                                                            // manifest served outside the patch path keeps failing as the error
+                                                            // it always was.
+                                                            void (^mergeFailCallback)(NSError *) = !isBinaryPatchUpdate ? failCallback : ^(NSError *mergeError) {
+                                                                CPLog(@"The asset diff could not be merged (%@).", mergeError.localizedDescription);
+                                                                patchFallbackCallback(CodePushArchiveFallbackReasonAssetMergeFailed);
+                                                            };
+
                                                             // Copy the current package to the new package.
                                                             NSString *currentPackageFolderPath = [self getCurrentPackageFolderPath:&error];
                                                             if (error) {
-                                                                failCallback(error);
+                                                                mergeFailCallback(error);
                                                                 return;
                                                             }
-                                                            
+
                                                             if (currentPackageFolderPath == nil) {
                                                                 // Currently running the binary version, copy files from the bundled resources
                                                                 NSString *newUpdateCodePushPath = [newUpdateFolderPath stringByAppendingPathComponent:[CodePushUpdateUtils manifestFolderPrefix]];
@@ -285,23 +419,23 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                                                                            attributes:nil
                                                                                                                 error:&error];
                                                                 if (error) {
-                                                                    failCallback(error);
+                                                                    mergeFailCallback(error);
                                                                     return;
                                                                 }
-                                                                
+
                                                                 [[NSFileManager defaultManager] copyItemAtPath:[CodePush bundleAssetsPath]
                                                                                                         toPath:[newUpdateCodePushPath stringByAppendingPathComponent:[CodePushUpdateUtils assetsFolderName]]
                                                                                                          error:&error];
                                                                 if (error) {
-                                                                    failCallback(error);
+                                                                    mergeFailCallback(error);
                                                                     return;
                                                                 }
-                                                                
+
                                                                 [[NSFileManager defaultManager] copyItemAtPath:[[CodePush binaryBundleURL] path]
                                                                                                         toPath:[newUpdateCodePushPath stringByAppendingPathComponent:[[CodePush binaryBundleURL] lastPathComponent]]
                                                                                                          error:&error];
                                                                 if (error) {
-                                                                    failCallback(error);
+                                                                    mergeFailCallback(error);
                                                                     return;
                                                                 }
                                                             } else {
@@ -309,20 +443,20 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                                                                         toPath:newUpdateFolderPath
                                                                                                          error:&error];
                                                                 if (error) {
-                                                                    failCallback(error);
+                                                                    mergeFailCallback(error);
                                                                     return;
                                                                 }
                                                             }
-                                                            
+
                                                             // Delete files mentioned in the manifest.
                                                             NSString *manifestContent = [NSString stringWithContentsOfFile:diffManifestFilePath
                                                                                                                   encoding:NSUTF8StringEncoding
                                                                                                                      error:&error];
                                                             if (error) {
-                                                                failCallback(error);
+                                                                mergeFailCallback(error);
                                                                 return;
                                                             }
-                                                            
+
                                                             NSData *data = [manifestContent dataUsingEncoding:NSUTF8StringEncoding];
                                                             NSDictionary *manifestJSON = [NSJSONSerialization JSONObjectWithData:data
                                                                                                                          options:kNilOptions
@@ -338,16 +472,16 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                                     [[NSFileManager defaultManager] removeItemAtPath:absoluteDeletedFilePath
                                                                                                                error:&error];
                                                                     if (error) {
-                                                                        failCallback(error);
+                                                                        mergeFailCallback(error);
                                                                         return;
                                                                     }
                                                                 }
                                                             }
-                                                            
+
                                                             [[NSFileManager defaultManager] removeItemAtPath:diffManifestFilePath
                                                                                                        error:&error];
                                                             if (error) {
-                                                                failCallback(error);
+                                                                mergeFailCallback(error);
                                                                 return;
                                                             }
                                                         }
@@ -418,7 +552,7 @@ static NSString *const UnzippedFolderName = @"unzipped";
                                                             // answered with a 200 looks like this too. Moving it into place would
                                                             // install bytes no hash has ever been checked against, so the full archive
                                                             // is downloaded instead.
-                                                            patchFallbackCallback(CodePushBinaryPatchReasonInvalidManifest);
+                                                            patchFallbackCallback(CodePushArchiveFallbackReasonInvalidManifest);
                                                             return;
                                                         }
 

@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 
 /*
- * Why an update that was downloaded as a binary patch has to be downloaded in full
+ * Why an update that was downloaded as one of its archives has to be downloaded in full
  * instead.
  *
  * A failed restore is not an error the user ever hears about: it is the signal to
@@ -11,22 +11,32 @@
  */
 
 /** The bundle inside the app binary could not be opened or read. */
-extern NSString *const CodePushBinaryPatchReasonBaseBundleUnavailable;
+extern NSString *const CodePushArchiveFallbackReasonBaseBundleUnavailable;
 
 /** The bundle inside the app binary is not the one the patch was computed against. */
-extern NSString *const CodePushBinaryPatchReasonBaseHashMismatch;
+extern NSString *const CodePushArchiveFallbackReasonBaseHashMismatch;
 
 /** The manifest is missing, malformed, points outside the archive, or asks for too much. */
-extern NSString *const CodePushBinaryPatchReasonInvalidManifest;
+extern NSString *const CodePushArchiveFallbackReasonInvalidManifest;
 
 /** The patch was produced by a format or a codec this client cannot apply. */
-extern NSString *const CodePushBinaryPatchReasonUnsupportedFormat;
+extern NSString *const CodePushArchiveFallbackReasonUnsupportedFormat;
 
 /** The applier refused the patch, or the restored bundle could not be written. */
-extern NSString *const CodePushBinaryPatchReasonPatchApplyFailed;
+extern NSString *const CodePushArchiveFallbackReasonPatchApplyFailed;
 
 /** The restored bundle is not the one the manifest promised. */
-extern NSString *const CodePushBinaryPatchReasonTargetVerificationFailed;
+extern NSString *const CodePushArchiveFallbackReasonTargetVerificationFailed;
+
+/**
+ * The asset diff could not be merged with the installed update it was built against.
+ *
+ * Reported by the caller too, from the merge that follows the restore: the diff archive
+ * only carries what the installed update does not, so this covers reading the installed
+ * update's files, applying the deletion manifest, and everything else that stitches the
+ * two back together.
+ */
+extern NSString *const CodePushArchiveFallbackReasonAssetMergeFailed;
 
 /**
  * The update restored from the patch did not pass the checks every update passes before
@@ -35,7 +45,7 @@ extern NSString *const CodePushBinaryPatchReasonTargetVerificationFailed;
  * This one is reported by the caller rather than by the applier: by the time it applies,
  * the applier has already handed back a bundle it was happy with.
  */
-extern NSString *const CodePushBinaryPatchReasonPackageVerificationFailed;
+extern NSString *const CodePushArchiveFallbackReasonPackageVerificationFailed;
 
 /**
  * Rebuilds the JS bundle of an update that was downloaded as a binary patch archive.
