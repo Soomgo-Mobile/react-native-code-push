@@ -292,49 +292,12 @@ export default CodePush({
 
 #### 4-1. Telemetry Callbacks
 
-Please refer to the `CodePushOptions` type in [typings/react-native-code-push.d.ts](typings/react-native-code-push.d.ts) for more details.
-- **onUpdateSuccess:** Triggered when the update bundle is executed successfully.
-- **onUpdateRollback:** Triggered when there is an issue executing the update bundle, leading to a rollback.
-- **onDownloadStart:** Triggered when the bundle download begins.
-- **onDownloadSuccess:** Triggered when the bundle download completes successfully.
-- **onSyncError:** Triggered when an unknown error occurs during the update process. (`CodePush.SyncStatus.UNKNOWN_ERROR` status)
-- **onUpdateArchiveResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the update archives went. Unlike the callbacks above, this one can also be passed to a single `sync()` call - see below.
+`CodePushOptions` takes optional callbacks that report what an update did - when it was
+downloaded, whether it ran or was rolled back, and which archive it came from. They are
+purely for observation.
 
-`onUpdateArchiveResult` is called with `{ status: "applied" | "fallback", archive: "binary-patch" | "asset-diff", fallbackReason?: string, totalDurationMs: number, attempts: [...] }`.
-`archive` names the archive of the last attempt - the one the downloaded update came from, or the one given up on last -
-and `attempts` retells every archive that was tried, in order, as `{ archive, fallbackReason?, durationMs, applyDurationMs? }`.
-`totalDurationMs` times the whole patch path, from the first archive starting to download to the last attempt being
-finished with, and an attempt's `applyDurationMs` times the applier rebuilding the bundle from that archive's patch -
-absent when the attempt ended before the bundle was restored.
-A `"fallback"` is not a failed update: the update is downloaded in full instead and installed as usual, so the result
-is there to be observed and nothing more. The library neither stores it nor sends it anywhere - an app that wants it in
-its telemetry sends it itself. A callback that throws never fails the update - the error is only logged to the console.
-A fallback also shows in `downloadProgressCallback`: each following download reports a progress stream of its own that
-counts `receivedBytes` from zero again, against its own `totalBytes`.
-
-Register `onUpdateArchiveResult` on `CodePush({ ... })` like the callbacks above and it covers every sync, whatever the `checkFrequency` is
-and including the `CodePush.sync()` calls you make yourself.
-
-```typescript
-export default CodePush({
-  checkFrequency: CodePush.CheckFrequency.MANUAL, // or something else
-  releaseHistoryFetcher: releaseHistoryFetcher,
-  onUpdateArchiveResult: (label, result) => {
-    // Send it to your own telemetry, if you want it there.
-  },
-})(MyApp);
-```
-
-Pass it to a `sync()` call to override the registered one for that call - to tag the result of one particular sync,
-for instance.
-
-```typescript
-CodePush.sync({
-  onUpdateArchiveResult: (label, result) => {
-    // Send it to your own telemetry, if you want it there.
-  },
-});
-```
+See [Telemetry callbacks](docs/telemetry-callbacks.md) for what each one receives and how to
+register them.
 
 
 #### 4-2. Asset Diff Archives
@@ -345,14 +308,32 @@ that version does not already have, and a manifest of the files it has to drop. 
 copies the update it already has installed, applies those, and ends up holding exactly the
 contents of the full archive.
 
-So one release has a full archive, a patch archive and up to `--diff-base-count` diff
-archives, and a client starts from the smallest one it can use: the diff archive built
-against the update it is running, when the release has one, and the patch archive when it
-is running the bundle in the binary or an update this release was not diffed against. Each
-attempt downloads one archive, and an archive that cannot be applied falls back to the
-next.
+A client tries the archives in this order and stops at the first one it can install:
+
+| Order | Archive | Available when |
+|---|---|---|
+| 1 | Asset diff | the release was diffed against the update the client is running. |
+| 2 | Binary patch | always. It is built against the bundle in the app binary, which every client has. |
+| 3 | Full | always. It needs nothing installed. |
+
+There are two exceptions to this order.
+
+**Not every client tries all three.** One with no asset diff to use - it is running the
+bundle in the app binary, or an update this release was not diffed against - starts at the
+binary patch.
+
+**A failed asset diff does not always reach the binary patch.** It moves on to that archive
+only when the diff failed on its asset side: the merge with the installed update failing
+(`asset_merge_failed`), or the merged contents failing the package hash
+(`package_verification_failed`). Anything else the diff fails on lives in the bundle patch
+both archives carry, so the binary patch would fail there the same way and the client goes
+straight to the full archive.
+
+`onUpdateArchiveResult` reports every archive that was tried - see
+[Telemetry callbacks](docs/telemetry-callbacks.md#what-onupdatearchiveresult-reports).
 
 Diff archives are published only when all three of these hold:
+
 - the release is a binary patch release (`release --binary-bundle-path`),
 - `code-push.config.ts` implements `bundleDownloader`, so the CLI can fetch the earlier releases to diff against,
 - `--diff-base-count` is greater than `0` (it defaults to `3`).
@@ -366,14 +347,7 @@ bundleDownloader: async (archive, platform, identifier = 'staging') => {
 },
 ```
 
-A diff that cannot be applied falls back by where it failed. A failure on its asset
-side - the merge with the installed update failing (`"asset_merge_failed"`), or the merged
-contents failing the package hash (`"package_verification_failed"`) - moves on to the
-patch archive, which carries every asset and depends on nothing installed. A failure in
-the bundle patch both archives carry skips the patch archive for the full download
-instead, so a client is never walked through two downloads that can only fail the same
-way. Either way `onUpdateArchiveResult` reports the whole ladder in its `attempts`. See
-[Asset diff archives](cli/README.md#asset-diff-archives) for what the release publishes.
+See [Asset diff archives](cli/README.md#asset-diff-archives) for what the release publishes.
 
 
 ### 5. Configure the CLI Tool
