@@ -28,8 +28,8 @@ When you require `react-native-code-push`, the module object provides the follow
 
 * [sync](#codepushsync): Allows checking for an update, downloading it and installing it, all with a single call. Unless you need custom UI and/or behavior, we recommend most developers to use this method when integrating CodePush into their apps
 
-* [clearUpdates](#clearupdates): Clear all downloaded CodePush updates. This is useful when switching to a different deployment which may have an older release than the current package. 
-   
+* [clearUpdates](#codepushclearupdates): Clear all downloaded CodePush updates. This is useful when switching to a different deployment which may have an older release than the current package.
+
     _Note: we don’t recommend to use this method in scenarios other than that (CodePush will call this method automatically when needed in other cases) as it could lead to unpredictable behavior._
 
 #### codePush
@@ -528,6 +528,18 @@ This method returns a `Promise` which is resolved to a `SyncStatus` code that in
 * __codePush.SyncStatus.SYNC_IN_PROGRESS__ *(4)* - There is an ongoing `sync` operation running which prevents the current call from being executed.
 
 The `sync` method can be called anywhere you'd like to check for an update. That could be in the `componentWillMount` lifecycle event of your root component, the onPress handler of a `<TouchableHighlight>` component, in the callback of a periodic timer, or whatever else makes sense for your needs. Just like the `checkForUpdate` method, it will perform the network request to check for an update in the background, so it won't impact your UI thread and/or JavaScript thread's responsiveness.
+
+#### codePush.clearUpdates
+
+```javascript
+codePush.clearUpdates(): void;
+```
+
+Clears all of the CodePush updates that have been downloaded to the device, which gives precedence back to the JS bundle inside the app binary the next time the app is restarted.
+
+This is useful when switching to a different deployment which may have an older release than the current package.
+
+*Note: we don’t recommend using this method in scenarios other than that one, as it could lead to unpredictable behavior. CodePush calls it itself when it is needed - for example when the release history says the app has to roll back to the binary.*
 
 #### Package objects
 
