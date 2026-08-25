@@ -377,8 +377,8 @@ export interface SyncOptions {
 
     /**
      * An "options" object used to determine whether a confirmation dialog should be displayed to the end user when an update is available,
-     * and if so, what strings to use. Defaults to null, which has the effect of disabling the dialog completely. Setting this to any truthy
-     * value will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as
+     * and if so, what strings to use. Defaults to null, which has the effect of disabling the dialog completely. Setting this to `true`
+     * will enable the dialog with the default strings, and passing an object to this parameter allows enabling the dialog as well as
      * overriding one or more of the default strings.
      */
     updateDialog?: UpdateDialog | true;
@@ -386,9 +386,9 @@ export interface SyncOptions {
     /**
      * The rollback retry mechanism allows the application to attempt to reinstall an update that was previously rolled back (with the restrictions
      * specified in the options). It is an "options" object used to determine whether a rollback retry should occur, and if so, what settings to use
-     * for the rollback retry. This defaults to null, which has the effect of disabling the retry mechanism. Setting this to any truthy value will enable
-     * the retry mechanism with the default settings, and passing an object to this parameter allows enabling the rollback retry as well as overriding
-     * one or more of the default values.
+     * for the rollback retry. This defaults to null, which has the effect of disabling the retry mechanism. Passing an object to this parameter enables
+     * the rollback retry: an empty object retries with the default settings, and each value the object specifies overrides the default for that
+     * setting.
      */
     rollbackRetryOptions?: RollbackRetryOptions;
 
@@ -664,13 +664,13 @@ declare namespace CodePush {
         RUNNING,
 
         /**
-         * Indicates than an update has been installed, but the
+         * Indicates that an update has been installed, but the
          * app hasn't been restarted yet in order to apply it.
          */
         PENDING,
 
         /**
-         * Indicates than an update represents the latest available
+         * Indicates that an update represents the latest available
          * release, and can be either currently running or pending.
          */
         LATEST
@@ -706,7 +706,7 @@ declare namespace CodePush {
         ON_APP_RESUME,
 
         /**
-         * Don't automatically check for updates, but only do it when codePush.sync() is manully called inside app code.
+         * Don't automatically check for updates, but only do it when codePush.sync() is manually called inside app code.
          */
         MANUAL
     }
