@@ -1,5 +1,7 @@
 # Telemetry Callbacks
 
+[한국어](telemetry-callbacks.ko.md)
+
 `CodePushOptions` takes optional callbacks that report what an update did. They exist to be
 observed and nothing more: the library neither stores what they report nor sends it
 anywhere, so an app that wants any of it in its telemetry sends it itself. Registering none
