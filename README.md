@@ -292,7 +292,7 @@ export default CodePush({
 
 #### 4-1. Telemetry Callbacks
 
-Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-native-code-push/blob/f0d26f7614af41c6dd4daecd9f7146e2383b2b0d/typings/react-native-code-push.d.ts#L76-L95) type for more details.
+Please refer to the `CodePushOptions` type in [typings/react-native-code-push.d.ts](typings/react-native-code-push.d.ts) for more details.
 - **onUpdateSuccess:** Triggered when the update bundle is executed successfully.
 - **onUpdateRollback:** Triggered when there is an issue executing the update bundle, leading to a rollback.
 - **onDownloadStart:** Triggered when the bundle download begins.
@@ -301,7 +301,7 @@ Please refer to the [CodePushOptions](https://github.com/Soomgo-Mobile/react-nat
 - **onUpdateArchiveResult:** Triggered when an update that was published with a binary patch has been downloaded, with the release label and how the update archives went. Unlike the callbacks above, this one can also be passed to a single `sync()` call - see below.
 
 `onUpdateArchiveResult` is called with `{ status: "applied" | "fallback", archive: "binary-patch" | "asset-diff", fallbackReason?: string, totalDurationMs: number, attempts: [...] }`.
-`archive` names the archive of the last attempt - the one the update was installed from, or the one given up on last -
+`archive` names the archive of the last attempt - the one the downloaded update came from, or the one given up on last -
 and `attempts` retells every archive that was tried, in order, as `{ archive, fallbackReason?, durationMs, applyDurationMs? }`.
 `totalDurationMs` times the whole patch path, from the first archive starting to download to the last attempt being
 finished with, and an attempt's `applyDurationMs` times the applier rebuilding the bundle from that archive's patch -
@@ -349,7 +349,7 @@ So one release has a full archive, a patch archive and up to `--diff-base-count`
 archives, and a client starts from the smallest one it can use: the diff archive built
 against the update it is running, when the release has one, and the patch archive when it
 is running the bundle in the binary or an update this release was not diffed against. Each
-attempt downloads one archive, and an archive that cannot be installed falls back to the
+attempt downloads one archive, and an archive that cannot be applied falls back to the
 next.
 
 Diff archives are published only when all three of these hold:
@@ -366,7 +366,7 @@ bundleDownloader: async (archive, platform, identifier = 'staging') => {
 },
 ```
 
-A diff that cannot be installed falls back by where it failed. A failure on its asset
+A diff that cannot be applied falls back by where it failed. A failure on its asset
 side - the merge with the installed update failing (`"asset_merge_failed"`), or the merged
 contents failing the package hash (`"package_verification_failed"`) - moves on to the
 patch archive, which carries every asset and depends on nothing installed. A failure in
