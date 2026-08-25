@@ -170,7 +170,7 @@ anything is uploaded and leaves the release history untouched.
 #### Verifying the base bundle
 
 The bundle `--binary-bundle-path` points at is the one input a release cannot verify on
-its own, so the [build hooks](../README.md#6-export-the-embedded-bundle-optional) leave a
+its own, so the [build hooks](../docs/diff-updates.md#exporting-the-embedded-bundle) leave a
 `binary-patch-base.json` record next to every bundle they export. When that record is
 there, the release fails before anything is built or uploaded if the base bundle no longer
 hashes to what the record describes, or if it was exported from a binary version other

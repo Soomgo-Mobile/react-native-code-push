@@ -52,7 +52,7 @@ CodePush.sync({
 
 ## `onUpdateArchiveResult`가 보고하는 내용
 
-binary patch로 배포한 릴리스는 full 아카이브 대신 다운로드할 수 있는 patch 아카이브를 제공합니다. 아카이브의 종류와 릴리스에 포함되는 조건은 [Asset Diff Archives](../README.md#4-2-asset-diff-archives)를 참고하세요. 이 콜백은 업데이트를 어떤 아카이브에서 다운로드했는지와, 업데이트에 쓰이지 못한 나머지 아카이브에 어떤 일이 있었는지를 보고합니다.
+binary patch로 배포한 릴리스는 full 아카이브 대신 다운로드할 수 있는 patch 아카이브를 제공합니다. 아카이브의 종류와 릴리스에 포함되는 조건은 [Asset diff archives](diff-updates.md#asset-diff-archives)를 참고하세요. 이 콜백은 업데이트를 어떤 아카이브에서 다운로드했는지와, 업데이트에 쓰이지 못한 나머지 아카이브에 어떤 일이 있었는지를 보고합니다.
 
 ### `UpdateArchiveResult`
 

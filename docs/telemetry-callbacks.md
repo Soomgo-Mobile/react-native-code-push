@@ -65,7 +65,7 @@ CodePush.sync({
 
 A release published with a binary patch offers the client patch archives to download in
 place of the full one. See
-[Asset Diff Archives](../README.md#4-2-asset-diff-archives) for what those are and when a
+[Asset diff archives](diff-updates.md#asset-diff-archives) for what those are and when a
 release carries them. This callback reports which of them the download came from, and what
 happened to the ones it did not.
 
