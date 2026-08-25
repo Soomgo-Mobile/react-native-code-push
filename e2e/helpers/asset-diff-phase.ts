@@ -4,10 +4,13 @@
  *
  * A release published with asset diffs offers up to three archives of the same update. A
  * client whose installed update is a base the release was diffed against downloads the
- * diff archive alone; a client the diff cannot serve keeps the patch archive; and a diff
- * that does not merge back into the released package falls back to the full archive.
+ * diff archive alone, and a client the diff cannot serve keeps the patch archive. A diff
+ * that fails is fallen back from by where it failed: a failure on its asset side - the
+ * one part the patch archive does not share - moves on to the patch archive, and a
+ * failure in the bundle patch both archives carry skips the patch for the full one.
  * All of them end up running identical contents, so - as with the binary patch phase -
- * what tells the cases apart is which archives the app asked the mock server for.
+ * what tells the cases apart is which archives the app asked the mock server for,
+ * together with the result the app's own callback reported.
  */
 
 import path from "path";
@@ -19,11 +22,13 @@ import {
 } from "./asset-diff-fixtures";
 import {
   assertReleaseOffersPatch,
+  breakRestoredBundleExpectation,
   extractBinaryBundle,
   findAssetDiffArchive,
 } from "./binary-patch-fixtures";
 import {
   assertDownloadedArchives,
+  assertReportedArchiveResult,
   startRecordingDownloads,
   type DownloadedArchive,
 } from "./download-order";
@@ -65,6 +70,8 @@ interface AssetDiffScenario {
   breakDiff?: () => void;
   /** The archives the app is expected to download installing the update. */
   expectedDownloads: DownloadedArchive[];
+  /** The result the app's callback is expected to report, as one `status:archive:attempts` line. */
+  expectedArchiveResult: string;
 }
 
 export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise<void> {
@@ -106,7 +113,8 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
       await releaseWithAssets(scenario.baseVersion, true);
       startRecordingDownloads();
       await context.runMaestro(installUpdateFlow, { RELEASE_LABEL: scenario.baseVersion });
-      assertDownloadedArchives(`${scenario.name} — base install`, ["patch"]);
+      assertDownloadedArchives(`${scenario.name} — base install`, ["binary-patch"]);
+      await assertReportedArchiveResult(`${scenario.name} — base install`, "applied:binary-patch:binary-patch=applied");
 
       console.log(`\n=== [prepare-bundle: asset diff ${scenario.updateVersion} (${scenario.name})] ===`);
       await releaseWithAssets(scenario.updateVersion, false);
@@ -135,13 +143,15 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
         BASE_RELEASE_LABEL: scenario.baseVersion,
       });
       assertDownloadedArchives(scenario.name, scenario.expectedDownloads);
+      await assertReportedArchiveResult(scenario.name, scenario.expectedArchiveResult);
     });
 
   await runDiffScenario({
     name: "asset diff installs on top of the base it was built against",
     baseVersion: "1.4.1",
     updateVersion: "1.4.2",
-    expectedDownloads: ["diff"],
+    expectedDownloads: ["asset-diff"],
+    expectedArchiveResult: "applied:asset-diff:asset-diff=applied",
   });
 
   // The release the last scenario published still stands, diffPackages entry and all,
@@ -152,14 +162,32 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
   await context.withRetry(`run-maestro: asset diff (${binaryClientScenario})`, async () => {
     startRecordingDownloads();
     await context.runMaestro(installUpdateFlow, { RELEASE_LABEL: "1.4.2" });
-    assertDownloadedArchives(binaryClientScenario, ["patch"]);
+    assertDownloadedArchives(binaryClientScenario, ["binary-patch"]);
+    await assertReportedArchiveResult(binaryClientScenario, "applied:binary-patch:binary-patch=applied");
   });
 
+  // The merge completes over the corrupted asset, and what catches it is the package
+  // hash the merged contents fail to reproduce - a failure on the asset side of the
+  // diff, which the patch archive does not share, so the patch is the next rung.
   await runDiffScenario({
-    name: "diff that does not merge back into the released package falls back to the full update",
+    name: "diff that does not merge back into the released package falls back to the patch archive",
     baseVersion: "1.4.3",
     updateVersion: "1.4.4",
     breakDiff: () => corruptDiffArchiveAsset(findAssetDiffArchive(platform, releaseIdentifier)),
-    expectedDownloads: ["diff", "full"],
+    expectedDownloads: ["asset-diff", "binary-patch"],
+    expectedArchiveResult: "applied:binary-patch:asset-diff=package_verification_failed:binary-patch=applied",
+  });
+
+  // A diff whose bundle patch restores a bundle its manifest does not promise failed in
+  // the one part the patch archive carries byte for byte, so the patch is passed over
+  // for the full archive: retrying it could only fail the same way, and a client must
+  // never be walked through two doomed downloads on its way to the full one.
+  await runDiffScenario({
+    name: "diff that fails in the bundle patch both archives carry skips the patch archive",
+    baseVersion: "1.4.5",
+    updateVersion: "1.4.6",
+    breakDiff: () => breakRestoredBundleExpectation(findAssetDiffArchive(platform, releaseIdentifier)),
+    expectedDownloads: ["asset-diff", "full"],
+    expectedArchiveResult: "fallback:asset-diff:asset-diff=target_verification_failed",
   });
 }

@@ -92,7 +92,7 @@ The test runner (`e2e/run.ts`) executes these phases in order:
    - `1.3.7` — One pre-built bundle (`bundle` once, `release --skip-bundle` twice, with the base bundle passed to only one of the two) installs as a patch from the history that carries a patch URL, and in full from the history that does not.
    - `1.3.8` — `02-ui-responsive-during-install`: the app answers taps while the patch is being downloaded and applied. Runs unless `--exclude-timing-sensitive` is passed.
 
-A patch install and a fallback to the full archive install the same contents, so they look identical on screen. What tells them apart is which archives the app asked the mock server for, which every scenario asserts: `[patch]` for a patch install, `[patch, full]` for a fallback, `[full]` for a release published without a patch.
+A patch install and a fallback to the full archive install the same contents, so they look identical on screen. What tells them apart is which archives the app asked the mock server for, which every scenario asserts: `[binary-patch]` for a patch install, `[binary-patch, full]` for a fallback, `[full]` for a release published without a patch.
 
 ### Phase 7 — Asset Diff Updates (`flows-asset-diff/`)
 
@@ -100,9 +100,10 @@ A patch install and a fallback to the full archive install the same contents, so
 17. **Publish the update and its asset diff** — The next release joins the same history. The local config provides `bundleDownloader`, so the release downloads the base's full archive and publishes an asset diff archive alongside the full and patch archives, recording it in the history as `diffPackages`. Before anything is installed, the runner asserts the diff at the artifact level: the shared asset stayed out, the new asset travels in it, and the deletion manifest (`hotcodepush.json`) names the asset the update dropped.
    - `1.4.1 → 1.4.2` — A client running the base installs the update with `01-update-from-installed`, downloading the diff archive alone. The merged contents have to reproduce the released package hash, which is what proves the deletion and the overlay actually happened on the device.
    - `1.4.2` from the binary — With the diff release still standing, a client starting over from the binary holds no installed update, so it installs through the patch archive as if the diff had never been published.
-   - `1.4.3 → 1.4.4` — A diff whose shipped asset is corrupted downloads and merges, fails the package verification, and falls back to the full archive.
+   - `1.4.3 → 1.4.4` — A diff whose shipped asset is corrupted downloads and merges, fails the package verification, and falls back to the patch archive: an asset-side failure, which the patch archive - carrying every asset - is not implicated in.
+   - `1.4.5 → 1.4.6` — A diff whose bundle patch restores a bundle its manifest does not promise failed in the part both archives carry byte for byte, so the patch archive is skipped and the full archive is downloaded.
 
-A diff install and its fallback also install the same contents, so every scenario again asserts the downloaded archives: `[diff]` for a diff install, `[patch]` for a client the diff cannot serve, `[diff, full]` for a fallback.
+A diff install and its fallbacks all install the same contents, so every scenario again asserts the downloaded archives: `[asset-diff]` for a diff install, `[binary-patch]` for a client the diff cannot serve, `[asset-diff, binary-patch]` for an asset-side fallback and `[asset-diff, full]` for a bundle-side one. Every scenario also asserts the result the app's `onUpdateArchiveResult` callback was told, down to the archives and fallback reasons of each attempt: the prepared config injects a probe that reports the result to the mock server as a request of its own, so the restart that follows an install cannot take it away.
 
 ## Architecture
 
@@ -116,7 +117,7 @@ e2e/
 ├── templates/
 │   └── code-push.config.local.ts  # Filesystem-based CodePush config
 ├── helpers/
-│   ├── prepare-config.ts   # Patches App.tsx (host + temporary E2E buttons), copies config
+│   ├── prepare-config.ts   # Patches App.tsx (host, E2E buttons, patch result probe), copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
 │   ├── build-app.ts        # Builds iOS/Android in Release mode
 │   ├── artifact-storage.ts # Asserts where the CLI stored bundles and release histories
@@ -144,7 +145,7 @@ Instead of a real CodePush server, tests use a local Express server that serves:
 
 The `code-push.config.local.ts` template routes all CLI operations (upload, history read/write) to this local filesystem, and the app's `CODEPUSH_HOST` is patched to point at the mock server. It uses the uploader's artifact metadata for the storage key, so its layout does not depend on archive filenames.
 
-The server records every request it answers. Reading that log back is how the runner tells apart cases the screen cannot: which update archives the app downloaded, and in which order.
+The server records every request it answers. Reading that log back is how the runner tells apart cases the screen cannot: which update archives the app downloaded, in which order, and what the app's own `onUpdateArchiveResult` callback was told - the injected probe reports that result as a request of its own.
 
 When the config template is given `E2E_ARTIFACT_LOG_PATH`, it also records every artifact it stores (outside the served directory), which the runner reads back to assert that bundles and release histories keep landing under their metadata-based paths.
 

@@ -8,7 +8,7 @@ import { prepareBundle, runCodePushCommand, setReleasingBundle, setReleaseMarker
 import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
 import { assertArtifactStorageLayout, clearArtifactLog } from "./helpers/artifact-storage";
-import { assertNoPatchDownloads, startRecordingDownloads } from "./helpers/download-order";
+import { assertFullArchivesOnly, startRecordingDownloads } from "./helpers/download-order";
 import { assertReleaseOffersNoPatch } from "./helpers/binary-patch-fixtures";
 import { runBinaryPatchPhase } from "./helpers/binary-patch-phase";
 import { runAssetDiffPhase } from "./helpers/asset-diff-phase";
@@ -146,7 +146,7 @@ async function main() {
     await withRetry("run-maestro: phase 1", options.retryCount, retryDelayMs, async () => {
       startRecordingDownloads();
       await runMaestro(flowsDir, options.platform, appId);
-      assertNoPatchDownloads(fullOnlyRelease);
+      assertFullArchivesOnly(fullOnlyRelease);
     });
 
     // 6. Disable release for rollback test

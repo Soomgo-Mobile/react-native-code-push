@@ -114,7 +114,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "patch update installs on top of the app binary",
       releaseVersion: "1.3.1",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch"],
+      expectedDownloads: ["binary-patch"],
       prepare: async () => {
         await releasePatchUpdate("1.3.1");
         // The bundle this release ships is a real bundle of this app that is not the one
@@ -126,7 +126,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "patch update carrying assets installs",
       releaseVersion: "1.3.2",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch"],
+      expectedDownloads: ["binary-patch"],
       prepare: async () => {
         await releasePatchUpdate("1.3.2", { assetMarkers: [{ label: "1.3.2" }] });
         assertPatchArchiveCarriesAssets(
@@ -139,14 +139,14 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "patch against a stale base bundle falls back to the full update",
       releaseVersion: "1.3.3",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch", "full"],
+      expectedDownloads: ["binary-patch", "full"],
       prepare: () => releasePatchUpdate("1.3.3", { binaryBundlePath: staleBaseBundlePath }),
     },
     {
       name: "corrupt patch body falls back to the full update",
       releaseVersion: "1.3.4",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch", "full"],
+      expectedDownloads: ["binary-patch", "full"],
       prepare: async () => {
         await releasePatchUpdate("1.3.4");
         corruptPatchBody(findPatchArchive(platform, releaseIdentifier));
@@ -156,7 +156,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "restored bundle that the manifest does not describe falls back to the full update",
       releaseVersion: "1.3.9",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch", "full"],
+      expectedDownloads: ["binary-patch", "full"],
       prepare: async () => {
         await releasePatchUpdate("1.3.9");
         breakRestoredBundleExpectation(findPatchArchive(platform, releaseIdentifier));
@@ -166,7 +166,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "corrupt patch header falls back to the full update",
       releaseVersion: "1.3.5",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch", "full"],
+      expectedDownloads: ["binary-patch", "full"],
       prepare: async () => {
         await releasePatchUpdate("1.3.5");
         corruptPatchHeader(findPatchArchive(platform, releaseIdentifier));
@@ -176,7 +176,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "patch archive of the other platform falls back to the full update",
       releaseVersion: "1.3.6",
       flowPath: installUpdateFlow,
-      expectedDownloads: ["patch", "full"],
+      expectedDownloads: ["binary-patch", "full"],
       prepare: async () => {
         await releasePatchUpdate("1.3.6");
         retargetPatchArchiveToOtherPlatform(
@@ -190,7 +190,7 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
       name: "app stays responsive while a patch update installs",
       releaseVersion: "1.3.8",
       flowPath: uiResponsiveFlow,
-      expectedDownloads: ["patch"],
+      expectedDownloads: ["binary-patch"],
       timingSensitive: true,
       prepare: () => releasePatchUpdate("1.3.8", { mandatory: false }),
     },
@@ -295,7 +295,7 @@ async function runPublishedTwiceScenario(
   assertReleaseOffersNoPatch(scenario, platform, fullOnlyIdentifier, BINARY_VERSION, releaseVersion);
   assertSameReleasedPackage(scenario, platform, releaseIdentifier, fullOnlyIdentifier, releaseVersion);
 
-  await installUpdate(`${scenario} — history with a patch URL`, installUpdateFlow, releaseVersion, ["patch"]);
+  await installUpdate(`${scenario} — history with a patch URL`, installUpdateFlow, releaseVersion, ["binary-patch"]);
 
   serveReleaseHistoryOf(platform, fullOnlyIdentifier, releaseIdentifier, BINARY_VERSION);
   await installUpdate(`${scenario} — history without a patch URL`, installUpdateFlow, releaseVersion, ["full"]);
