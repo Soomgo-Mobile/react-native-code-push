@@ -347,6 +347,54 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void givesUpTheDownloadWhenTheNetworkCannotCarryTheAssetDiff() throws IOException {
+        // A refused connection is the network failing rather than a verdict on the archive,
+        // and the archives behind it are behind the same network - the full one only larger
+        // and started over from nothing.
+        String unreachableDiffUrl = "http://127.0.0.1:" + portNothingListensOn() + "/diff.zip";
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContents()));
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+
+        try {
+            updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                    updatePackageWithAssetDiff(mPackageHash, fullUrl, patchUrl, unreachableDiffUrl),
+                    BUNDLE_FILE_NAME, ignoreProgress());
+            fail("a network that carried nothing must not be reported as an installed update");
+        } catch (IOException e) {
+            assertEquals(CodePushErrorCode.NETWORK, CodePushErrorCode.of(e));
+        }
+
+        assertTrue("no archive behind the same network is asked for", mServer.requestedPaths().isEmpty());
+        assertFalse("nothing that never arrived reaches the package folder", mPackageFolder.exists());
+    }
+
+    @Test
+    public void stillFallsBackWhenTheServerRefusesTheAssetDiffWithAnErrorStatus() throws IOException {
+        // A server that answered is not a network that failed: the connection worked, so the
+        // archives behind it are worth asking for.
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = mServer.urlOf("/missing-diff.zip");
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/missing-diff.zip", "/full.zip"), mServer.requestedPaths());
+        assertInstalledContents(updateHash, updateContents);
+        assertFallbackResult(patchResult, null);
+    }
+
+    /** A loopback port that is opened only to be closed, so connecting to it is refused. */
+    private static int portNothingListensOn() throws IOException {
+        ServerSocket socket = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"));
+        int port = socket.getLocalPort();
+        socket.close();
+        return port;
+    }
+
+    @Test
     public void installsFromThePatchArchiveWhenTheAssetDiffUrlIsAnEmptyString() throws IOException {
         // An empty slot is not an archive on offer. Attempting it would fail for want of a
         // URL and leave no verdict behind, which is what skips the patch archive - so the

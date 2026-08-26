@@ -218,8 +218,9 @@ public class CodePushUpdateManager {
     /**
      * Installs the update from one of its patch archives.
      *
-     * Every way this can fail ends the same way, with the caller moving on to the next
-     * archive, so none of it is reported to the caller as an error. The ladder cannot loop:
+     * Every verdict on the archive ends the same way, with the caller moving on to the next
+     * one, so none of it is reported to the caller as an error. A network that did not carry
+     * the archive is not a verdict on it and is raised instead. The ladder cannot loop:
      * which archive comes next is the caller's decision alone, and the full archive at its
      * end is downloaded by a call that is not allowed to take the patch path, so it has no
      * failure of its own to fall back from.
@@ -228,10 +229,13 @@ public class CodePushUpdateManager {
      *                     whoever asked for the download
      * @return true when the update was installed, false when the caller has to move on to
      *         the next archive
+     * @throws IOException when the network did not carry the archive, which is not a verdict
+     *                     on the archive and so is not a reason to try another one
      */
     private boolean tryDownloadArchivePackage(JSONObject updatePackage, String expectedBundleFileName,
                                               DownloadProgressCallback progressCallback,
-                                              String archiveDownloadUrl, ArchiveAttemptLog patchAttempt) {
+                                              String archiveDownloadUrl, ArchiveAttemptLog patchAttempt)
+            throws IOException {
         try {
             ArchiveRestoreResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
                     progressCallback, archiveDownloadUrl, true, patchAttempt);
@@ -243,6 +247,22 @@ public class CodePushUpdateManager {
             CodePushUtils.log("The " + patchAttempt.currentArchive() + " archive failed ("
                     + patchResult.getFailureReason() + "). Falling back.");
         } catch (Exception | OutOfMemoryError e) {
+            if (CodePushErrorCode.isNetworkFailure(e)) {
+                // The network is what failed, not the archive, and the full archive is behind
+                // the same network - only larger, and started over from nothing. Falling back
+                // here would spend a second download to reach the failure already in hand.
+                CodePushUtils.log("The " + patchAttempt.currentArchive()
+                        + " archive could not be downloaded. Giving up on the download.");
+                if (e instanceof IOException) {
+                    throw (IOException) e;
+                }
+
+                // A network failure read out of a wrapper this package raised, which the
+                // caller catches by its own type rather than by `IOException`.
+                throw new CodePushUnknownException(
+                        "The " + patchAttempt.currentArchive() + " archive could not be downloaded.", e);
+            }
+
             // Applying a patch is the one path that holds a whole bundle in memory, so
             // running out of it is a failure this has to absorb like any other: by the time
             // it lands here the arrays are unreachable, and the full archive is downloaded

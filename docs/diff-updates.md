@@ -118,7 +118,7 @@ A client tries the archives in this order and stops at the first one it can inst
 | 2 | Binary patch | always. It is built against the bundle in the app binary, which every client has. |
 | 3 | Full | always. It needs nothing installed. |
 
-There are two exceptions to this order.
+There are three exceptions to this order.
 
 **Not every client tries all three.** One with no asset diff to use - it is running the
 bundle in the app binary, or an update this release was not diffed against - starts at the
@@ -130,6 +130,11 @@ only when the diff failed on its asset side: the merge with the installed update
 (`package_verification_failed`). Anything else the diff fails on lives in the bundle patch
 both archives carry, so the binary patch would fail there the same way and the client goes
 straight to the full archive.
+
+**A failed connection stops the download.** The next archive is behind the same network,
+and the full one is the largest of the three, so trying it would only fail again more
+slowly. The client reports the connection error instead. A server that answered is
+different: a 404 on one archive is no reason to skip the next.
 
 `onUpdateArchiveResult` reports every archive that was tried - see
 [Telemetry callbacks](telemetry-callbacks.md#what-onupdatearchiveresult-reports).

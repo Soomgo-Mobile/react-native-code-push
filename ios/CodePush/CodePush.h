@@ -158,6 +158,7 @@ failCallback:(void (^)(NSError *err))failCallback;
 
 + (NSError *)errorWithMessage:(NSString *)errorMessage;
 + (BOOL)isCodePushError:(NSError *)error;
++ (BOOL)isNetworkFailure:(NSError *)error;
 
 @end
 
