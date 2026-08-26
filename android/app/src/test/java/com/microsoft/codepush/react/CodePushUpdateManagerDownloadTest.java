@@ -2,6 +2,7 @@ package com.microsoft.codepush.react;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -136,6 +137,24 @@ public class CodePushUpdateManagerDownloadTest {
         assertFalse(result.succeeded());
         assertEquals(ArchiveRestoreResult.REASON_INVALID_MANIFEST, result.getFailureReason());
         assertFalse("bytes that are not an update must not reach the package folder", mPackageFolder.exists());
+    }
+
+    @Test
+    public void failsTheDownloadWhenTheServerAnswersTheArchiveWithAnErrorStatus() throws IOException {
+        // Nothing is served at this path, so the server answers it with a 404.
+        String fullUrl = mServer.urlOf("/missing-full.zip");
+
+        try {
+            updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                    fullUpdatePackage(mPackageHash, fullUrl), BUNDLE_FILE_NAME, ignoreProgress());
+            fail("a download the server refused must not be reported as installed");
+        } catch (CodePushHttpException e) {
+            assertEquals(404, e.getStatusCode());
+            assertTrue("the message names the status the server answered with",
+                    e.getMessage().contains("404"));
+        }
+
+        assertFalse("nothing the server refused reaches the package folder", mPackageFolder.exists());
     }
 
     @Test

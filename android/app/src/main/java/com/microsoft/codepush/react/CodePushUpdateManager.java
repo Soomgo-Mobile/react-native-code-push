@@ -309,6 +309,15 @@ public class CodePushUpdateManager {
             }
 
             connection.setRequestProperty("Accept-Encoding", "identity");
+
+            // Read before the body is: an error status carries a body of its own, and
+            // asking `getInputStream()` for it first turns some statuses into a stream and
+            // others into an exception that says nothing about which status it was.
+            int responseCode = connection.getResponseCode();
+            if (responseCode >= 400) {
+                throw new CodePushHttpException(downloadUrlString, responseCode);
+            }
+
             bin = new BufferedInputStream(connection.getInputStream());
 
             // Announced only once the response is flowing, so a connection that fails to
@@ -511,6 +520,12 @@ public class CodePushUpdateManager {
             connection = (HttpURLConnection) (downloadUrl.openConnection());
             connection.setConnectTimeout(CodePushConstants.DOWNLOAD_CONNECT_TIMEOUT_IN_MS);
             connection.setReadTimeout(CodePushConstants.DOWNLOAD_READ_TIMEOUT_IN_MS);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode >= 400) {
+                throw new CodePushHttpException(remoteBundleUrl, responseCode);
+            }
+
             bin = new BufferedInputStream(connection.getInputStream());
             File downloadFile = new File(getCurrentPackageBundlePath(bundleFileName));
             downloadFile.delete();
