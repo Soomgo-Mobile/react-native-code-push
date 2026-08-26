@@ -158,6 +158,18 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void installsAnUpdateTheServerSentWithoutDeclaringItsLength() throws IOException {
+        // `getContentLength()` answers -1 for a body sent with no `Content-Length`, which no
+        // read total matches - so a download checked against it anyway could never arrive.
+        String fullUrl = mServer.serveWithoutContentLength("/full.zip", zipOf(fullArchiveContents()));
+
+        updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                fullUpdatePackage(mPackageHash, fullUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertInstalledContents();
+    }
+
+    @Test
     public void fallsBackToTheFullArchiveWhenApplyingThePatchRunsOutOfMemory() throws IOException {
         String patchUrl = serve("/patch.zip", zipOf(patchArchiveContents()));
         String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
@@ -700,7 +712,10 @@ public class CodePushUpdateManagerDownloadTest {
     private static class TestArchiveServer {
 
         private final ServerSocket mSocket;
+        private static final long NO_CONTENT_LENGTH = -1;
+
         private final Map<String, byte[]> mBodies = new HashMap<>();
+        private final Map<String, Long> mDeclaredLengths = new HashMap<>();
         private final List<String> mRequestedPaths = Collections.synchronizedList(new ArrayList<String>());
 
         TestArchiveServer() throws IOException {
@@ -718,6 +733,18 @@ public class CodePushUpdateManagerDownloadTest {
         synchronized String serve(String path, byte[] body) {
             mBodies.put(path, body);
             return urlOf(path);
+        }
+
+        /** Serves a body under a `Content-Length` of the server's choosing rather than its own. */
+        synchronized String serveClaimingLength(String path, byte[] body, long declaredLength) {
+            mBodies.put(path, body);
+            mDeclaredLengths.put(path, declaredLength);
+            return urlOf(path);
+        }
+
+        /** Serves a body with no `Content-Length` at all, which the client reads until it closes. */
+        synchronized String serveWithoutContentLength(String path, byte[] body) {
+            return serveClaimingLength(path, body, NO_CONTENT_LENGTH);
         }
 
         /** The URL of a path this server answers - with a 404, when nothing is served there. */
@@ -771,8 +798,17 @@ public class CodePushUpdateManagerDownloadTest {
             if (body == null) {
                 response.write(bytes("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
             } else {
-                response.write(bytes("HTTP/1.1 200 OK\r\nContent-Length: " + body.length
-                        + "\r\nConnection: close\r\n\r\n"));
+                Long declaredLength = declaredLengthFor(path);
+                if (declaredLength == null) {
+                    response.write(bytes("HTTP/1.1 200 OK\r\nContent-Length: " + body.length
+                            + "\r\nConnection: close\r\n\r\n"));
+                } else if (declaredLength == NO_CONTENT_LENGTH) {
+                    response.write(bytes("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n"));
+                } else {
+                    response.write(bytes("HTTP/1.1 200 OK\r\nContent-Length: " + declaredLength
+                            + "\r\nConnection: close\r\n\r\n"));
+                }
+
                 response.write(body);
             }
             response.flush();
@@ -786,6 +822,10 @@ public class CodePushUpdateManagerDownloadTest {
 
         private synchronized byte[] bodyFor(String path) {
             return mBodies.get(path);
+        }
+
+        private synchronized Long declaredLengthFor(String path) {
+            return mDeclaredLengths.get(path);
         }
     }
 

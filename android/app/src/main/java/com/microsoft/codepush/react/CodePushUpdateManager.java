@@ -378,7 +378,10 @@ public class CodePushUpdateManager {
                 progressCallback.call(new DownloadProgress(totalBytes, receivedBytes));
             }
 
-            if (totalBytes != receivedBytes) {
+            // Only against a length the server declared. `getContentLength()` answers -1
+            // for a body sent without one, which no read total matches - so comparing anyway
+            // would fail every download a server chooses to send that way.
+            if (totalBytes >= 0 && totalBytes != receivedBytes) {
                 throw new CodePushUnknownException("Received " + receivedBytes + " bytes, expected " + totalBytes);
             }
 
