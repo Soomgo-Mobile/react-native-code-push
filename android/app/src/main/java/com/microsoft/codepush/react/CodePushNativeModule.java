@@ -402,10 +402,10 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                 } catch (CodePushInvalidUpdateException e) {
                     CodePushUtils.log(e);
                     mSettingsManager.saveFailedUpdate(CodePushUtils.convertReadableToJsonObject(updatePackage));
-                    promise.reject(e);
+                    promise.reject(CodePushErrorCode.of(e), e.getMessage(), e);
                 } catch (IOException | CodePushUnknownException e) {
                     CodePushUtils.log(e);
-                    promise.reject(e);
+                    promise.reject(CodePushErrorCode.of(e), e.getMessage(), e);
                 }
             }
         });
