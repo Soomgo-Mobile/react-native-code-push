@@ -11,7 +11,7 @@
 | 콜백 | 호출 시점 | 전달값 |
 |---|---|---|
 | `onDownloadStart` | 사용 가능한 업데이트의 다운로드가 시작될 때 | `(label)` |
-| `onDownloadSuccess` | 해당 다운로드가 완료될 때. 설치는 이후에 이뤄지므로, 업데이트를 설치할 수 있다는 뜻은 아닙니다. | `(label)` |
+| `onDownloadSuccess` | 사용 가능한 업데이트의 다운로드가 완료될 때. 설치는 이후에 이뤄지므로, 업데이트를 설치할 수 있다는 뜻은 아닙니다. | `(label)` |
 | `onUpdateArchiveResult` | binary patch로 배포된 업데이트가 다운로드된 뒤, 설치되기 전 | `(label, result)` |
 | `onUpdateSuccess` | 성공 상태를 확정하는 [`notifyAppReady`](api-js.md#codepushnotifyappready) 호출을 기준으로, 설치된 업데이트가 정상 실행됐을 때 | `(label)` |
 | `onUpdateRollback` | 설치된 업데이트가 실행에 실패해 이전 버전으로 롤백될 때 | `(label)` |
@@ -52,7 +52,7 @@ CodePush.sync({
 
 ## `onUpdateArchiveResult`가 보고하는 내용
 
-binary patch로 배포한 릴리스는 full 아카이브 대신 다운로드할 수 있는 patch 아카이브를 제공합니다. 아카이브의 종류와 릴리스에 포함되는 조건은 [Asset Diff Archives](../README.md#4-2-asset-diff-archives)를 참고하세요. 이 콜백은 업데이트를 어떤 아카이브에서 다운로드했는지와, 업데이트에 쓰이지 못한 나머지 아카이브에 어떤 일이 있었는지를 보고합니다.
+binary patch로 배포한 릴리스는 full 아카이브 대신 다운로드할 수 있는 patch 아카이브를 제공합니다. 아카이브의 종류와 릴리스에 포함되는 조건은 [asset diff 아카이브](diff-updates.ko.md#asset-diff-아카이브)를 참고하세요. 이 콜백은 업데이트를 어떤 아카이브에서 다운로드했는지와, 업데이트에 쓰이지 못한 나머지 아카이브에 어떤 일이 있었는지를 보고합니다.
 
 ### `UpdateArchiveResult`
 
@@ -86,7 +86,7 @@ binary patch로 배포한 릴리스는 full 아카이브 대신 다운로드할 
 | `base_bundle_unavailable` | 앱 바이너리 안의 번들을 열거나 읽을 수 없습니다. |
 | `base_hash_mismatch` | 앱 바이너리 안의 번들이 patch를 생성할 때 기준으로 삼은 번들과 다릅니다. |
 | `invalid_manifest` | manifest가 없거나 잘못됐거나, 아카이브 밖의 경로를 가리키거나, 허용 범위를 초과한 작업을 요청합니다. |
-| `unsupported_format` | 이 클라이언트가 적용할 수 없는 형식 또는 codec으로 patch가 생성됐습니다. |
+| `unsupported_format` | 클라이언트가 적용할 수 없는 형식 또는 codec으로 patch가 생성됐습니다. |
 | `patch_apply_failed` | applier가 patch 적용을 거부했거나, 복원한 번들을 쓸 수 없습니다. |
 | `target_verification_failed` | 복원한 번들이 manifest가 약속한 내용과 다릅니다. |
 | `asset_merge_failed` | asset diff를 생성할 때 기준으로 삼았던 설치된 업데이트와 병합할 수 없습니다. |

@@ -168,7 +168,7 @@ patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습�
 #### base 번들 검증
 
 `--binary-bundle-path`가 가리키는 번들은 릴리스가 스스로 검증할 수 없는 유일한 입력이므로,
-[build 훅](../README.md#6-export-the-embedded-bundle-optional)은 export하는 번들 옆에
+[build 훅](../docs/diff-updates.ko.md#내장-번들-export하기)은 export하는 번들 옆에
 `binary-patch-base.json` 기록을 함께 남깁니다. 이 기록이 있으면 base 번들의 실제 SHA-256이
 기록과 다르거나 `--binary-version`이 아닌 다른 바이너리 버전에서 export된 번들일 때, 빌드나
 업로드를 시작하기 전에 릴리스를 실패시킵니다. 기록이 없는 base 번들은 기존과 동일하게

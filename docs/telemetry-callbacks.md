@@ -16,7 +16,7 @@ For the per-option reference, alongside every other option, see
 | Callback | Called when | Receives |
 |---|---|---|
 | `onDownloadStart` | the download of an available update begins | `(label)` |
-| `onDownloadSuccess` | that download has completed. The install happens afterwards, so this says nothing about whether the update could be installed | `(label)` |
+| `onDownloadSuccess` | the download of an available update has completed. The install happens afterwards, so this says nothing about whether the update could be installed | `(label)` |
 | `onUpdateArchiveResult` | an update published with a binary patch has been downloaded, before it is installed | `(label, result)` |
 | `onUpdateSuccess` | an installed update has run successfully, as of the [`notifyAppReady`](api-js.md#codepushnotifyappready) that marks it successful | `(label)` |
 | `onUpdateRollback` | an installed update failed to run and was rolled back to the previous version | `(label)` |
@@ -65,7 +65,7 @@ CodePush.sync({
 
 A release published with a binary patch offers the client patch archives to download in
 place of the full one. See
-[Asset Diff Archives](../README.md#4-2-asset-diff-archives) for what those are and when a
+[Asset diff archives](diff-updates.md#asset-diff-archives) for what those are and when a
 release carries them. This callback reports which of them the download came from, and what
 happened to the ones it did not.
 
