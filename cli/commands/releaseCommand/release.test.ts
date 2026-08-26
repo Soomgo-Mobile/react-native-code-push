@@ -206,9 +206,9 @@ beforeEach(() => {
 
 afterEach(() => {
     jest.restoreAllMocks();
-    // addToReleaseHistory writes its JSON next to the invocation, and only removes it
-    // when the history was stored successfully.
-    fs.rmSync(path.resolve(process.cwd(), `${BINARY_VERSION}.json`), { force: true });
+    // addToReleaseHistory writes its JSON under the directory it was invoked in, and only
+    // removes it when the history was stored successfully.
+    fs.rmSync(path.resolve(process.cwd(), "codepush-release-history"), { recursive: true, force: true });
 });
 
 describe("release without --binary-bundle-path", () => {

@@ -1,6 +1,5 @@
-import path from "path";
-import fs from "fs";
 import type { CliConfigInterface } from "../../../typings/react-native-code-push.d.ts";
+import { stageReleaseHistoryFile } from "../../functions/stageReleaseHistoryFile.js";
 
 export async function addToReleaseHistory(
     appVersion: string,
@@ -51,15 +50,8 @@ export async function addToReleaseHistory(
     }
 
     try {
-        const JSON_FILE_NAME = `${binaryVersion}.json`;
-        const JSON_FILE_PATH = path.resolve(process.cwd(), JSON_FILE_NAME);
-
-        console.log(`log: creating JSON file... ("${JSON_FILE_NAME}")\n`, JSON.stringify(newReleaseHistory, null, 2));
-        fs.writeFileSync(JSON_FILE_PATH, JSON.stringify(newReleaseHistory));
-
-        await setReleaseHistory(binaryVersion, JSON_FILE_PATH, newReleaseHistory, platform, identifier)
-
-        fs.unlinkSync(JSON_FILE_PATH);
+        await stageReleaseHistoryFile(binaryVersion, newReleaseHistory, platform, (jsonFilePath) =>
+            setReleaseHistory(binaryVersion, jsonFilePath, newReleaseHistory, platform, identifier));
     } catch (error) {
         console.error('Error occurred while updating history:', error);
         process.exit(1)

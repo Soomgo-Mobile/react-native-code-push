@@ -191,3 +191,6 @@ Examples/*/App.ios.tsx
 Examples/*/App.android.tsx
 Examples/*/e2e-marker-assets-*/
 Examples/*/code-push.config.local.ts
+
+# Release history the CLI stages in the directory it is invoked from
+codepush-release-history/
