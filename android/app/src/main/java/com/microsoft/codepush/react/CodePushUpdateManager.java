@@ -180,12 +180,15 @@ public class CodePushUpdateManager {
                 return patchAttempt.result();
             }
 
-            // A diff that failed before its bundle was restored failed in the bundle patch,
-            // which the patch archive carries byte for byte - it would fail the same way,
-            // and trying it would only put a second doomed download in front of the full
-            // one. A failure after the restore is on the asset side, which the patch
-            // archive does not share.
-            patchArchiveWorthTrying = patchArchiveWorthTrying && patchAttempt.currentAttemptRestoredBundle();
+            // The patch archive is worth trying when nothing about how the diff failed
+            // implicates it. A diff that failed after restoring its bundle failed on its
+            // asset side, which the patch archive does not share; a diff the server never
+            // served is a verdict on one URL, and the patch archive is at another. Anything
+            // else failed in the bundle patch both archives carry byte for byte, so the
+            // patch archive would fail the same way and trying it would only put a second
+            // doomed download in front of the full one.
+            patchArchiveWorthTrying = patchArchiveWorthTrying
+                    && (patchAttempt.currentAttemptRestoredBundle() || patchAttempt.currentAttemptWasNotServed());
         }
 
         if (patchArchiveWorthTrying) {
@@ -218,8 +221,9 @@ public class CodePushUpdateManager {
     /**
      * Installs the update from one of its patch archives.
      *
-     * Every way this can fail ends the same way, with the caller moving on to the next
-     * archive, so none of it is reported to the caller as an error. The ladder cannot loop:
+     * Every verdict on the archive ends the same way, with the caller moving on to the next
+     * one, so none of it is reported to the caller as an error. A network that did not carry
+     * the archive is not a verdict on it and is raised instead. The ladder cannot loop:
      * which archive comes next is the caller's decision alone, and the full archive at its
      * end is downloaded by a call that is not allowed to take the patch path, so it has no
      * failure of its own to fall back from.
@@ -228,10 +232,13 @@ public class CodePushUpdateManager {
      *                     whoever asked for the download
      * @return true when the update was installed, false when the caller has to move on to
      *         the next archive
+     * @throws IOException when the network did not carry the archive, which is not a verdict
+     *                     on the archive and so is not a reason to try another one
      */
     private boolean tryDownloadArchivePackage(JSONObject updatePackage, String expectedBundleFileName,
                                               DownloadProgressCallback progressCallback,
-                                              String archiveDownloadUrl, ArchiveAttemptLog patchAttempt) {
+                                              String archiveDownloadUrl, ArchiveAttemptLog patchAttempt)
+            throws IOException {
         try {
             ArchiveRestoreResult patchResult = downloadAndInstallPackage(updatePackage, expectedBundleFileName,
                     progressCallback, archiveDownloadUrl, true, patchAttempt);
@@ -243,11 +250,27 @@ public class CodePushUpdateManager {
             CodePushUtils.log("The " + patchAttempt.currentArchive() + " archive failed ("
                     + patchResult.getFailureReason() + "). Falling back.");
         } catch (Exception | OutOfMemoryError e) {
+            if (CodePushErrorCode.isNetworkFailure(e)) {
+                // The network is what failed, not the archive, and the full archive is behind
+                // the same network - only larger, and started over from nothing. Falling back
+                // here would spend a second download to reach the failure already in hand.
+                CodePushUtils.log("The " + patchAttempt.currentArchive()
+                        + " archive could not be downloaded. Giving up on the download.");
+                if (e instanceof IOException) {
+                    throw (IOException) e;
+                }
+
+                // A network failure read out of a wrapper this package raised, which the
+                // caller catches by its own type rather than by `IOException`.
+                throw new CodePushUnknownException(
+                        "The " + patchAttempt.currentArchive() + " archive could not be downloaded.", e);
+            }
+
             // Applying a patch is the one path that holds a whole bundle in memory, so
             // running out of it is a failure this has to absorb like any other: by the time
             // it lands here the arrays are unreachable, and the full archive is downloaded
             // to disk in chunks rather than held.
-            patchAttempt.recordFallbackAfterError();
+            patchAttempt.recordFallbackAfterError(e);
             CodePushUtils.log(e);
             CodePushUtils.log("The " + patchAttempt.currentArchive()
                     + " archive could not be applied. Falling back.");
@@ -296,6 +319,8 @@ public class CodePushUpdateManager {
         try {
             URL downloadUrl = new URL(downloadUrlString);
             connection = (HttpURLConnection) (downloadUrl.openConnection());
+            connection.setConnectTimeout(CodePushConstants.DOWNLOAD_CONNECT_TIMEOUT_IN_MS);
+            connection.setReadTimeout(CodePushConstants.DOWNLOAD_READ_TIMEOUT_IN_MS);
 
             if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
                 downloadUrl.toString().startsWith("https")) {
@@ -307,6 +332,15 @@ public class CodePushUpdateManager {
             }
 
             connection.setRequestProperty("Accept-Encoding", "identity");
+
+            // Read before the body is: an error status carries a body of its own, and
+            // asking `getInputStream()` for it first turns some statuses into a stream and
+            // others into an exception that says nothing about which status it was.
+            int responseCode = connection.getResponseCode();
+            if (responseCode >= 400) {
+                throw new CodePushHttpException(downloadUrlString, responseCode);
+            }
+
             bin = new BufferedInputStream(connection.getInputStream());
 
             // Announced only once the response is flowing, so a connection that fails to
@@ -347,8 +381,11 @@ public class CodePushUpdateManager {
                 progressCallback.call(new DownloadProgress(totalBytes, receivedBytes));
             }
 
-            if (totalBytes != receivedBytes) {
-                throw new CodePushUnknownException("Received " + receivedBytes + " bytes, expected " + totalBytes);
+            // Only against a length the server declared. `getContentLength()` answers -1
+            // for a body sent without one, which no read total matches - so comparing anyway
+            // would fail every download a server chooses to send that way.
+            if (totalBytes >= 0 && totalBytes != receivedBytes) {
+                throw new CodePushIncompleteDownloadException(receivedBytes, totalBytes);
             }
 
             isZip = ByteBuffer.wrap(header).getInt() == 0x504b0304;
@@ -507,6 +544,14 @@ public class CodePushUpdateManager {
         try {
             downloadUrl = new URL(remoteBundleUrl);
             connection = (HttpURLConnection) (downloadUrl.openConnection());
+            connection.setConnectTimeout(CodePushConstants.DOWNLOAD_CONNECT_TIMEOUT_IN_MS);
+            connection.setReadTimeout(CodePushConstants.DOWNLOAD_READ_TIMEOUT_IN_MS);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode >= 400) {
+                throw new CodePushHttpException(remoteBundleUrl, responseCode);
+            }
+
             bin = new BufferedInputStream(connection.getInputStream());
             File downloadFile = new File(getCurrentPackageBundlePath(bundleFileName));
             downloadFile.delete();

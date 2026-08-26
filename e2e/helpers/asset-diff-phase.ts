@@ -20,6 +20,7 @@ import {
   assertReleaseOffersDiff,
   corruptDiffArchiveAsset,
   dropDiffArchiveManifestDeletions,
+  removeDiffArchive,
 } from "./asset-diff-fixtures";
 import {
   assertReleaseOffersPatch,
@@ -190,6 +191,20 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
     breakDiff: () => breakRestoredBundleExpectation(findAssetDiffArchive(platform, releaseIdentifier)),
     expectedDownloads: ["asset-diff", "full"],
     expectedArchiveResult: "fallback:asset-diff:asset-diff=target_verification_failed",
+  });
+
+  // A diff the server does not serve is not a verdict on the archives it does. Diffs are
+  // published one per recent version and are the first thing a retention policy clears
+  // out, while the patch archive at its own URL stays - so a 404 on the diff must not cost
+  // the patch archive its try. This is the one failure before the bundle is restored that
+  // still reaches the patch archive.
+  await runDiffScenario({
+    name: "diff the server does not serve falls back to the patch archive",
+    baseVersion: "1.4.9",
+    updateVersion: "1.4.10",
+    breakDiff: () => removeDiffArchive(findAssetDiffArchive(platform, releaseIdentifier)),
+    expectedDownloads: ["asset-diff", "binary-patch"],
+    expectedArchiveResult: "applied:binary-patch:asset-diff=no-verdict:binary-patch=applied",
   });
 
   // A manifest that names no files to delete is not one with nothing to delete - the CLI

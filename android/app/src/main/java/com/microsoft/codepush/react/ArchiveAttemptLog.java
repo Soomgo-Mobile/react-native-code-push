@@ -43,6 +43,9 @@ class ArchiveAttemptLog {
         String fallbackReason;
         long durationMs = -1;
 
+        /** Whether the server answered this archive's URL with a status instead of the archive. */
+        boolean wasNotServed;
+
         Attempt(String archive) {
             this.archive = archive;
         }
@@ -72,12 +75,23 @@ class ArchiveAttemptLog {
 
     /**
      * Whether the current archive's attempt got as far as restoring the bundle. A failure
-     * after that point is on the asset side of the archive - and every archive carries the
-     * same bundle patch, so this is what decides whether the patch archive is worth trying
-     * after a failed diff.
+     * after that point is on the asset side of the archive, which the archives do not share -
+     * unlike the bundle patch, which they carry byte for byte.
      */
     boolean currentAttemptRestoredBundle() {
         return current().applyDurationMs >= 0;
+    }
+
+    /**
+     * Whether the current archive never arrived, because the server answered its URL with a
+     * status rather than with the archive.
+     *
+     * A verdict on one URL, and the archives are at URLs of their own: a release whose diff
+     * has been cleaned up still has its patch archive. This is the one failure before the
+     * bundle is restored that says nothing about the archives left to try.
+     */
+    boolean currentAttemptWasNotServed() {
+        return current().wasNotServed;
     }
 
     /**
@@ -104,7 +118,8 @@ class ArchiveAttemptLog {
      * here would put a value on the wire that no platform reports, so the fallback is
      * reported without a reason.
      */
-    void recordFallbackAfterError() {
+    void recordFallbackAfterError(Throwable error) {
+        current().wasNotServed = CodePushErrorCode.HTTP.equals(CodePushErrorCode.of(error));
         recordFallback(currentAttemptRestoredBundle() ? ArchiveRestoreResult.REASON_PACKAGE_VERIFICATION_FAILED : null);
     }
 

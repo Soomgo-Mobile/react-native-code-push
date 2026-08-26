@@ -168,3 +168,20 @@ export function dropDiffArchiveManifestDeletions(archivePath: string): void {
     fs.writeFileSync(manifestPath, JSON.stringify(manifest));
   });
 }
+
+/**
+ * Deletes the published diff archive, leaving the release that offers it untouched.
+ *
+ * The release history still names the diff's URL, so the client asks for it and the
+ * server answers 404 - the shape of a release whose diff has been cleaned up while the
+ * archives at the other URLs are still there. Nothing is corrupted and nothing is
+ * applied: what this isolates is a client deciding what a status answered at one URL says
+ * about the archives at the others.
+ */
+export function removeDiffArchive(archivePath: string): void {
+  if (!fs.existsSync(archivePath)) {
+    throw new Error(`There is no diff archive at "${archivePath}" to remove`);
+  }
+
+  fs.rmSync(archivePath);
+}

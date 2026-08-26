@@ -772,7 +772,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
             NSDictionary *newPackage = [CodePushPackage getPackage:mutableUpdatePackage[PackageHashKey] error:&err];
 
             if (err) {
-                return reject([NSString stringWithFormat: @"%lu", (long)err.code], err.localizedDescription, err);
+                return reject([NSString stringWithFormat: @"%ld", (long)err.code], err.localizedDescription, err);
             }
 
             if (updateArchiveResult) {
@@ -796,7 +796,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
             // Stop observing frame updates if the download fails.
             _didUpdateProgress = NO;
             self.paused = YES;
-            reject([NSString stringWithFormat: @"%lu", (long)err.code], err.localizedDescription, err);
+            reject([NSString stringWithFormat: @"%ld", (long)err.code], err.localizedDescription, err);
         }];
 }
 
@@ -876,7 +876,7 @@ RCT_EXPORT_METHOD(getUpdateMetadata:(double)updateStateValue
     NSMutableDictionary *package = [[CodePushPackage getCurrentPackage:&error] mutableCopy];
 
     if (error) {
-        return reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
+        return reject([NSString stringWithFormat: @"%ld", (long)error.code], error.localizedDescription, error);
     } else if (package == nil) {
         // The app hasn't downloaded any CodePush updates yet,
         // so we simply return nil regardless if the user
@@ -930,7 +930,7 @@ RCT_EXPORT_METHOD(installUpdate:(NSDictionary*)updatePackage
                               error:&error];
 
     if (error) {
-        reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
+        reject([NSString stringWithFormat: @"%ld", (long)error.code], error.localizedDescription, error);
     } else {
         [self savePendingUpdate:updatePackage[PackageHashKey]
                       isLoading:NO];

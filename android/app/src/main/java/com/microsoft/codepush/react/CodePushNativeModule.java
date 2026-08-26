@@ -402,10 +402,15 @@ public class CodePushNativeModule extends NativeCodePushSpec {
                 } catch (CodePushInvalidUpdateException e) {
                     CodePushUtils.log(e);
                     mSettingsManager.saveFailedUpdate(CodePushUtils.convertReadableToJsonObject(updatePackage));
-                    promise.reject(e);
-                } catch (IOException | CodePushUnknownException e) {
+                    promise.reject(CodePushErrorCode.of(e), e.getMessage(), e);
+                } catch (Throwable e) {
+                    // Anything at all, because a promise is waiting on this. A failure that
+                    // leaves this method without settling it leaves JS waiting on a download
+                    // that is no longer running, with nothing to time it out. The narrower
+                    // catch this replaces let two through: a download URL that is not a URL,
+                    // and an archive naming a path outside the folder it unpacks into.
                     CodePushUtils.log(e);
-                    promise.reject(e);
+                    promise.reject(CodePushErrorCode.of(e), e.getMessage(), e);
                 }
             }
         });

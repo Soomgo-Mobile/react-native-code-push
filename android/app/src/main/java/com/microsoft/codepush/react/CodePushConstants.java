@@ -36,6 +36,24 @@ public class CodePushConstants {
     public static final String DEFAULT_JS_BUNDLE_NAME = "index.android.bundle";
     public static final String DIFF_MANIFEST_FILE_NAME = "hotcodepush.json";
     public static final int DOWNLOAD_BUFFER_SIZE = 1024 * 256;
+
+    /**
+     * How long a download waits for the server to answer at all.
+     *
+     * Kept well above any real handshake, because the only thing this has to catch is a
+     * host that will never answer - a captive portal, a dead route, a network that went
+     * away between the update check and the download.
+     */
+    public static final int DOWNLOAD_CONNECT_TIMEOUT_IN_MS = 10 * 1000;
+
+    /**
+     * How long a download waits for the next bytes of a response already flowing.
+     *
+     * This bounds silence, not the download: a slow connection that keeps delivering is
+     * never cut off, however long the whole archive takes. A connection that delivers
+     * nothing for this long is one the operating system has stopped reporting as dead.
+     */
+    public static final int DOWNLOAD_READ_TIMEOUT_IN_MS = 30 * 1000;
     public static final String DOWNLOAD_FILE_NAME = "download.zip";
     public static final String DOWNLOAD_PROGRESS_EVENT_NAME = "CodePushDownloadProgress";
     public static final String DOWNLOAD_URL_KEY = "downloadUrl";

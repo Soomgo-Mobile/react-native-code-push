@@ -23,6 +23,26 @@
 > [!NOTE]
 > 타입 정의에서 `onRolloutSkipped`는 두 번째 `error` 매개변수를 선언하지만, 런타임은 항상 `label`만 전달합니다.
 
+## `error`가 담고 있는 것
+
+리포트는 메시지가 아니라 `error.code`로 묶으세요. 메시지는 iOS에서 현지화되고 Android에서는 예외 자체의 문구입니다.
+
+| 플랫폼 | `error.code` | 예 |
+|---|---|---|
+| iOS | [`NSURLError`](https://developer.apple.com/documentation/foundation/1508628-url_loading_system_error_codes) 코드를 문자열로, CodePush가 직접 던진 오류는 `-1` | `"-1005"`, 연결이 끊김 |
+| Android | 실패의 카테고리 | `"CODE_PUSH_NETWORK"`, 연결이 끊김 |
+
+Android 카테고리는 다음과 같습니다.
+
+| Code | 뜻 | 다시 받아 볼 가치 |
+|---|---|---|
+| `CODE_PUSH_NETWORK` | 연결이 끊겼거나, 시간이 초과됐거나, 열리지 않았습니다. | 네트워크가 돌아오면 있음 |
+| `CODE_PUSH_HTTP` | 서버가 400 이상으로 응답했습니다. 상태 코드는 메시지에 있습니다. | 상태 코드에 따라 다름 |
+| `CODE_PUSH_INTEGRITY` | 다운로드한 내용의 hash가 릴리스의 package hash와 다르거나, 그 안에 앱이 찾는 이름의 JS 번들이 없습니다. | 없음 |
+| `CODE_PUSH_UNKNOWN` | 그 밖의 경우입니다. | 알 수 없음 |
+
+`CodePush.sync()`도 같은 오류로 거절되므로, 반환값을 기다리는 호출자에게는 이 콜백이 필요 없습니다.
+
 ## 등록
 
 [앱에 CodePush 적용하기](../README.md#4-codepush-ify-your-app)의 `CodePush({ ... })` 래퍼에 콜백을 전달하면, `checkFrequency` 값과 무관하게 직접 호출한 `CodePush.sync()`를 포함한 모든 sync에서 실행됩니다.

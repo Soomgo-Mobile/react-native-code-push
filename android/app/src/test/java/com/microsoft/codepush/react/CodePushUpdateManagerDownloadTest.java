@@ -2,6 +2,7 @@ package com.microsoft.codepush.react;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -136,6 +137,57 @@ public class CodePushUpdateManagerDownloadTest {
         assertFalse(result.succeeded());
         assertEquals(ArchiveRestoreResult.REASON_INVALID_MANIFEST, result.getFailureReason());
         assertFalse("bytes that are not an update must not reach the package folder", mPackageFolder.exists());
+    }
+
+    @Test
+    public void failsTheDownloadWhenTheServerAnswersTheArchiveWithAnErrorStatus() throws IOException {
+        // Nothing is served at this path, so the server answers it with a 404.
+        String fullUrl = mServer.urlOf("/missing-full.zip");
+
+        try {
+            updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                    fullUpdatePackage(mPackageHash, fullUrl), BUNDLE_FILE_NAME, ignoreProgress());
+            fail("a download the server refused must not be reported as installed");
+        } catch (CodePushHttpException e) {
+            assertEquals(404, e.getStatusCode());
+            assertTrue("the message names the status the server answered with",
+                    e.getMessage().contains("404"));
+        }
+
+        assertFalse("nothing the server refused reaches the package folder", mPackageFolder.exists());
+    }
+
+    @Test
+    public void givesUpTheDownloadWhenThePatchArchiveArrivesShort() throws IOException {
+        // The connection carried part of the body and stopped. The full archive is behind
+        // the same connection and is larger, so there is nothing to fall back to.
+        byte[] patchArchive = zipOf(patchArchiveContents());
+        String patchUrl = mServer.serveClaimingLength("/patch.zip", patchArchive, patchArchive.length + 1024);
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+
+        try {
+            updateManager(applierWriting(TARGET_BUNDLE))
+                    .downloadPackage(updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, ignoreProgress());
+            fail("a download that stopped short must not be reported as installed");
+        } catch (IOException e) {
+            assertEquals(CodePushErrorCode.NETWORK, CodePushErrorCode.of(e));
+        }
+
+        assertEquals("the full archive is behind the connection that just stopped",
+                Arrays.asList("/patch.zip"), mServer.requestedPaths());
+        assertFalse("nothing that arrived short reaches the package folder", mPackageFolder.exists());
+    }
+
+    @Test
+    public void installsAnUpdateTheServerSentWithoutDeclaringItsLength() throws IOException {
+        // `getContentLength()` answers -1 for a body sent with no `Content-Length`, which no
+        // read total matches - so a download checked against it anyway could never arrive.
+        String fullUrl = mServer.serveWithoutContentLength("/full.zip", zipOf(fullArchiveContents()));
+
+        updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                fullUpdatePackage(mPackageHash, fullUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertInstalledContents();
     }
 
     @Test
@@ -307,10 +359,11 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
-    public void skipsThePatchArchiveWhenTheAssetDiffCannotBeDownloaded() throws IOException {
-        // A diff that never arrived left no verdict at all: nothing says the patch archive
-        // is any better off, and the full download is the one that cannot fail - so a
-        // client is never walked through two doomed downloads on its way there.
+    public void triesThePatchArchiveWhenTheServerDoesNotServeTheAssetDiff() throws IOException {
+        // A 404 is a verdict on the URL it was asked of. Diffs are published one per recent
+        // version and are the first thing a retention policy clears out, while the patch
+        // archive at its own URL stays - so nothing about a diff that is gone says the patch
+        // archive is.
         Map<String, byte[]> updateContents = assetDiffTargetContents();
         String updateHash = packageHashOf(updateContents);
         String diffUrl = mServer.urlOf("/missing-diff.zip");
@@ -320,11 +373,62 @@ public class CodePushUpdateManagerDownloadTest {
         JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
                 updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
-        assertEquals(Arrays.asList("/missing-diff.zip", "/full.zip"), mServer.requestedPaths());
-        assertFallbackResult(patchResult, null);
-        assertEquals("asset-diff", patchResult.optString("archive", null));
+        assertEquals("the full archive is not downloaded when the patch archive installs",
+                Arrays.asList("/missing-diff.zip", "/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(2, patchResult.optJSONArray("attempts").length());
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void skipsThePatchArchiveWhenTheAssetDiffFailsInItsBundlePatch() throws IOException {
+        // Both archives carry that patch byte for byte, so an applier that refused it here
+        // would refuse it there - and trying it would put a second doomed download in front
+        // of the full one.
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH)));
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierRefusingThePatch()).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/diff.zip", "/full.zip"), mServer.requestedPaths());
         assertEquals(1, patchResult.optJSONArray("attempts").length());
         assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void givesUpTheDownloadWhenTheNetworkCannotCarryTheAssetDiff() throws IOException {
+        // A refused connection is the network failing rather than a verdict on the archive,
+        // and the archives behind it are behind the same network - the full one only larger
+        // and started over from nothing.
+        String unreachableDiffUrl = "http://127.0.0.1:" + portNothingListensOn() + "/diff.zip";
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContents()));
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+
+        try {
+            updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                    updatePackageWithAssetDiff(mPackageHash, fullUrl, patchUrl, unreachableDiffUrl),
+                    BUNDLE_FILE_NAME, ignoreProgress());
+            fail("a network that carried nothing must not be reported as an installed update");
+        } catch (IOException e) {
+            assertEquals(CodePushErrorCode.NETWORK, CodePushErrorCode.of(e));
+        }
+
+        assertTrue("no archive behind the same network is asked for", mServer.requestedPaths().isEmpty());
+        assertFalse("nothing that never arrived reaches the package folder", mPackageFolder.exists());
+    }
+
+
+    /** A loopback port that is opened only to be closed, so connecting to it is refused. */
+    private static int portNothingListensOn() throws IOException {
+        ServerSocket socket = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"));
+        int port = socket.getLocalPort();
+        socket.close();
+        return port;
     }
 
     @Test
@@ -500,6 +604,16 @@ public class CodePushUpdateManagerDownloadTest {
         return new CodePushUpdateManager(mDocumentsDirectory, binaryPatch);
     }
 
+    /** An applier that refuses the bundle patch, which every archive of a release carries. */
+    private static CodePushBinaryPatch.PatchApplier applierRefusingThePatch() {
+        return new CodePushBinaryPatch.PatchApplier() {
+            @Override
+            public int apply(byte[] base, byte[] patch, String outputPath, long expectedTargetSize) {
+                return RESULT_APPLY_FAILED;
+            }
+        };
+    }
+
     private static CodePushBinaryPatch.PatchApplier applierWriting(final byte[] restoredBundle) {
         return new CodePushBinaryPatch.PatchApplier() {
             @Override
@@ -633,7 +747,10 @@ public class CodePushUpdateManagerDownloadTest {
     private static class TestArchiveServer {
 
         private final ServerSocket mSocket;
+        private static final long NO_CONTENT_LENGTH = -1;
+
         private final Map<String, byte[]> mBodies = new HashMap<>();
+        private final Map<String, Long> mDeclaredLengths = new HashMap<>();
         private final List<String> mRequestedPaths = Collections.synchronizedList(new ArrayList<String>());
 
         TestArchiveServer() throws IOException {
@@ -651,6 +768,18 @@ public class CodePushUpdateManagerDownloadTest {
         synchronized String serve(String path, byte[] body) {
             mBodies.put(path, body);
             return urlOf(path);
+        }
+
+        /** Serves a body under a `Content-Length` of the server's choosing rather than its own. */
+        synchronized String serveClaimingLength(String path, byte[] body, long declaredLength) {
+            mBodies.put(path, body);
+            mDeclaredLengths.put(path, declaredLength);
+            return urlOf(path);
+        }
+
+        /** Serves a body with no `Content-Length` at all, which the client reads until it closes. */
+        synchronized String serveWithoutContentLength(String path, byte[] body) {
+            return serveClaimingLength(path, body, NO_CONTENT_LENGTH);
         }
 
         /** The URL of a path this server answers - with a 404, when nothing is served there. */
@@ -704,8 +833,17 @@ public class CodePushUpdateManagerDownloadTest {
             if (body == null) {
                 response.write(bytes("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
             } else {
-                response.write(bytes("HTTP/1.1 200 OK\r\nContent-Length: " + body.length
-                        + "\r\nConnection: close\r\n\r\n"));
+                Long declaredLength = declaredLengthFor(path);
+                if (declaredLength == null) {
+                    response.write(bytes("HTTP/1.1 200 OK\r\nContent-Length: " + body.length
+                            + "\r\nConnection: close\r\n\r\n"));
+                } else if (declaredLength == NO_CONTENT_LENGTH) {
+                    response.write(bytes("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n"));
+                } else {
+                    response.write(bytes("HTTP/1.1 200 OK\r\nContent-Length: " + declaredLength
+                            + "\r\nConnection: close\r\n\r\n"));
+                }
+
                 response.write(body);
             }
             response.flush();
@@ -719,6 +857,10 @@ public class CodePushUpdateManagerDownloadTest {
 
         private synchronized byte[] bodyFor(String path) {
             return mBodies.get(path);
+        }
+
+        private synchronized Long declaredLengthFor(String path) {
+            return mDeclaredLengths.get(path);
         }
     }
 

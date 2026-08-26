@@ -157,7 +157,10 @@ failCallback:(void (^)(NSError *err))failCallback;
 @interface CodePushErrorUtils : NSObject
 
 + (NSError *)errorWithMessage:(NSString *)errorMessage;
++ (NSError *)errorWithMessage:(NSString *)errorMessage httpStatusCode:(NSInteger)statusCode;
 + (BOOL)isCodePushError:(NSError *)error;
++ (BOOL)isNetworkFailure:(NSError *)error;
++ (BOOL)isHttpStatusError:(NSError *)error;
 
 @end
 

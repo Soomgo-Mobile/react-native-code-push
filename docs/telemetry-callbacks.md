@@ -30,6 +30,28 @@ the sync failed before a release was resolved.
 > The typings declare a second `error` parameter on `onRolloutSkipped`, but the runtime only
 > ever passes the label.
 
+## What `error` carries
+
+Group reports by `error.code`, not by the message: the message is localized on iOS and is
+the exception's own words on Android.
+
+| Platform | `error.code` | Example |
+|---|---|---|
+| iOS | the [`NSURLError`](https://developer.apple.com/documentation/foundation/1508628-url_loading_system_error_codes) code as a string, or `-1` for an error CodePush raised itself | `"-1005"`, the connection dropped |
+| Android | the category of the failure | `"CODE_PUSH_NETWORK"`, the connection dropped |
+
+Android categories:
+
+| Code | Means | Worth downloading again |
+|---|---|---|
+| `CODE_PUSH_NETWORK` | The connection dropped, timed out, or never opened. | Once the network is back |
+| `CODE_PUSH_HTTP` | The server answered with a status of 400 or above. The status is in the message. | Depends on the status |
+| `CODE_PUSH_INTEGRITY` | The downloaded contents do not hash to the release's package hash, or hold no JS bundle by the name the app looks for. | No |
+| `CODE_PUSH_UNKNOWN` | Anything else. | Unknown |
+
+`CodePush.sync()` rejects with the same error, so a caller that awaits it does not need
+this callback.
+
 ## Registering them
 
 Pass them to the `CodePush({ ... })` wrapper from
