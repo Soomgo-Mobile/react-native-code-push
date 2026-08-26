@@ -74,9 +74,13 @@ public class CodePushErrorCode {
         // `SocketException` is the one that covers the reported majority - the connection
         // reset and the connection aborted an app being backgrounded mid-download leaves
         // behind - along with the connection that was refused or had no route.
+        //
+        // A download that stopped short belongs here too. The socket raised nothing for it,
+        // so only the byte count says the network dropped the rest of the body.
         return error instanceof SocketTimeoutException
                 || error instanceof SocketException
                 || error instanceof UnknownHostException
-                || error instanceof SSLException;
+                || error instanceof SSLException
+                || error instanceof CodePushIncompleteDownloadException;
     }
 }

@@ -158,6 +158,27 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
+    public void givesUpTheDownloadWhenThePatchArchiveArrivesShort() throws IOException {
+        // The connection carried part of the body and stopped. The full archive is behind
+        // the same connection and is larger, so there is nothing to fall back to.
+        byte[] patchArchive = zipOf(patchArchiveContents());
+        String patchUrl = mServer.serveClaimingLength("/patch.zip", patchArchive, patchArchive.length + 1024);
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+
+        try {
+            updateManager(applierWriting(TARGET_BUNDLE))
+                    .downloadPackage(updatePackage(fullUrl, patchUrl), BUNDLE_FILE_NAME, ignoreProgress());
+            fail("a download that stopped short must not be reported as installed");
+        } catch (IOException e) {
+            assertEquals(CodePushErrorCode.NETWORK, CodePushErrorCode.of(e));
+        }
+
+        assertEquals("the full archive is behind the connection that just stopped",
+                Arrays.asList("/patch.zip"), mServer.requestedPaths());
+        assertFalse("nothing that arrived short reaches the package folder", mPackageFolder.exists());
+    }
+
+    @Test
     public void installsAnUpdateTheServerSentWithoutDeclaringItsLength() throws IOException {
         // `getContentLength()` answers -1 for a body sent with no `Content-Length`, which no
         // read total matches - so a download checked against it anyway could never arrive.

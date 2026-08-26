@@ -382,7 +382,7 @@ public class CodePushUpdateManager {
             // for a body sent without one, which no read total matches - so comparing anyway
             // would fail every download a server chooses to send that way.
             if (totalBytes >= 0 && totalBytes != receivedBytes) {
-                throw new CodePushUnknownException("Received " + receivedBytes + " bytes, expected " + totalBytes);
+                throw new CodePushIncompleteDownloadException(receivedBytes, totalBytes);
             }
 
             isZip = ByteBuffer.wrap(header).getInt() == 0x504b0304;

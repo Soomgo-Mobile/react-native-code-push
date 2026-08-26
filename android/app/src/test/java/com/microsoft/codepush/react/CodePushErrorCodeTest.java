@@ -36,6 +36,15 @@ public class CodePushErrorCodeTest {
     }
 
     @Test
+    public void namesADownloadThatStoppedShortAsANetworkFailure() {
+        // The socket raised nothing for it, so only the byte count says the body was cut off.
+        Throwable error = new CodePushIncompleteDownloadException(1024, 4096);
+
+        assertEquals(CodePushErrorCode.NETWORK, CodePushErrorCode.of(error));
+        assertTrue(CodePushErrorCode.isNetworkFailure(error));
+    }
+
+    @Test
     public void namesAnErrorStatusAsAnHttpFailureRatherThanANetworkOne() {
         Throwable error = new CodePushHttpException("https://cdn.example.test/full.zip", 503);
 
