@@ -37,7 +37,7 @@ bash scripts/e2e/run-rn-cli-matrix.sh [옵션]
 | `--skip-setup` | 앱 생성 단계를 건너뛰고 E2E만 실행 | `false` |
 | `--maestro-only` | 빌드를 건너뛰고 Maestro 플로우만 실행 | `false` |
 | `--only-setup` | setup만 수행하고 E2E 실행은 생략 | `false` |
-| `--only android\|ios` | 한 플랫폼만 실행 | both |
+| `--only android\|ios` | 한 플랫폼만 실행. 지정하지 않으면 한 번의 E2E 실행에서 두 플랫폼이 나란히 돌며, 시뮬레이터와 에뮬레이터(또는 연결된 기기)가 동시에 필요합니다 | both |
 | `--legacy-arch-max-version <minor(두 자리)>` | RN **minor**가 이 값 이하인 버전을 legacy architecture로 셋업 | `76` |
 
 ### `--legacy-arch-max-version` 입력 형식

@@ -9,8 +9,8 @@ FORCE_RECREATE=0
 SKIP_SETUP=0
 FAILED_E2E=()
 PASSED_E2E=()
-RUN_ANDROID=1
-RUN_IOS=1
+# Empty unless --only names one platform, in which case that platform runs on its own.
+ONLY_PLATFORM=""
 LEGACY_ARCH_MAX_MINOR=76
 MAESTRO_ONLY=0
 ONLY_SETUP=0
@@ -20,7 +20,7 @@ ONLY_SETUP=0
 # --skip-setup: skip app setup and run with the current workspace state
 # --maestro-only: skip build and run Maestro flows only
 # --only-setup: run setup only and skip E2E execution
-# --only android|ios: run E2E for the selected platform only
+# --only android|ios: run E2E for the selected platform only (default: both, side by side in one run)
 # --legacy-arch-max-version <minor(2 digits)>: use legacy architecture setup for RN x.y.z when y <= given minor
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,13 +46,8 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       case "$2" in
-        android)
-          RUN_ANDROID=1
-          RUN_IOS=0
-          ;;
-        ios)
-          RUN_ANDROID=0
-          RUN_IOS=1
+        android|ios)
+          ONLY_PLATFORM="$2"
           ;;
         *)
           echo "Invalid platform for --only: $2 (expected: android|ios)" >&2
@@ -215,11 +210,6 @@ main() {
   cd "$ROOT_DIR"
   resolve_rn_targets
 
-  if [[ "$RUN_ANDROID" -eq 0 && "$RUN_IOS" -eq 0 ]]; then
-    echo "Both platforms are skipped. Nothing to run."
-    return 0
-  fi
-
   local target
   local local_app_name
   local rn_version
@@ -233,31 +223,21 @@ main() {
     return 0
   fi
 
-  if [[ "$RUN_ANDROID" -eq 1 ]]; then
-    echo
-    echo "############################################################"
-    echo "[E2E] platform=android (all versions)"
-    echo "############################################################"
-    for target in "${RN_TARGETS[@]}"; do
-      IFS='|' read -r local_app_name rn_version <<< "$target"
-      echo
-      echo "[ANDROID] version=$rn_version app=$local_app_name"
-      run_e2e_for_app_platform "$local_app_name" "android"
-    done
-  fi
+  # Without --only, an app's two platforms run side by side within one E2E invocation,
+  # which halves the runs this matrix makes. That needs a simulator and an emulator or
+  # device up at the same time, so --only is what to reach for when only one is.
+  local platform="${ONLY_PLATFORM:-both}"
 
-  if [[ "$RUN_IOS" -eq 1 ]]; then
+  echo
+  echo "############################################################"
+  echo "[E2E] platform=$platform (all versions)"
+  echo "############################################################"
+  for target in "${RN_TARGETS[@]}"; do
+    IFS='|' read -r local_app_name rn_version <<< "$target"
     echo
-    echo "############################################################"
-    echo "[E2E] platform=ios (all versions)"
-    echo "############################################################"
-    for target in "${RN_TARGETS[@]}"; do
-      IFS='|' read -r local_app_name rn_version <<< "$target"
-      echo
-      echo "[iOS] version=$rn_version app=$local_app_name"
-      run_e2e_for_app_platform "$local_app_name" "ios"
-    done
-  fi
+    echo "[${platform}] version=$rn_version app=$local_app_name"
+    run_e2e_for_app_platform "$local_app_name" "$platform"
+  done
 
   print_e2e_summary
 
