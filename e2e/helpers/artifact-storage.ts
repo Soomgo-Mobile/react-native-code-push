@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { ARTIFACT_LOG_PATH, MOCK_DATA_DIR } from "../config";
+import { getArtifactLogPath, getMockDataDir } from "../config";
 
 /**
  * What the CLI stored through the local config, read back from the record the config
@@ -34,16 +34,16 @@ export interface StoredHistoryArtifact {
 
 export type StoredArtifact = StoredBundleArtifact | StoredHistoryArtifact;
 
-export function clearArtifactLog(): void {
-  fs.rmSync(ARTIFACT_LOG_PATH, { force: true });
+export function clearArtifactLog(platform: "ios" | "android"): void {
+  fs.rmSync(getArtifactLogPath(platform), { force: true });
 }
 
-export function readArtifactLog(): StoredArtifact[] {
-  if (!fs.existsSync(ARTIFACT_LOG_PATH)) {
+export function readArtifactLog(platform: "ios" | "android"): StoredArtifact[] {
+  if (!fs.existsSync(getArtifactLogPath(platform))) {
     return [];
   }
 
-  return fs.readFileSync(ARTIFACT_LOG_PATH, "utf8")
+  return fs.readFileSync(getArtifactLogPath(platform), "utf8")
     .split("\n")
     .filter((line) => line.trim().length > 0)
     .map((line) => JSON.parse(line) as StoredArtifact);
@@ -56,8 +56,8 @@ export function readArtifactLog(): StoredArtifact[] {
  * @return the artifacts that were checked, so a caller can go on to assert something
  * about a specific one.
  */
-export function assertArtifactStorageLayout(scenario: string): StoredArtifact[] {
-  const artifacts = readArtifactLog();
+export function assertArtifactStorageLayout(scenario: string, platform: "ios" | "android"): StoredArtifact[] {
+  const artifacts = readArtifactLog(platform);
   if (artifacts.length === 0) {
     throw new Error(`${scenario}: no artifacts were stored`);
   }
@@ -75,7 +75,7 @@ export function assertArtifactStorageLayout(scenario: string): StoredArtifact[] 
       );
     }
 
-    if (!fs.existsSync(path.join(MOCK_DATA_DIR, artifact.storedPath))) {
+    if (!fs.existsSync(path.join(getMockDataDir(platform), artifact.storedPath))) {
       throw new Error(`${scenario}: ${artifact.kind} is missing from the served data at "${artifact.storedPath}"`);
     }
   }

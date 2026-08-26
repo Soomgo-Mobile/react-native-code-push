@@ -2,7 +2,7 @@ import { execFileSync } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import { MOCK_DATA_DIR, WORK_DIR } from "../config";
+import { getMockDataDir, WORK_DIR } from "../config";
 
 /**
  * Fixtures for the binary patch scenarios: the base bundle a patch is computed against,
@@ -116,7 +116,7 @@ function extractIosBinaryBundle(appId: string, bundleName: string, destPath: str
 }
 
 export function getHistoryFilePath(platform: Platform, identifier: string, binaryVersion: string): string {
-  return path.join(MOCK_DATA_DIR, "histories", platform, identifier, `${binaryVersion}.json`);
+  return path.join(getMockDataDir(platform), "histories", platform, identifier, `${binaryVersion}.json`);
 }
 
 export function readReleaseHistory(
@@ -249,7 +249,7 @@ function findArchive(
   identifier: string,
   artifactType: "full-bundle" | "binary-patch" | "asset-diff",
 ): string {
-  const bundleDir = path.join(MOCK_DATA_DIR, "bundles", platform, identifier);
+  const bundleDir = path.join(getMockDataDir(platform), "bundles", platform, identifier);
   const archivePaths = findFiles(bundleDir)
     .filter((filePath) => path.relative(bundleDir, filePath).split(path.sep).includes(artifactType));
 

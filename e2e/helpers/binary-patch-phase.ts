@@ -104,9 +104,9 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
     releaseVersion: string,
     expectedDownloads: DownloadedArchive[],
   ) => context.withRetry(`run-maestro: binary patch (${scenarioName})`, async () => {
-    startRecordingDownloads();
+    startRecordingDownloads(platform);
     await context.runMaestro(flowPath, { RELEASE_LABEL: releaseVersion });
-    assertDownloadedArchives(scenarioName, expectedDownloads);
+    assertDownloadedArchives(scenarioName, platform, expectedDownloads);
   });
 
   const scenarios: BinaryPatchScenario[] = [
@@ -198,14 +198,14 @@ export async function runBinaryPatchPhase(context: BinaryPatchPhaseContext): Pro
 
   for (const scenario of scenarios) {
     if (scenario.timingSensitive && context.excludeTimingSensitive) {
-      console.log(`\n=== [phase 6] skipping timing-sensitive scenario (${scenario.name}) ===`);
+      console.log(`\n=== [${platform}][phase 6] skipping timing-sensitive scenario (${scenario.name}) ===`);
       continue;
     }
 
-    console.log(`\n=== [prepare-bundle: binary patch ${scenario.releaseVersion} (${scenario.name})] ===`);
+    console.log(`\n=== [${platform}][prepare-bundle: binary patch ${scenario.releaseVersion} (${scenario.name})] ===`);
     context.cleanMockData();
     await scenario.prepare();
-    assertArtifactStorageLayout(scenario.name);
+    assertArtifactStorageLayout(scenario.name, platform);
     assertReleaseOffersPatch(scenario.name, platform, releaseIdentifier, BINARY_VERSION, scenario.releaseVersion);
 
     await installUpdate(scenario.name, scenario.flowPath, scenario.releaseVersion, scenario.expectedDownloads);
@@ -240,12 +240,12 @@ async function runPublishedTwiceScenario(
   const releaseVersion = "1.3.7";
   const fullOnlyIdentifier = `${releaseIdentifier}-full-only`;
 
-  console.log(`\n=== [prepare-bundle: binary patch ${releaseVersion} (${scenario})] ===`);
+  console.log(`\n=== [${platform}][prepare-bundle: binary patch ${releaseVersion} (${scenario})] ===`);
   context.cleanMockData();
-  setReleasingBundle(appPath, true);
+  setReleasingBundle(appPath, platform, true);
   const { entryFile, frameworkArgs } = getCodePushReleaseArgs(appPath, framework);
   try {
-    setReleaseMarker(appPath, releaseVersion);
+    setReleaseMarker(appPath, platform, releaseVersion);
     await runCodePushCommand(appPath, platform, [
       "bundle",
       ...frameworkArgs,
@@ -286,11 +286,11 @@ async function runPublishedTwiceScenario(
       "--skip-bundle", "true",
     ]);
   } finally {
-    clearReleaseMarker(appPath);
-    setReleasingBundle(appPath, false);
+    clearReleaseMarker(appPath, platform);
+    setReleasingBundle(appPath, platform, false);
   }
 
-  assertArtifactStorageLayout(scenario);
+  assertArtifactStorageLayout(scenario, platform);
   assertReleaseOffersPatch(scenario, platform, releaseIdentifier, BINARY_VERSION, releaseVersion);
   assertReleaseOffersNoPatch(scenario, platform, fullOnlyIdentifier, BINARY_VERSION, releaseVersion);
   assertSameReleasedPackage(scenario, platform, releaseIdentifier, fullOnlyIdentifier, releaseVersion);

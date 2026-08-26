@@ -8,7 +8,7 @@ End-to-end tests for `react-native-code-push` using [Maestro](https://github.com
 - **Maestro CLI (iOS)** — `curl -Ls "https://get.maestro.mobile.dev" | bash`
 - **maestro-runner (Android)** — `curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash`
 - **iOS**: Xcode with a booted iOS Simulator
-- **Android**: Android SDK with a running emulator
+- **Android**: Android SDK with a running emulator or a connected device
 - An example app set up under `Examples/` (e.g. `RN0840`)
 
 ## Quick Start
@@ -19,6 +19,9 @@ npm run e2e -- --app RN0840 --platform ios
 
 # Skip build, run test flows only
 npm run e2e -- --app RN0840 --platform ios --maestro-only
+
+# Both platforms at once, on a booted simulator and a connected Android device
+npm run e2e -- --app RN0840 --platform both
 ```
 
 ### Expo Example App
@@ -31,12 +34,35 @@ npm run e2e -- --app Expo55 --framework expo --platform ios
 npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 ```
 
+### Running Both Platforms
+
+`--platform both` runs the two platforms' scenarios side by side out of one checkout. It needs
+a booted iOS Simulator and a running Android emulator or connected device at the same time,
+because each platform drives its own.
+
+Everything a run writes is per platform: the app entry (`App.ios.tsx` / `App.android.tsx`), the
+mock server port (18081 / 18082) and the data it serves, the artifact record, the CLI output
+root under the app's `build/`, and the temp directory each CLI invocation runs in. Nothing is
+serialized between the two pipelines.
+
+Two things stay sequential and up front: the native builds, which share the app directory and
+its `node_modules`, and the one-time watchman reset and library sync.
+
+Both pipelines write to one terminal. The runner's own phase banners and the mock server lines
+carry the platform they belong to; output from the processes they spawn — gradle, xcodebuild,
+maestro — arrives as it is. A failing platform does not cut the other one short: both verdicts
+are reported and the run exits non-zero if either failed.
+
+Running both halves the wall clock at the cost of sharing one machine's CPU between two
+simulators, two bundlers and two Maestro drivers. If the timing-sensitive scenarios start
+flaking under that load, `--exclude-timing-sensitive` and `--retry-count` are the levers.
+
 ## CLI Options
 
 | Option | Required | Description |
 |---|---|---|
 | `--app <name>` | Yes | Example app directory name (e.g. `RN0840`) |
-| `--platform <type>` | Yes | `ios` or `android` |
+| `--platform <type>` | Yes | `ios`, `android`, or `both` to run the two platforms side by side |
 | `--framework <type>` | No | Use `expo` for Expo example apps |
 | `--simulator <name>` | No | iOS simulator name (auto-detects booted simulator, defaults to "iPhone 16") |
 | `--maestro-only` | No | Skip build step, only run test flows |
@@ -48,10 +74,10 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 
 ### Phase 1 — Basic Flows (`flows/`)
 
-1. **Prepare config** — Patches `App.tsx` to point at a local mock server, copies `code-push.config.local.ts` to the app directory.
+1. **Prepare config** — Writes `App.<platform>.tsx` from `App.tsx`, pointed at that platform's local mock server, and copies `code-push.config.local.ts` to the app directory. Metro resolves the platform extension ahead of the plain name, so `App.tsx` itself is never modified and each platform has an entry the other cannot touch.
 2. **Build app** — Builds the example app in Release mode and installs it on the simulator/emulator. The export hooks run inside that build, so the bundle they wrote out is then compared with the bundle inside the built app, and the `binary-patch-base.json` record beside it is checked against the same hash and binary version. The check runs only for an app that applies the hook for the platform being built (`codepush-export.gradle` in its `android/app/build.gradle`, `export-embedded-bundle.sh` as an Xcode build phase) — `RN0840` is the one that does today, and every other app is skipped with a log line. For an app that does apply it, a missing or mismatched export fails the run. A `--maestro-only` run builds nothing of its own, so it too is skipped when it finds no export.
 3. **Prepare bundle** — Creates release history and bundles v1.0.1 using `npx code-push release`.
-4. **Start mock server** — Starts a local HTTP server (port 18081) that serves bundles and release history JSON.
+4. **Start mock server** — Starts a local HTTP server that serves bundles and release history JSON: port 18081 for iOS, 18082 for Android.
 5. **Run test flows** — Uses Maestro on iOS and maestro-runner on Android:
    - `01-app-launch` — Verifies the app launches and UI elements are present.
    - `02-restart-no-crash` — Taps Restart, confirms app doesn't crash.
@@ -114,11 +140,11 @@ e2e/
 ├── config.ts               # Paths, ports, host configuration
 ├── tsconfig.json
 ├── mock-server/
-│   └── server.ts           # Express static file server (port 18081), records every request
+│   └── server.ts           # Express static file server per platform (18081/18082), records every request
 ├── templates/
 │   └── code-push.config.local.ts  # Filesystem-based CodePush config
 ├── helpers/
-│   ├── prepare-config.ts   # Patches App.tsx (host, E2E buttons, archive result probe), copies config
+│   ├── prepare-config.ts   # Writes App.<platform>.tsx (host, E2E buttons, archive result probe), copies config
 │   ├── prepare-bundle.ts   # Runs code-push CLI to create bundles
 │   ├── build-app.ts        # Builds iOS/Android in Release mode
 │   ├── artifact-storage.ts # Asserts where the CLI stored bundles and release histories
@@ -141,8 +167,10 @@ e2e/
 ### Mock Server
 
 Instead of a real CodePush server, tests use a local Express server that serves:
-- **Bundles**: `mock-server/data/bundles/{platform}/{identifier}/full-bundle/{packageHash}` and `mock-server/data/bundles/{platform}/{identifier}/{artifactType}/{targetBinaryVersion}/`
-- **Release history**: `mock-server/data/histories/{platform}/{identifier}/{version}.json`
+- **Bundles**: `mock-server/data/{platform}/bundles/{platform}/{identifier}/full-bundle/{packageHash}` and `mock-server/data/{platform}/bundles/{platform}/{identifier}/{artifactType}/{targetBinaryVersion}/`
+- **Release history**: `mock-server/data/{platform}/histories/{platform}/{identifier}/{version}.json`
+
+Each platform serves a root of its own so a run covering both can empty one platform's data between scenarios without touching the other's.
 
 The `code-push.config.local.ts` template routes all CLI operations (upload, history read/write) to this local filesystem, and the app's `CODEPUSH_HOST` is patched to point at the mock server. It uses the uploader's artifact metadata for the storage key, so its layout does not depend on archive filenames.
 
@@ -152,11 +180,11 @@ When the config template is given `E2E_ARTIFACT_LOG_PATH`, it also records every
 
 ### Release Markers
 
-When creating multiple releases with identical source code (e.g. v1.0.1 and v1.0.2), the bundled JavaScript would produce the same hash, causing CodePush to treat them as the same update. To avoid this, the runner injects `console.log("E2E_MARKER_{version}")` into `App.tsx` before each release, which survives minification and produces unique bundle hashes.
+When creating multiple releases with identical source code (e.g. v1.0.1 and v1.0.2), the bundled JavaScript would produce the same hash, causing CodePush to treat them as the same update. To avoid this, the runner injects `console.log("E2E_MARKER_{version}")` into `App.<platform>.tsx` before each release, which survives minification and produces unique bundle hashes.
 
 ## Troubleshooting
 
 - **Build fails with signing error (iOS)**: The setup script sets `SUPPORTED_PLATFORMS = iphonesimulator` and disables code signing. Make sure the example app was set up with `scripts/setupExampleApp`.
 - **Maestro/maestro-runner can't find the app**: Ensure the simulator/emulator is booted before running. For iOS, the script auto-detects the booted simulator.
 - **Android network error**: Android emulators use `10.0.2.2` to reach the host machine's localhost. This is handled automatically by the config. A phone connected over adb has no such alias, so the runner forwards the mock server port onto the device (`adb reverse`) and points the app at its own localhost instead. Set `E2E_ANDROID_MOCK_SERVER_HOST` to override either default.
-- **Update not applying**: Check that the mock server is running (port 18081) and that `mock-server/data/` contains the expected bundle and history files.
+- **Update not applying**: Check that the mock server is running (18081 for iOS, 18082 for Android) and that `mock-server/data/{platform}/` contains the expected bundle and history files.
