@@ -89,7 +89,7 @@ binary patch로 배포한 릴리스는 **asset diff 아카이브**도 함께 담
 
 **모든 클라이언트가 셋을 다 시도하지는 않습니다.** 쓸 수 있는 asset diff가 없는 클라이언트는 binary patch에서 시작합니다. 앱 바이너리의 번들을 실행 중이거나, 새 릴리스가 diff를 만들지 않은 업데이트를 실행 중인 경우입니다.
 
-**asset diff가 실패해도 항상 binary patch로 넘어가지는 않습니다.** diff가 asset 영역에서 실패했을 때만 넘어갑니다. 설치된 업데이트와 병합하지 못했거나(`asset_merge_failed`), 병합된 내용이 package hash 검증에 실패한 경우(`package_verification_failed`)입니다. 그 밖의 실패는 두 아카이브가 공유하는 bundle patch에서 일어나므로 binary patch도 같은 방식으로 실패합니다. 이때 클라이언트는 곧바로 full 아카이브를 내려받습니다.
+**asset diff가 실패해도 항상 binary patch로 넘어가지는 않습니다.** diff가 asset 영역에서 실패했다면 넘어갑니다. 설치된 업데이트와 병합하지 못했거나(`asset_merge_failed`), 병합된 내용이 package hash 검증에 실패한 경우(`package_verification_failed`)입니다. 서버가 diff의 URL에 400 이상으로 응답했을 때도 넘어갑니다. 두 아카이브는 서로 다른 URL에 있으니, diff를 받지 못했다고 해서 binary patch도 받지 못하리라 단정할 수 없습니다. 그 밖의 실패는 두 아카이브가 byte 단위로 똑같이 담고 있는 bundle patch에서 일어납니다. binary patch도 같은 방식으로 실패하므로 곧바로 full 아카이브를 내려받습니다.
 
 **연결이 실패하면 다운로드가 거기서 멈춥니다.** 다음 아카이브도 같은 네트워크 뒤에 있고 full 아카이브는 셋 중 가장 큽니다. 이어서 시도해 봐야 더 느리게 실패할 뿐이므로, 클라이언트는 연결 오류를 그대로 알립니다. 서버가 응답한 경우는 다릅니다. 한 아카이브의 404는 다음 아카이브를 건너뛸 이유가 되지 않습니다.
 

@@ -124,12 +124,14 @@ There are three exceptions to this order.
 bundle in the app binary, or an update this release was not diffed against - starts at the
 binary patch.
 
-**A failed asset diff does not always reach the binary patch.** It moves on to that archive
-only when the diff failed on its asset side: the merge with the installed update failing
-(`asset_merge_failed`), or the merged contents failing the package hash
-(`package_verification_failed`). Anything else the diff fails on lives in the bundle patch
-both archives carry, so the binary patch would fail there the same way and the client goes
-straight to the full archive.
+**A failed asset diff does not always reach the binary patch.** It does when the diff failed
+on its asset side: the merge with the installed update failing (`asset_merge_failed`), or the
+merged contents failing the package hash (`package_verification_failed`). It also does when
+the server answered the diff's URL with a status of 400 or above. The two archives are at
+URLs of their own, so a diff that could not be fetched is no reason to expect the binary
+patch cannot be either. Anything else the diff fails on lives in the bundle patch both
+archives carry byte for byte. The binary patch would fail there the same way, so the client
+goes straight to the full archive.
 
 **A failed connection stops the download.** The next archive is behind the same network,
 and the full one is the largest of the three, so trying it would only fail again more

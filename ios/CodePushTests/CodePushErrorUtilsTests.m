@@ -43,6 +43,19 @@ static NSError *urlError(NSInteger code)
     XCTAssertFalse([CodePushErrorUtils isNetworkFailure:error]);
 }
 
+- (void)testNamesAnErrorStatusApartFromTheOtherErrorsCodePushRaises
+{
+    NSError *status = [CodePushErrorUtils errorWithMessage:@"Received 404 response from https://cdn.example.test/diff.zip"
+                                            httpStatusCode:404];
+    NSError *other = [CodePushErrorUtils errorWithMessage:@"Received empty response from https://cdn.example.test/diff.zip"];
+
+    XCTAssertTrue([CodePushErrorUtils isHttpStatusError:status]);
+    XCTAssertFalse([CodePushErrorUtils isHttpStatusError:other]);
+    XCTAssertFalse([CodePushErrorUtils isHttpStatusError:[NSError errorWithDomain:NSURLErrorDomain
+                                                                             code:NSURLErrorTimedOut
+                                                                         userInfo:nil]]);
+}
+
 - (void)testDoesNotNameANilErrorAsANetworkFailure
 {
     XCTAssertFalse([CodePushErrorUtils isNetworkFailure:nil]);

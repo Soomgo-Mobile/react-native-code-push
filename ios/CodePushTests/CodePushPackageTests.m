@@ -632,10 +632,14 @@ static NSData *CPTestBytes(NSString *text) {
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 
-- (void)testSkipsThePatchArchiveWhenTheAssetDiffCannotBeDownloaded {
-    // A diff that never arrived left no verdict at all: nothing says the patch archive is
-    // any better off, and the full download is the one that cannot fail - so a client is
-    // never walked through two doomed downloads on its way there.
+- (void)testSkipsThePatchArchiveWhenTheAssetDiffUrlAnswersWithNoStatusAtAll {
+    // A URL that answers with nothing - no archive and no status to read it by - left no
+    // verdict of any kind, and the full download is the one that cannot fail, so a client is
+    // never walked through two doomed downloads on its way there. A server that answers a
+    // status is the other case: that is a verdict on one URL and the patch archive is at
+    // another, so it is tried. The archives here are served as files, which have no status
+    // to answer with, so that case is covered by the Android suite and by
+    // CodePushErrorUtilsTests rather than here.
     [self installPackageWithContents:[self stageInstalledArchiveContents]];
     NSString *updateStaging = [self stageAssetDiffTargetContents];
     NSString *packageHash = CPTestFolderHash(updateStaging);

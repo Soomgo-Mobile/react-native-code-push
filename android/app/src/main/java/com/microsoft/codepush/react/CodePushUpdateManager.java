@@ -180,12 +180,15 @@ public class CodePushUpdateManager {
                 return patchAttempt.result();
             }
 
-            // A diff that failed before its bundle was restored failed in the bundle patch,
-            // which the patch archive carries byte for byte - it would fail the same way,
-            // and trying it would only put a second doomed download in front of the full
-            // one. A failure after the restore is on the asset side, which the patch
-            // archive does not share.
-            patchArchiveWorthTrying = patchArchiveWorthTrying && patchAttempt.currentAttemptRestoredBundle();
+            // The patch archive is worth trying when nothing about how the diff failed
+            // implicates it. A diff that failed after restoring its bundle failed on its
+            // asset side, which the patch archive does not share; a diff the server never
+            // served is a verdict on one URL, and the patch archive is at another. Anything
+            // else failed in the bundle patch both archives carry byte for byte, so the
+            // patch archive would fail the same way and trying it would only put a second
+            // doomed download in front of the full one.
+            patchArchiveWorthTrying = patchArchiveWorthTrying
+                    && (patchAttempt.currentAttemptRestoredBundle() || patchAttempt.currentAttemptWasNotServed());
         }
 
         if (patchArchiveWorthTrying) {
@@ -267,7 +270,7 @@ public class CodePushUpdateManager {
             // running out of it is a failure this has to absorb like any other: by the time
             // it lands here the arrays are unreachable, and the full archive is downloaded
             // to disk in chunks rather than held.
-            patchAttempt.recordFallbackAfterError();
+            patchAttempt.recordFallbackAfterError(e);
             CodePushUtils.log(e);
             CodePushUtils.log("The " + patchAttempt.currentArchive()
                     + " archive could not be applied. Falling back.");

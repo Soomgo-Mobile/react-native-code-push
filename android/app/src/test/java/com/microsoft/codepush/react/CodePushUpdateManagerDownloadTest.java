@@ -359,10 +359,11 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
-    public void skipsThePatchArchiveWhenTheAssetDiffCannotBeDownloaded() throws IOException {
-        // A diff that never arrived left no verdict at all: nothing says the patch archive
-        // is any better off, and the full download is the one that cannot fail - so a
-        // client is never walked through two doomed downloads on its way there.
+    public void triesThePatchArchiveWhenTheServerDoesNotServeTheAssetDiff() throws IOException {
+        // A 404 is a verdict on the URL it was asked of. Diffs are published one per recent
+        // version and are the first thing a retention policy clears out, while the patch
+        // archive at its own URL stays - so nothing about a diff that is gone says the patch
+        // archive is.
         Map<String, byte[]> updateContents = assetDiffTargetContents();
         String updateHash = packageHashOf(updateContents);
         String diffUrl = mServer.urlOf("/missing-diff.zip");
@@ -372,9 +373,29 @@ public class CodePushUpdateManagerDownloadTest {
         JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
                 updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
-        assertEquals(Arrays.asList("/missing-diff.zip", "/full.zip"), mServer.requestedPaths());
-        assertFallbackResult(patchResult, null);
-        assertEquals("asset-diff", patchResult.optString("archive", null));
+        assertEquals("the full archive is not downloaded when the patch archive installs",
+                Arrays.asList("/missing-diff.zip", "/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(2, patchResult.optJSONArray("attempts").length());
+        assertInstalledContents(updateHash, updateContents);
+    }
+
+    @Test
+    public void skipsThePatchArchiveWhenTheAssetDiffFailsInItsBundlePatch() throws IOException {
+        // Both archives carry that patch byte for byte, so an applier that refused it here
+        // would refuse it there - and trying it would put a second doomed download in front
+        // of the full one.
+        Map<String, byte[]> updateContents = assetDiffTargetContents();
+        String updateHash = packageHashOf(updateContents);
+        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH)));
+        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
+        String fullUrl = serve("/full.zip", zipOf(updateContents));
+
+        JSONObject patchResult = updateManager(applierRefusingThePatch()).downloadPackage(
+                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
+
+        assertEquals(Arrays.asList("/diff.zip", "/full.zip"), mServer.requestedPaths());
         assertEquals(1, patchResult.optJSONArray("attempts").length());
         assertInstalledContents(updateHash, updateContents);
     }
@@ -401,23 +422,6 @@ public class CodePushUpdateManagerDownloadTest {
         assertFalse("nothing that never arrived reaches the package folder", mPackageFolder.exists());
     }
 
-    @Test
-    public void stillFallsBackWhenTheServerRefusesTheAssetDiffWithAnErrorStatus() throws IOException {
-        // A server that answered is not a network that failed: the connection worked, so the
-        // archives behind it are worth asking for.
-        Map<String, byte[]> updateContents = assetDiffTargetContents();
-        String updateHash = packageHashOf(updateContents);
-        String diffUrl = mServer.urlOf("/missing-diff.zip");
-        String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
-        String fullUrl = serve("/full.zip", zipOf(updateContents));
-
-        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
-                updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
-
-        assertEquals(Arrays.asList("/missing-diff.zip", "/full.zip"), mServer.requestedPaths());
-        assertInstalledContents(updateHash, updateContents);
-        assertFallbackResult(patchResult, null);
-    }
 
     /** A loopback port that is opened only to be closed, so connecting to it is refused. */
     private static int portNothingListensOn() throws IOException {
@@ -598,6 +602,16 @@ public class CodePushUpdateManagerDownloadTest {
         }, applier);
 
         return new CodePushUpdateManager(mDocumentsDirectory, binaryPatch);
+    }
+
+    /** An applier that refuses the bundle patch, which every archive of a release carries. */
+    private static CodePushBinaryPatch.PatchApplier applierRefusingThePatch() {
+        return new CodePushBinaryPatch.PatchApplier() {
+            @Override
+            public int apply(byte[] base, byte[] patch, String outputPath, long expectedTargetSize) {
+                return RESULT_APPLY_FAILED;
+            }
+        };
     }
 
     private static CodePushBinaryPatch.PatchApplier applierWriting(final byte[] restoredBundle) {

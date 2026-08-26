@@ -116,11 +116,12 @@ static NSString *const UnzippedFolderName = @"unzipped";
 /*
  * Tries the first archive of the queue, and decides what a failure of it means for the
  * rest. A failure after the bundle was restored is on the asset side of the archive, so
- * the next archive - which does not share it - is worth trying. A failure before that
- * point is in the bundle patch every archive carries byte for byte, or is something no
- * verdict exists for, and either way the remaining archives are passed over: they could
- * only fail the same way, and trying them would put more doomed downloads in front of the
- * full one.
+ * the next archive - which does not share it - is worth trying, and so is one the server
+ * never served, which is a verdict on one URL rather than on the archives at the others.
+ * A failure between those is in the bundle patch every archive carries byte for byte, or
+ * is something no verdict exists for, and either way the remaining archives are passed
+ * over: they could only fail the same way, and trying them would put more doomed downloads
+ * in front of the full one.
  *
  * Every verdict on an archive ends with the update installed - by an archive of the queue
  * or by the full download behind it - so no verdict reaches the caller as an error, and the
@@ -144,6 +145,9 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
     // Set once the applier has restored the bundle, which is also what tells a failure
     // that follows apart from one that came before.
     __block NSNumber *applyDurationMs = nil;
+    // Set when the server answered this archive's URL with a status instead of the archive,
+    // which is a verdict on that URL and not on the archives at the others.
+    __block BOOL archiveWasNotServed = NO;
 
     void (^giveUpAttempt)(NSString *failureReason) = ^(NSString *failureReason) {
         [self deleteBinaryPatchFolder];
@@ -152,7 +156,7 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                       applyDurationMs:applyDurationMs
                                      attemptStartTime:attemptStartTime]];
 
-        if (applyDurationMs != nil && [remainingArchives count] > 0) {
+        if ((applyDurationMs != nil || archiveWasNotServed) && [remainingArchives count] > 0) {
             [self tryNextArchive:remainingArchives
                    attemptsSoFar:attempts
            firstAttemptStartTime:firstAttemptStartTime
@@ -214,6 +218,7 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                return;
                            }
 
+                           archiveWasNotServed = [CodePushErrorUtils isHttpStatusError:err];
                            CPLog(@"The %@ archive could not be applied (%@). Falling back.", archive, err.localizedDescription);
                            // An error raised after the bundle was restored is the restored
                            // update failing the checks every update passes before it is

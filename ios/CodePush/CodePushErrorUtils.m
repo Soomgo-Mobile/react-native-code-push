@@ -4,6 +4,13 @@
 
 static NSString *const CodePushErrorDomain = @"CodePushError";
 static const int CodePushErrorCode = -1;
+/*
+ * The status a server answered a download with, on the error raised for it.
+ *
+ * Carried in the user info rather than in the error code, because the code is what JS reads
+ * an error by and every error of this domain has always been -1 there.
+ */
+static NSString *const CodePushHttpStatusCodeKey = @"CodePushHttpStatusCode";
 
 + (NSError *)errorWithMessage:(NSString *)errorMessage
 {
@@ -12,9 +19,26 @@ static const int CodePushErrorCode = -1;
                            userInfo:@{ NSLocalizedDescriptionKey: NSLocalizedString(errorMessage, nil) }];
 }
 
++ (NSError *)errorWithMessage:(NSString *)errorMessage httpStatusCode:(NSInteger)statusCode
+{
+    return [NSError errorWithDomain:CodePushErrorDomain
+                               code:CodePushErrorCode
+                           userInfo:@{ NSLocalizedDescriptionKey: NSLocalizedString(errorMessage, nil),
+                                       CodePushHttpStatusCodeKey: @(statusCode) }];
+}
+
 + (BOOL)isCodePushError:(NSError *)err
 {
     return err != nil && [CodePushErrorDomain isEqualToString:err.domain];
+}
+
+/*
+ * Whether the download failed because the server answered it with a status rather than with
+ * a body to install.
+ */
++ (BOOL)isHttpStatusError:(NSError *)err
+{
+    return [self isCodePushError:err] && err.userInfo[CodePushHttpStatusCodeKey] != nil;
 }
 
 /*

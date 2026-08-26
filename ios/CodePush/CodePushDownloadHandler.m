@@ -54,7 +54,8 @@ failCallback:(void (^)(NSError *err))failCallback {
         if (statusCode >= 400) {
             [self.outputFileStream close];
             [connection cancel];
-            NSError *err = [CodePushErrorUtils errorWithMessage:[NSString stringWithFormat: @"Received %ld response from %@", (long)statusCode, self.downloadUrl]];
+            NSError *err = [CodePushErrorUtils errorWithMessage:[NSString stringWithFormat: @"Received %ld response from %@", (long)statusCode, self.downloadUrl]
+                                                 httpStatusCode:statusCode];
             self.failCallback(err);
             return;
         }
