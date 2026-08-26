@@ -8,6 +8,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.MalformedURLException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -66,6 +67,16 @@ public class CodePushErrorCodeTest {
 
         assertEquals(CodePushErrorCode.NETWORK, CodePushErrorCode.of(wrapped));
         assertTrue(CodePushErrorCode.isNetworkFailure(wrapped));
+    }
+
+    @Test
+    public void namesTheFailuresThatUsedToEscapeTheDownloadUncaught() {
+        // Neither is an `IOException`, so the download's old catch let them past and left
+        // the promise waiting on it unsettled. They are classified like anything else now.
+        assertEquals(CodePushErrorCode.UNKNOWN,
+                CodePushErrorCode.of(new CodePushMalformedDataException("not a url", new MalformedURLException())));
+        assertEquals(CodePushErrorCode.UNKNOWN,
+                CodePushErrorCode.of(new IllegalStateException("File is outside extraction target directory.")));
     }
 
     @Test
