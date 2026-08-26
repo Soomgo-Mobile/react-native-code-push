@@ -1,8 +1,8 @@
 import express from "express";
-import { MOCK_DATA_DIR, MOCK_SERVER_PORT } from "../config";
+import { getMockDataDir, getMockServerPort } from "../config";
 import type { Server } from "http";
 
-let server: Server | null = null;
+type Platform = "ios" | "android";
 
 /** One request the app made to the mock server, in the order it arrived. */
 export interface MockServerRequest {
@@ -11,30 +11,58 @@ export interface MockServerRequest {
   receivedAt: number;
 }
 
-const requestLog: MockServerRequest[] = [];
+interface RunningMockServer {
+  server: Server;
+  requestLog: MockServerRequest[];
+}
 
 /**
- * Every request the server has answered since the log was last cleared.
+ * The server of each platform that is currently running.
+ *
+ * A run covering both platforms serves two ports out of two data directories, and the
+ * assertions over what was downloaded read one platform's requests at a time - so the
+ * request log belongs to the server rather than to the module.
+ */
+const running = new Map<Platform, RunningMockServer>();
+
+function requireRunning(platform: Platform): RunningMockServer {
+  const instance = running.get(platform);
+  if (!instance) {
+    throw new Error(`The ${platform} mock server is not running`);
+  }
+  return instance;
+}
+
+/**
+ * Every request the platform's server has answered since its log was last cleared.
  *
  * The order matters more than the count: an update that is published as both a full and
  * a patch archive installs to the same contents either way, so which archives were asked
  * for, and in which order, is what tells a patch install apart from a fallback to the
  * full archive.
  */
-export function getRequestLog(): MockServerRequest[] {
-  return [...requestLog];
+export function getRequestLog(platform: Platform): MockServerRequest[] {
+  return [...requireRunning(platform).requestLog];
 }
 
-export function clearRequestLog(): void {
-  requestLog.length = 0;
+export function clearRequestLog(platform: Platform): void {
+  requireRunning(platform).requestLog.length = 0;
 }
 
-export function startMockServer(): Promise<Server> {
+export function startMockServer(platform: Platform): Promise<void> {
+  if (running.has(platform)) {
+    throw new Error(`The ${platform} mock server is already running`);
+  }
+
+  const dataDir = getMockDataDir(platform);
+  const port = getMockServerPort(platform);
+  const requestLog: MockServerRequest[] = [];
+
   return new Promise((resolve, reject) => {
     const app = express();
 
     app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
-      console.log(`[mock-server] ${req.method} ${req.url}`);
+      console.log(`[mock-server:${platform}] ${req.method} ${req.url}`);
       requestLog.push({ method: req.method, url: req.url, receivedAt: Date.now() });
       next();
     });
@@ -46,33 +74,34 @@ export function startMockServer(): Promise<Server> {
       res.status(204).end();
     });
 
-    app.use(express.static(MOCK_DATA_DIR));
+    app.use(express.static(dataDir));
 
     app.use((_req: express.Request, res: express.Response) => {
       res.status(404).json({ error: "Not found" });
     });
 
-    const s = app.listen(MOCK_SERVER_PORT, () => {
-      console.log(`Mock server started on port ${MOCK_SERVER_PORT}`);
-      console.log(`Serving files from: ${MOCK_DATA_DIR}`);
-      resolve(s);
+    const server = app.listen(port, () => {
+      console.log(`Mock server for ${platform} started on port ${port}`);
+      console.log(`Serving files from: ${dataDir}`);
+      running.set(platform, { server, requestLog });
+      resolve();
     });
 
-    s.on("error", reject);
-    server = s;
+    server.on("error", reject);
   });
 }
 
-export function stopMockServer(): Promise<void> {
+export function stopMockServer(platform: Platform): Promise<void> {
+  const instance = running.get(platform);
+  if (!instance) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve) => {
-    if (server) {
-      server.close(() => {
-        console.log("Mock server stopped");
-        server = null;
-        resolve();
-      });
-    } else {
+    instance.server.close(() => {
+      console.log(`Mock server for ${platform} stopped`);
+      running.delete(platform);
       resolve();
-    }
+    });
   });
 }

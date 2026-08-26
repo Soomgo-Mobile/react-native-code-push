@@ -109,17 +109,17 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
    */
   const runDiffScenario = (scenario: AssetDiffScenario) =>
     context.withRetry(`run-maestro: asset diff (${scenario.name})`, async () => {
-      console.log(`\n=== [prepare-bundle: asset diff ${scenario.baseVersion} (${scenario.name})] ===`);
+      console.log(`\n=== [${platform}][prepare-bundle: asset diff ${scenario.baseVersion} (${scenario.name})] ===`);
       context.cleanMockData();
       await releaseWithAssets(scenario.baseVersion, true);
-      startRecordingDownloads();
+      startRecordingDownloads(platform);
       await context.runMaestro(installUpdateFlow, { RELEASE_LABEL: scenario.baseVersion });
-      assertDownloadedArchives(`${scenario.name} — base install`, ["binary-patch"]);
-      await assertReportedArchiveResult(`${scenario.name} — base install`, "applied:binary-patch:binary-patch=applied");
+      assertDownloadedArchives(`${scenario.name} — base install`, platform, ["binary-patch"]);
+      await assertReportedArchiveResult(`${scenario.name} — base install`, platform, "applied:binary-patch:binary-patch=applied");
 
-      console.log(`\n=== [prepare-bundle: asset diff ${scenario.updateVersion} (${scenario.name})] ===`);
+      console.log(`\n=== [${platform}][prepare-bundle: asset diff ${scenario.updateVersion} (${scenario.name})] ===`);
       await releaseWithAssets(scenario.updateVersion, false);
-      assertArtifactStorageLayout(scenario.name);
+      assertArtifactStorageLayout(scenario.name, platform);
       assertReleaseOffersPatch(scenario.name, platform, releaseIdentifier, BINARY_VERSION, scenario.updateVersion);
 
       assertReleaseOffersDiff(
@@ -138,13 +138,13 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
 
       scenario.breakDiff?.();
 
-      startRecordingDownloads();
+      startRecordingDownloads(platform);
       await context.runMaestro(updateFromInstalledFlow, {
         RELEASE_LABEL: scenario.updateVersion,
         BASE_RELEASE_LABEL: scenario.baseVersion,
       });
-      assertDownloadedArchives(scenario.name, scenario.expectedDownloads);
-      await assertReportedArchiveResult(scenario.name, scenario.expectedArchiveResult);
+      assertDownloadedArchives(scenario.name, platform, scenario.expectedDownloads);
+      await assertReportedArchiveResult(scenario.name, platform, scenario.expectedArchiveResult);
     });
 
   await runDiffScenario({
@@ -161,10 +161,10 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
   // must be passed over for the patch archive exactly as if it had never been published.
   const binaryClientScenario = "client on the binary passes over the diff and installs the patch";
   await context.withRetry(`run-maestro: asset diff (${binaryClientScenario})`, async () => {
-    startRecordingDownloads();
+    startRecordingDownloads(platform);
     await context.runMaestro(installUpdateFlow, { RELEASE_LABEL: "1.4.2" });
-    assertDownloadedArchives(binaryClientScenario, ["binary-patch"]);
-    await assertReportedArchiveResult(binaryClientScenario, "applied:binary-patch:binary-patch=applied");
+    assertDownloadedArchives(binaryClientScenario, platform, ["binary-patch"]);
+    await assertReportedArchiveResult(binaryClientScenario, platform, "applied:binary-patch:binary-patch=applied");
   });
 
   // The merge completes over the corrupted asset, and what catches it is the package

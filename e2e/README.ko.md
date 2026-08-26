@@ -8,7 +8,7 @@
 - **Maestro CLI (iOS)** — `curl -Ls "https://get.maestro.mobile.dev" | bash`
 - **maestro-runner (Android)** — `curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash`
 - **iOS**: Xcode 및 부팅된 iOS 시뮬레이터
-- **Android**: Android SDK 및 실행 중인 에뮬레이터
+- **Android**: Android SDK 및 실행 중인 에뮬레이터 또는 연결된 기기
 - `Examples/` 디렉토리에 설정된 예제 앱 (예: `RN0840`)
 
 ## 빠른 시작
@@ -19,6 +19,9 @@ npm run e2e -- --app RN0840 --platform ios
 
 # 빌드 생략, 테스트 플로우만 실행
 npm run e2e -- --app RN0840 --platform ios --maestro-only
+
+# 부팅된 시뮬레이터와 연결된 안드로이드 기기에서 두 플랫폼을 동시에 실행
+npm run e2e -- --app RN0840 --platform both
 ```
 
 ### Expo 예제 앱
@@ -31,12 +34,33 @@ npm run e2e -- --app Expo55 --framework expo --platform ios
 npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 ```
 
+### 두 플랫폼 동시 실행
+
+`--platform both`는 하나의 체크아웃에서 두 플랫폼의 시나리오를 나란히 실행합니다. 각 플랫폼이 자기
+디바이스를 구동하므로 부팅된 iOS 시뮬레이터와 실행 중인 안드로이드 에뮬레이터 또는 연결된 기기가
+동시에 필요합니다.
+
+실행이 기록하는 자원은 모두 플랫폼별로 나뉘어 있습니다. 앱 엔트리(`App.ios.tsx`, `App.android.tsx`),
+mock 서버 포트(18081, 18082)와 서빙 데이터, 아티팩트 기록, 앱의 `build/` 아래 CLI 출력 루트, 그리고
+CLI 호출마다 사용하는 임시 디렉터리가 각각 분리됩니다. 두 파이프라인 사이에 직렬화하는 구간은 없습니다.
+
+순차로 남겨 둔 작업은 두 가지입니다. 앱 디렉터리와 `node_modules`를 공유하는 네이티브 빌드, 그리고
+한 번만 수행하는 watchman 초기화와 라이브러리 동기화입니다.
+
+두 파이프라인이 같은 터미널에 출력합니다. 러너의 단계 배너와 mock 서버 로그에는 플랫폼이 붙지만,
+그들이 띄우는 gradle, xcodebuild, maestro의 출력은 그대로 섞여 나옵니다. 한 플랫폼이 실패해도 다른
+플랫폼은 끝까지 실행하며, 두 결과를 모두 보고하고 어느 한쪽이라도 실패하면 0이 아닌 코드로 종료합니다.
+
+동시 실행은 벽시계 시간을 절반 가까이 줄이는 대신 한 머신의 CPU를 시뮬레이터 두 대와 번들러 두 개,
+Maestro 드라이버 두 개가 나눠 씁니다. 이 부하에서 타이밍 민감 시나리오가 흔들리면
+`--exclude-timing-sensitive`와 `--retry-count`로 조절하세요.
+
 ## CLI 옵션
 
 | 옵션 | 필수 | 설명 |
 |---|---|---|
 | `--app <name>` | 예 | 예제 앱 디렉토리 이름 (예: `RN0840`) |
-| `--platform <type>` | 예 | `ios` 또는 `android` |
+| `--platform <type>` | 예 | `ios`, `android`, 또는 두 플랫폼을 나란히 실행하는 `both` |
 | `--framework <type>` | 아니오 | Expo 예제 앱인 경우 `expo` 지정 |
 | `--simulator <name>` | 아니오 | iOS 시뮬레이터 이름 (부팅된 시뮬레이터 자동 감지, 기본값 "iPhone 16") |
 | `--maestro-only` | 아니오 | 빌드 단계 생략, 테스트 플로우만 실행 |
@@ -48,10 +72,10 @@ npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only
 
 ### Phase 1 — 기본 플로우 (`flows/`)
 
-1. **설정 준비** — `App.tsx`를 로컬 mock 서버를 가리키도록 패치하고, `code-push.config.local.ts`를 앱 디렉토리에 복사합니다.
+1. **설정 준비** — `App.tsx`를 읽어 해당 플랫폼의 로컬 mock 서버를 가리키는 `App.<platform>.tsx`를 작성하고, `code-push.config.local.ts`를 앱 디렉토리에 복사합니다. Metro가 플랫폼 확장자를 일반 이름보다 먼저 해석하므로 `App.tsx` 자체는 수정하지 않으며, 두 플랫폼이 서로의 엔트리를 건드리지 않습니다.
 2. **앱 빌드** — 예제 앱을 Release 모드로 빌드하여 시뮬레이터/에뮬레이터에 설치합니다. export 훅이 이 빌드 안에서 실행되므로, 훅이 내보낸 번들을 빌드된 앱 안의 번들과 비교하고 옆에 놓인 `binary-patch-base.json` 기록도 같은 해시와 바이너리 버전인지 확인합니다. 이 검사는 해당 플랫폼의 훅을 적용한 앱에서만 실행합니다(`android/app/build.gradle`의 `codepush-export.gradle`, Xcode 빌드 페이즈의 `export-embedded-bundle.sh`). 지금은 `RN0840`만 적용했고 나머지 앱은 로그를 남기고 건너뜁니다. 훅을 적용한 앱에서 export가 없거나 내용이 어긋나면 실행이 실패합니다. `--maestro-only` 실행은 빌드 산출물이 없으니 export를 찾지 못하면 마찬가지로 건너뜁니다.
 3. **번들 준비** — `npx code-push release`로 릴리스 히스토리를 생성하고 v1.0.1을 번들링합니다.
-4. **Mock 서버 시작** — 번들과 릴리스 히스토리 JSON을 서빙하는 로컬 HTTP 서버(포트 18081)를 시작합니다.
+4. **Mock 서버 시작** — 번들과 릴리스 히스토리 JSON을 서빙하는 로컬 HTTP 서버를 시작합니다. iOS는 포트 18081, 안드로이드는 18082를 사용합니다.
 5. **테스트 플로우 실행** — iOS는 Maestro, Android는 maestro-runner 사용:
    - `01-app-launch` — 앱 실행 및 UI 요소 존재 확인
    - `02-restart-no-crash` — 재시작 탭 후 크래시 없음 확인
@@ -114,11 +138,11 @@ e2e/
 ├── config.ts               # 경로, 포트, 호스트 설정
 ├── tsconfig.json
 ├── mock-server/
-│   └── server.ts           # Express 정적 파일 서버 (포트 18081), 모든 요청 기록
+│   └── server.ts           # 플랫폼별 Express 정적 파일 서버 (18081/18082), 모든 요청 기록
 ├── templates/
 │   └── code-push.config.local.ts  # 파일시스템 기반 CodePush 설정
 ├── helpers/
-│   ├── prepare-config.ts   # App.tsx 패치(호스트, E2E 버튼, archive 결과 프로브), 설정 복사
+│   ├── prepare-config.ts   # App.<platform>.tsx 작성(호스트, E2E 버튼, archive 결과 프로브), 설정 복사
 │   ├── prepare-bundle.ts   # code-push CLI로 번들 생성
 │   ├── build-app.ts        # iOS/Android Release 빌드
 │   ├── artifact-storage.ts # CLI가 번들과 릴리스 히스토리를 저장한 위치 검증
@@ -141,8 +165,10 @@ e2e/
 ### Mock 서버
 
 실제 CodePush 서버 대신, 로컬 Express 서버가 다음을 서빙합니다:
-- **번들**: `mock-server/data/bundles/{platform}/{identifier}/full-bundle/{packageHash}`와 `mock-server/data/bundles/{platform}/{identifier}/{artifactType}/{targetBinaryVersion}/`
-- **릴리스 히스토리**: `mock-server/data/histories/{platform}/{identifier}/{version}.json`
+- **번들**: `mock-server/data/{platform}/bundles/{platform}/{identifier}/full-bundle/{packageHash}`와 `mock-server/data/{platform}/bundles/{platform}/{identifier}/{artifactType}/{targetBinaryVersion}/`
+- **릴리스 히스토리**: `mock-server/data/{platform}/histories/{platform}/{identifier}/{version}.json`
+
+플랫폼마다 서빙 루트를 따로 두어서, 두 플랫폼을 함께 실행하더라도 한쪽이 시나리오 사이에 데이터를 비울 때 다른 쪽 데이터가 함께 지워지지 않습니다.
 
 `code-push.config.local.ts` 템플릿은 모든 CLI 작업(업로드, 히스토리 읽기/쓰기)을 로컬 파일시스템으로 라우팅하며, 앱의 `CODEPUSH_HOST`는 mock 서버를 가리키도록 패치됩니다. 업로더가 전달한 artifact metadata로 스토리지 키를 만들므로 archive 파일명에 의존하지 않습니다.
 
@@ -152,11 +178,11 @@ e2e/
 
 ### 릴리스 마커
 
-동일한 소스 코드로 여러 릴리스(예: v1.0.1과 v1.0.2)를 생성하면 번들 JavaScript의 해시가 동일해져 CodePush가 같은 업데이트로 인식합니다. 이를 방지하기 위해 러너는 각 릴리스 전에 `App.tsx`에 `console.log("E2E_MARKER_{version}")`를 주입합니다. 이 코드는 미니피케이션 후에도 유지되어 고유한 번들 해시를 생성합니다.
+동일한 소스 코드로 여러 릴리스(예: v1.0.1과 v1.0.2)를 생성하면 번들 JavaScript의 해시가 동일해져 CodePush가 같은 업데이트로 인식합니다. 이를 방지하기 위해 러너는 각 릴리스 전에 `App.<platform>.tsx`에 `console.log("E2E_MARKER_{version}")`를 주입합니다. 이 코드는 미니피케이션 후에도 유지되어 고유한 번들 해시를 생성합니다.
 
 ## 문제 해결
 
 - **iOS 빌드 시 서명 오류**: setup 스크립트가 `SUPPORTED_PLATFORMS = iphonesimulator`를 설정하고 코드 서명을 비활성화합니다. `scripts/setupExampleApp`으로 예제 앱이 설정되었는지 확인하세요.
 - **Maestro/maestro-runner가 앱을 찾지 못함**: 실행 전에 시뮬레이터/에뮬레이터가 부팅되어 있는지 확인하세요. iOS의 경우 스크립트가 부팅된 시뮬레이터를 자동 감지합니다.
 - **Android 네트워크 오류**: Android 에뮬레이터는 호스트 머신의 localhost에 접근하기 위해 `10.0.2.2`를 사용합니다. 설정에서 자동으로 처리됩니다. adb로 연결한 실기기에는 이 별칭이 없으므로, 러너가 mock 서버 포트를 기기로 포워딩(`adb reverse`)하고 앱이 기기 자신의 localhost를 보도록 합니다. 두 기본값 모두 `E2E_ANDROID_MOCK_SERVER_HOST`로 덮어쓸 수 있습니다.
-- **업데이트가 적용되지 않음**: Mock 서버가 실행 중인지(포트 18081), `mock-server/data/`에 예상되는 번들과 히스토리 파일이 있는지 확인하세요.
+- **업데이트가 적용되지 않음**: Mock 서버가 실행 중인지(iOS는 18081, 안드로이드는 18082), `mock-server/data/{platform}/`에 예상되는 번들과 히스토리 파일이 있는지 확인하세요.

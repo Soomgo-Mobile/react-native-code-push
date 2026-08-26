@@ -1,8 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { getMockServerHost } from "../config";
+import { getAppEntryPath, getAppSourceEntryPath, getMockServerHost } from "../config";
 
-const BACKUP_SUFFIX = ".e2e-backup";
 const RESUME_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (20s)";
 const SUSPEND_SYNC_BUTTON_TITLE = "Sync ON_NEXT_SUSPEND (20s)";
 const ALERT_SYNC_BUTTON_TITLE = "Sync with updateDialog";
@@ -15,23 +14,28 @@ const DEFAULT_SYNC_BUTTON_PATTERN = /^(\s*)<Button title="Check for updates" onP
 const DEFAULT_SYNC_OPTIONS_PATTERN = /(const handleSync = useCallback\(\(\) => \{\n\s*CodePush\.sync\(\n)(\s*)\{\},/;
 
 export function prepareConfig(appPath: string, platform: "ios" | "android"): void {
-  patchAppTsx(appPath, platform);
+  writePlatformAppEntry(appPath, platform);
   copyLocalConfig(appPath);
 }
 
-export function restoreConfig(appPath: string): void {
-  restoreFile(path.join(appPath, "App.tsx"));
-  const localConfig = path.join(appPath, "code-push.config.local.ts");
-  if (fs.existsSync(localConfig)) {
-    fs.unlinkSync(localConfig);
-  }
+/**
+ * Removes the entry this platform's run wrote.
+ *
+ * The local CLI config is left behind: both platforms are served by the same copy, so it
+ * is removed once the whole run is over rather than by whichever platform finishes first.
+ */
+export function restoreConfig(appPath: string, platform: "ios" | "android"): void {
+  fs.rmSync(getAppEntryPath(appPath, platform), { force: true });
 }
 
-function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
-  const appTsxPath = path.join(appPath, "App.tsx");
-  backupFile(appTsxPath);
+export function removeLocalConfig(appPath: string): void {
+  fs.rmSync(path.join(appPath, "code-push.config.local.ts"), { force: true });
+}
 
-  let content = fs.readFileSync(appTsxPath, "utf8");
+function writePlatformAppEntry(appPath: string, platform: "ios" | "android"): void {
+  const entryPath = getAppEntryPath(appPath, platform);
+
+  let content = fs.readFileSync(getAppSourceEntryPath(appPath), "utf8");
   const host = getMockServerHost(platform);
   content = replaceOrThrow(
     content,
@@ -45,8 +49,10 @@ function patchAppTsx(appPath: string, platform: "ios" | "android"): void {
   );
   content = injectUpdateArchiveResultProbe(content);
   content = injectResumeSyncSupport(content);
-  fs.writeFileSync(appTsxPath, content, "utf8");
-  console.log("App.tsx patched: CODEPUSH_HOST, IS_RELEASING_BUNDLE, E2E sync option buttons");
+  fs.writeFileSync(entryPath, content, "utf8");
+  console.log(
+    `${path.basename(entryPath)} written: CODEPUSH_HOST, IS_RELEASING_BUNDLE, E2E sync option buttons`,
+  );
 }
 
 function copyLocalConfig(appPath: string): void {
@@ -54,19 +60,6 @@ function copyLocalConfig(appPath: string): void {
   const destPath = path.join(appPath, "code-push.config.local.ts");
   fs.copyFileSync(templatePath, destPath);
   console.log("code-push.config.local.ts copied to app directory");
-}
-
-function backupFile(filePath: string): void {
-  const backupPath = filePath + BACKUP_SUFFIX;
-  fs.copyFileSync(filePath, backupPath);
-}
-
-function restoreFile(filePath: string): void {
-  const backupPath = filePath + BACKUP_SUFFIX;
-  if (fs.existsSync(backupPath)) {
-    fs.copyFileSync(backupPath, filePath);
-    fs.unlinkSync(backupPath);
-  }
 }
 
 function replaceOrThrow(

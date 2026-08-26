@@ -185,3 +185,9 @@ drivers
 # Local tool and build outputs
 cpp/binarypatch/host/build/
 .claude/
+
+# E2E files written into the example apps during a run
+Examples/*/App.ios.tsx
+Examples/*/App.android.tsx
+Examples/*/e2e-marker-assets-*/
+Examples/*/code-push.config.local.ts

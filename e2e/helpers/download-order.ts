@@ -17,13 +17,13 @@ import { clearRequestLog, getRequestLog } from "../mock-server/server";
  */
 export type DownloadedArchive = "binary-patch" | "asset-diff" | "full";
 
-export function startRecordingDownloads(): void {
-  clearRequestLog();
+export function startRecordingDownloads(platform: "ios" | "android"): void {
+  clearRequestLog(platform);
 }
 
 /** The update archives the app downloaded, in the order it asked for them. */
-export function getDownloadedArchives(): DownloadedArchive[] {
-  return getRequestLog()
+export function getDownloadedArchives(platform: "ios" | "android"): DownloadedArchive[] {
+  return getRequestLog(platform)
     .filter((request) => request.method === "GET" && request.url.startsWith("/bundles/"))
     .map((request) => {
       if (request.url.includes("/binary-patch/")) return "binary-patch";
@@ -32,8 +32,12 @@ export function getDownloadedArchives(): DownloadedArchive[] {
     });
 }
 
-export function assertDownloadedArchives(scenario: string, expected: DownloadedArchive[]): void {
-  const actual = getDownloadedArchives();
+export function assertDownloadedArchives(
+  scenario: string,
+  platform: "ios" | "android",
+  expected: DownloadedArchive[],
+): void {
+  const actual = getDownloadedArchives(platform);
 
   if (actual.length !== expected.length || actual.some((archive, index) => archive !== expected[index])) {
     throw new Error(
@@ -65,8 +69,8 @@ interface ReportedUpdateArchiveResult {
 }
 
 /** The results the app reported since recording started, in the order it reported them. */
-function getReportedUpdateArchiveResults(): ReportedUpdateArchiveResult[] {
-  return getRequestLog()
+function getReportedUpdateArchiveResults(platform: "ios" | "android"): ReportedUpdateArchiveResult[] {
+  return getRequestLog(platform)
     .filter((request) => request.method === "GET" && request.url.startsWith("/e2e/update-archive-result?"))
     .map((request) => {
       const data = new URLSearchParams(request.url.split("?")[1]).get("data");
@@ -90,11 +94,11 @@ const REPORT_POLL_INTERVAL_MS = 100;
  * other half, the bridge going down before the request is even dispatched, no wait can fix;
  * the timeout below is what says so out loud.
  */
-async function waitForOneReport(scenario: string): Promise<ReportedUpdateArchiveResult> {
+async function waitForOneReport(scenario: string, platform: "ios" | "android"): Promise<ReportedUpdateArchiveResult> {
   const deadline = Date.now() + REPORT_ARRIVAL_TIMEOUT_MS;
 
   for (;;) {
-    const reports = getReportedUpdateArchiveResults();
+    const reports = getReportedUpdateArchiveResults(platform);
     if (reports.length > 1) {
       throw new Error(
         `${scenario}: expected exactly one update archive result report, but the app sent ${reports.length}`,
@@ -140,8 +144,12 @@ function attemptOutcome(attempt: { fallbackReason?: string }, isLast: boolean, s
  * The report is waited for rather than read once, because the app dispatches it and moves
  * straight on to installing: it can still be in flight when the runner first looks.
  */
-export async function assertReportedArchiveResult(scenario: string, expected: string): Promise<void> {
-  const { result } = await waitForOneReport(scenario);
+export async function assertReportedArchiveResult(
+  scenario: string,
+  platform: "ios" | "android",
+  expected: string,
+): Promise<void> {
+  const { result } = await waitForOneReport(scenario, platform);
   const attempts = result.attempts ?? [];
   const actual = [
     result.status,
@@ -163,8 +171,8 @@ export async function assertReportedArchiveResult(scenario: string, expected: st
  * Asserts that no binary patch and no asset diff archive was offered to the app, let alone
  * downloaded - it took the full archive and nothing else.
  */
-export function assertFullArchivesOnly(scenario: string): void {
-  const archives = getDownloadedArchives();
+export function assertFullArchivesOnly(scenario: string, platform: "ios" | "android"): void {
+  const archives = getDownloadedArchives(platform);
 
   if (archives.some((archive) => archive !== "full")) {
     throw new Error(`${scenario}: expected full archives only, but the app downloaded [${archives.join(", ")}]`);
