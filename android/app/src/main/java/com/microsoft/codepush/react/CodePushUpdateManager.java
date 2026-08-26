@@ -296,6 +296,8 @@ public class CodePushUpdateManager {
         try {
             URL downloadUrl = new URL(downloadUrlString);
             connection = (HttpURLConnection) (downloadUrl.openConnection());
+            connection.setConnectTimeout(CodePushConstants.DOWNLOAD_CONNECT_TIMEOUT_IN_MS);
+            connection.setReadTimeout(CodePushConstants.DOWNLOAD_READ_TIMEOUT_IN_MS);
 
             if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
                 downloadUrl.toString().startsWith("https")) {
@@ -507,6 +509,8 @@ public class CodePushUpdateManager {
         try {
             downloadUrl = new URL(remoteBundleUrl);
             connection = (HttpURLConnection) (downloadUrl.openConnection());
+            connection.setConnectTimeout(CodePushConstants.DOWNLOAD_CONNECT_TIMEOUT_IN_MS);
+            connection.setReadTimeout(CodePushConstants.DOWNLOAD_READ_TIMEOUT_IN_MS);
             bin = new BufferedInputStream(connection.getInputStream());
             File downloadFile = new File(getCurrentPackageBundlePath(bundleFileName));
             downloadFile.delete();
