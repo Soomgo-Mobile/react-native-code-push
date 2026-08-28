@@ -15,7 +15,7 @@ import { buildPatchTools, hashBuildScript } from "./buildPatchTools.js";
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const SHIPPED_BUILD_SCRIPT = path.join(REPO_ROOT, "scripts", "binary-patch", "build-hdiffpatch.sh");
 /** Where `jest.globalSetup.ts` built the tools for this run. */
-const INSTALLED_TOOLS_DIR = process.env.HDIFFPATCH_TOOLS_DIR ?? path.join(REPO_ROOT, ".hdiffpatch-tools");
+const INSTALLED_TOOLS_DIR = process.env.HDIFFPATCH_TOOLS_DIR || path.join(REPO_ROOT, ".hdiffpatch-tools");
 
 let workDir: string;
 
@@ -76,6 +76,16 @@ describe("buildPatchTools", () => {
     });
 
     it("succeeds against an install the shipped script already finds complete", () => {
+        // Without an install the shipped script clones and compiles for minutes, and
+        // `spawnSync` holds the worker past any jest timeout. `jest.globalSetup.ts`
+        // provides the install; this says so when it did not.
+        const missing = ["hdiffz", "hpatchz"].filter((tool) => !fs.existsSync(path.join(INSTALLED_TOOLS_DIR, tool)));
+        if (missing.length > 0) {
+            throw new Error(
+                `${missing.join(", ")} not installed in ${INSTALLED_TOOLS_DIR}: jest.globalSetup.ts should have built the tools first`,
+            );
+        }
+
         expect(() =>
             buildPatchTools({ buildScriptPath: SHIPPED_BUILD_SCRIPT, toolsDir: INSTALLED_TOOLS_DIR, force: false }),
         ).not.toThrow();
