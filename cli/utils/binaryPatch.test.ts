@@ -101,7 +101,7 @@ describe("generatePatch/applyPatch", () => {
         const previous = process.env.HDIFFPATCH_TOOLS_DIR;
         process.env.HDIFFPATCH_TOOLS_DIR = workPath("no-such-dir");
         try {
-            expect(() => resolveBinaryPatchTool("hdiffz")).toThrow(/build-hdiffpatch\.sh/);
+            expect(() => resolveBinaryPatchTool("hdiffz")).toThrow(/npx code-push build-patch-tools/);
         } finally {
             if (previous === undefined) {
                 delete process.env.HDIFFPATCH_TOOLS_DIR;
