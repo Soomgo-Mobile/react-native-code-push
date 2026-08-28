@@ -34,6 +34,11 @@ import "./commands/showHistoryCommand/index.js";
  */
 import "./commands/initCommand/index.js";
 
+/**
+ * npx code-push build-patch-tools
+ */
+import "./commands/buildPatchToolsCommand/index.js";
+
 shell.set("-e");
 shell.set("+v");
 

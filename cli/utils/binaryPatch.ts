@@ -37,8 +37,8 @@ export type BinaryPatchTool = 'hdiffz' | 'hpatchz';
 const HDIFFZ_OPTIONS = ['-f', '-m-6', '-c-zstd-21-24'];
 const HPATCHZ_OPTIONS = ['-f', '-m'];
 
-const TOOLS_DIR_ENV_NAME = 'HDIFFPATCH_TOOLS_DIR';
-const TOOLS_DIR_NAME = '.hdiffpatch-tools';
+export const TOOLS_DIR_ENV_NAME = 'HDIFFPATCH_TOOLS_DIR';
+export const TOOLS_DIR_NAME = '.hdiffpatch-tools';
 const BUILD_SCRIPT_PATH = 'scripts/binary-patch/build-hdiffpatch.sh';
 
 /**
