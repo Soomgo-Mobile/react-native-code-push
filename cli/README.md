@@ -229,6 +229,7 @@ npx code-push build-patch-tools [options]
 |--------|-------------|---------|
 | `--tools-dir <path>` | Directory to install the tools into | `HDIFFPATCH_TOOLS_DIR` if set, else `.hdiffpatch-tools` in the working directory |
 | `--force` | Rebuild even when the tools are already installed | `false` |
+| `--print-hash` | Print a hash of the build script instead of building. See below | `false` |
 
 The tools are built from pinned upstream sources rather than installed as a package
 dependency, so the build needs `git`, a C/C++ toolchain (`make`, `cc`, `c++`) and network
@@ -242,12 +243,22 @@ parent directories; add `.hdiffpatch-tools/` to the project's `.gitignore`. Sett
 a CI image that builds the tools ahead of time, or a shared install outside the project, is
 used.
 
+A CI cache of the install directory needs a key that changes when the build would produce
+different tools. `--print-hash` prints one: a SHA-256 of the build script, which pins the
+sources and the build flags, so it changes with the version of this package that changes
+them and stays the same across the versions that do not. Write it to a file the CI's
+checksum can read, and combine it with the machine architecture, which the script knows
+nothing about.
+
 ```bash
 # Build into a shared location a CI image reuses
 npx code-push build-patch-tools --tools-dir /opt/hdiffpatch-tools
 
 # Rebuild, for a newly pinned HDiffPatch or a broken install
 npx code-push build-patch-tools --force
+
+# Key a CI cache of .hdiffpatch-tools by what the build would produce
+npx code-push build-patch-tools --print-hash > .hdiffpatch-tools.hash
 ```
 
 ---

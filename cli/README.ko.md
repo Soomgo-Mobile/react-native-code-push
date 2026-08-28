@@ -225,6 +225,7 @@ npx code-push build-patch-tools [options]
 |------|------|--------|
 | `--tools-dir <path>` | 도구를 설치할 디렉토리 | `HDIFFPATCH_TOOLS_DIR`가 설정돼 있으면 그 값, 아니면 작업 디렉토리의 `.hdiffpatch-tools` |
 | `--force` | 도구가 이미 설치돼 있어도 다시 빌드 | `false` |
+| `--print-hash` | 빌드하지 않고 빌드 스크립트의 해시만 출력. 아래 설명 참고 | `false` |
 
 도구는 패키지 의존성으로 설치되지 않고 고정된 upstream 소스에서 빌드되므로, `git`, C/C++
 툴체인(`make`, `cc`, `c++`), 네트워크 연결이 필요합니다. 머신마다 한 번만 실행하면 됩니다.
@@ -237,6 +238,12 @@ npx code-push build-patch-tools [options]
 설치와 탐색이 모두 그 디렉토리로 옮겨갑니다. 미리 빌드해 둔 CI 이미지나 프로젝트 밖의 공용
 설치를 사용할 때 이 방법을 씁니다.
 
+설치 디렉토리를 CI 캐시에 넣으려면 빌드 결과가 달라질 때 함께 바뀌는 키가 필요합니다.
+`--print-hash`가 그 값을 출력합니다. 빌드 스크립트의 SHA-256인데, 스크립트가 소스 버전과 빌드
+플래그를 고정하고 있어서 그것을 바꾼 패키지 버전에서만 값이 달라지고 나머지 버전에서는 같게
+유지됩니다. CI의 checksum이 읽을 수 있는 파일에 써 두고, 스크립트가 알지 못하는 머신
+아키텍처와 함께 키를 구성하세요.
+
 **예시:**
 
 ```bash
@@ -245,6 +252,9 @@ npx code-push build-patch-tools --tools-dir /opt/hdiffpatch-tools
 
 # 고정된 HDiffPatch 버전이 바뀌었거나 설치가 깨졌을 때 다시 빌드
 npx code-push build-patch-tools --force
+
+# .hdiffpatch-tools를 CI 캐시에 넣을 때 쓸 키를 파일로 남김
+npx code-push build-patch-tools --print-hash > .hdiffpatch-tools.hash
 ```
 
 ---
