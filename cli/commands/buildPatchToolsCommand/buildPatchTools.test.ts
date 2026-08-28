@@ -2,7 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import { buildPatchTools } from "./buildPatchTools.js";
+import { buildPatchTools, hashBuildScript } from "./buildPatchTools.js";
 
 /**
  * The command is a thin wrapper around the build script this package ships. What it has
@@ -79,5 +79,30 @@ describe("buildPatchTools", () => {
         expect(() =>
             buildPatchTools({ buildScriptPath: SHIPPED_BUILD_SCRIPT, toolsDir: INSTALLED_TOOLS_DIR, force: false }),
         ).not.toThrow();
+    });
+});
+
+/**
+ * A CI cache of the installed tools is keyed by this hash, so it has to stay the same for as
+ * long as the script would build the same tools, and change as soon as it would not.
+ */
+describe("hashBuildScript", () => {
+    it("hashes two scripts with the same contents to the same hex digest", () => {
+        const first = path.join(workDir, "first.sh");
+        const second = path.join(workDir, "second.sh");
+        fs.writeFileSync(first, "#!/bin/sh\nHDIFFPATCH_TAG=v5.1.3\n");
+        fs.writeFileSync(second, "#!/bin/sh\nHDIFFPATCH_TAG=v5.1.3\n");
+
+        expect(hashBuildScript(first)).toBe(hashBuildScript(second));
+        expect(hashBuildScript(first)).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("hashes a script whose pinned version changed to a different value", () => {
+        const before = path.join(workDir, "before.sh");
+        const after = path.join(workDir, "after.sh");
+        fs.writeFileSync(before, "#!/bin/sh\nHDIFFPATCH_TAG=v5.1.3\n");
+        fs.writeFileSync(after, "#!/bin/sh\nHDIFFPATCH_TAG=v5.1.4\n");
+
+        expect(hashBuildScript(after)).not.toBe(hashBuildScript(before));
     });
 });

@@ -1,4 +1,6 @@
 import { spawnSync } from "child_process";
+import crypto from "crypto";
+import fs from "fs";
 import path from "path";
 import { TOOLS_DIR_ENV_NAME } from "../../utils/binaryPatch.js";
 
@@ -32,4 +34,13 @@ export function buildPatchTools({ buildScriptPath, toolsDir, force }: BuildPatch
         const reason = result.status === null ? `signal ${result.signal}` : `exit code ${result.status}`;
         throw new Error(`${path.basename(buildScriptPath)} failed with ${reason}`);
     }
+}
+
+/**
+ * SHA-256 of the build script's bytes, for keying a CI cache of the installed tools. The
+ * script pins the sources and the build flags, so it changes whenever the tools it would
+ * build do.
+ */
+export function hashBuildScript(buildScriptPath: string): string {
+    return crypto.createHash('sha256').update(fs.readFileSync(buildScriptPath)).digest('hex');
 }
