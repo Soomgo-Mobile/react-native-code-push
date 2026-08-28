@@ -245,10 +245,10 @@ used.
 
 A CI cache of the install directory needs a key that changes when the build would produce
 different tools. `--print-hash` prints one: a SHA-256 of the build script, which pins the
-sources and the build flags, so it changes with the version of this package that changes
-them and stays the same across the versions that do not. Write it to a file the CI's
-checksum can read, and combine it with the machine architecture, which the script knows
-nothing about.
+sources and the build flags. It changes whenever the script changes, comments included, and
+stays the same across versions of this package that ship the same script. Write it to a
+file the CI's checksum can read, and combine it with the machine architecture, which the
+script knows nothing about.
 
 ```bash
 # Build into a shared location a CI image reuses
