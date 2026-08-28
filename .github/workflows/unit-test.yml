@@ -28,3 +28,10 @@ jobs:
 
       - name: Run Jest
         run: npm run jest -- --watchman=false
+
+      # jest runs babel in CJS mode and cannot load the modules that use `import.meta`, so
+      # the compiled CLI is started once here to prove it resolves its own files.
+      - name: Build and run the compiled CLI
+        run: |
+          npm run build:cli
+          node bin/code-push.js build-patch-tools --print-hash > /dev/null
