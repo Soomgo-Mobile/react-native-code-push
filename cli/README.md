@@ -136,28 +136,15 @@ them with nothing to add.
 
 #### Prerequisites: building the patch generator
 
-Producing a patch needs HDiffPatch's `hdiffz`, which is not installed as
-a package dependency. Build it once per machine with the script this package ships:
+Producing a patch needs HDiffPatch's `hdiffz`, which is not installed as a package
+dependency. Build it once per machine with [`build-patch-tools`](#build-patch-tools):
 
 ```bash
-./node_modules/@bravemobile/react-native-code-push/scripts/binary-patch/build-hdiffpatch.sh
-```
-
-The script clones the pinned upstream sources and compiles them, so it needs `git`, a C/C++
-toolchain (`make`, `cc`, `c++`) and network access. It does nothing when the tools are
-already in place; `--force` rebuilds them. It installs `hdiffz` and `hpatchz` into a
-`.hdiffpatch-tools/` directory at the root of the package it lives in, and the CLI looks for
-a `.hdiffpatch-tools/` directory in the working directory and every directory above it.
-Under `node_modules` that install sits below the project rather than above it, so point
-`HDIFFPATCH_TOOLS_DIR` at the directory holding the two executables - which is also how a CI
-image that builds them ahead of time, or a shared install outside the project, is used:
-
-```bash
-export HDIFFPATCH_TOOLS_DIR="$PWD/node_modules/@bravemobile/react-native-code-push/.hdiffpatch-tools"
+npx code-push build-patch-tools
 ```
 
 Only releases that pass `--binary-bundle-path` need the tools, and one that cannot find them
-fails with the build command in the message before anything is uploaded.
+fails with that command in the message before anything is uploaded.
 
 #### Oversized patches
 
@@ -225,6 +212,53 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/mai
 
 # Also publish asset diff archives against the 5 most recent releases (needs `bundleDownloader`)
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-base-count 5
+```
+
+---
+
+### `build-patch-tools`
+
+Builds `hdiffz` and `hpatchz`, the HDiffPatch tools that `release --binary-bundle-path`
+generates and verifies binary patches with, and installs them where `release` looks for them.
+
+```bash
+npx code-push build-patch-tools [options]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--tools-dir <path>` | Directory to install the tools into | `HDIFFPATCH_TOOLS_DIR` if set, else `.hdiffpatch-tools` in the working directory |
+| `--force` | Rebuild even when the tools are already installed | `false` |
+| `--print-hash` | Print a hash of the build script instead of building. See below | `false` |
+
+The tools are built from pinned upstream sources rather than installed as a package
+dependency, so the build needs `git`, a C/C++ toolchain (`make`, `cc`, `c++`) and network
+access. It runs once per machine: the command does nothing when both tools are already in
+the install directory. It does not check which version they are, so after upgrading this
+package to one that pins a different HDiffPatch, rebuild with `--force`.
+
+The default install directory is the first place `release` looks, before it walks up the
+parent directories; add `.hdiffpatch-tools/` to the project's `.gitignore`. Setting
+`HDIFFPATCH_TOOLS_DIR` moves both the install and the lookup to that directory, which is how
+a CI image that builds the tools ahead of time, or a shared install outside the project, is
+used.
+
+A CI cache of the install directory needs a key that changes when the build would produce
+different tools. `--print-hash` prints one: a SHA-256 of the build script, which pins the
+sources and the build flags. It changes whenever the script changes, comments included, and
+stays the same across versions of this package that ship the same script. Write it to a
+file the CI's checksum can read, and combine it with the machine architecture, which the
+script knows nothing about.
+
+```bash
+# Build into a shared location a CI image reuses
+npx code-push build-patch-tools --tools-dir /opt/hdiffpatch-tools
+
+# Rebuild, for a newly pinned HDiffPatch or a broken install
+npx code-push build-patch-tools --force
+
+# Key a CI cache of .hdiffpatch-tools by what the build would produce
+npx code-push build-patch-tools --print-hash > .hdiffpatch-tools.hash
 ```
 
 ---

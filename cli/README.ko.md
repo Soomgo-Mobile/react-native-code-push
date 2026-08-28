@@ -137,26 +137,14 @@ CMake가 필요하지만 React Native 프로젝트라면 대개 이미 갖추고
 #### 사전 준비: patch 생성 도구 빌드
 
 patch 생성에는 HDiffPatch의 `hdiffz`가 필요합니다. 패키지 의존성으로 설치되지
-않으므로, 이 패키지가 함께 배포하는 스크립트로 머신마다 한 번 빌드합니다.
+않으므로, [`build-patch-tools`](#build-patch-tools)로 머신마다 한 번 빌드합니다.
 
 ```bash
-./node_modules/@bravemobile/react-native-code-push/scripts/binary-patch/build-hdiffpatch.sh
-```
-
-스크립트는 고정된 upstream 소스를 clone해서 컴파일하므로 `git`, C/C++ 툴체인(`make`, `cc`,
-`c++`), 네트워크 연결이 필요합니다. 이미 빌드되어 있으면 아무 일도 하지 않고, `--force`를
-주면 다시 빌드합니다. `hdiffz`와 `hpatchz`는 스크립트가 속한 패키지 루트의
-`.hdiffpatch-tools/` 디렉토리에 설치되며, CLI는 작업 디렉토리와 그 상위 디렉토리들에서
-`.hdiffpatch-tools/` 디렉토리를 찾습니다. `node_modules` 안의 설치 위치는 프로젝트보다 상위가
-아니라 하위이므로, 두 실행 파일이 있는 디렉토리를 `HDIFFPATCH_TOOLS_DIR`로 지정하세요. 미리
-빌드해 둔 CI 이미지나 프로젝트 밖의 공용 설치를 사용할 때도 같은 방법을 씁니다.
-
-```bash
-export HDIFFPATCH_TOOLS_DIR="$PWD/node_modules/@bravemobile/react-native-code-push/.hdiffpatch-tools"
+npx code-push build-patch-tools
 ```
 
 도구가 필요한 것은 `--binary-bundle-path`를 사용하는 릴리스뿐이며, 도구를 찾지 못하면
-업로드를 시작하기 전에 빌드 명령을 안내하는 메시지와 함께 실패합니다.
+업로드를 시작하기 전에 이 명령을 안내하는 메시지와 함께 실패합니다.
 
 #### patch가 full 번들보다 작지 않을 때
 
@@ -220,6 +208,53 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/mai
 
 # 최근 릴리스 5개를 base로 삼아 asset diff archive까지 배포 (`bundleDownloader` 필요)
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-base-count 5
+```
+
+---
+
+### `build-patch-tools`
+
+`release --binary-bundle-path`가 binary patch를 생성하고 검증할 때 쓰는 HDiffPatch 도구
+`hdiffz`와 `hpatchz`를 소스에서 빌드해, `release`가 찾는 위치에 설치합니다.
+
+```bash
+npx code-push build-patch-tools [options]
+```
+
+| 옵션 | 설명 | 기본값 |
+|------|------|--------|
+| `--tools-dir <path>` | 도구를 설치할 디렉토리 | `HDIFFPATCH_TOOLS_DIR`가 설정돼 있으면 그 값, 아니면 작업 디렉토리의 `.hdiffpatch-tools` |
+| `--force` | 도구가 이미 설치돼 있어도 다시 빌드 | `false` |
+| `--print-hash` | 빌드하지 않고 빌드 스크립트의 해시만 출력. 아래 설명 참고 | `false` |
+
+도구는 패키지 의존성으로 설치되지 않고 고정된 upstream 소스에서 빌드되므로, `git`, C/C++
+툴체인(`make`, `cc`, `c++`), 네트워크 연결이 필요합니다. 머신마다 한 번만 실행하면 됩니다.
+설치 디렉토리에 두 도구가 이미 있으면 아무 일도 하지 않습니다. 설치된 도구의 버전은 확인하지
+않으므로, 이 패키지를 다른 HDiffPatch 버전을 고정한 버전으로 올렸다면 `--force`로 다시
+빌드하세요.
+
+기본 설치 디렉토리는 `release`가 상위 디렉토리로 올라가기 전에 가장 먼저 찾아보는 곳입니다.
+프로젝트의 `.gitignore`에 `.hdiffpatch-tools/`를 추가하세요. `HDIFFPATCH_TOOLS_DIR`를 설정하면
+설치와 탐색이 모두 그 디렉토리로 옮겨갑니다. 미리 빌드해 둔 CI 이미지나 프로젝트 밖의 공용
+설치를 사용할 때 이 방법을 씁니다.
+
+설치 디렉토리를 CI 캐시에 넣으려면 빌드 결과가 달라질 때 함께 바뀌는 키가 필요합니다.
+`--print-hash`가 그 값을 출력합니다. 소스 버전과 빌드 플래그를 고정하고 있는 빌드 스크립트의
+SHA-256입니다. 스크립트가 바뀌면 주석만 바뀌어도 값이 달라지고, 같은 스크립트를 담은 패키지
+버전 사이에서는 같게 유지됩니다. CI의 checksum이 읽을 수 있는 파일에 써 두고, 스크립트가 알지
+못하는 머신 아키텍처와 함께 키를 구성하세요.
+
+**예시:**
+
+```bash
+# CI 이미지가 재사용하는 공용 위치에 빌드
+npx code-push build-patch-tools --tools-dir /opt/hdiffpatch-tools
+
+# 고정된 HDiffPatch 버전이 바뀌었거나 설치가 깨졌을 때 다시 빌드
+npx code-push build-patch-tools --force
+
+# .hdiffpatch-tools를 CI 캐시에 넣을 때 쓸 키를 파일로 남김
+npx code-push build-patch-tools --print-hash > .hdiffpatch-tools.hash
 ```
 
 ---

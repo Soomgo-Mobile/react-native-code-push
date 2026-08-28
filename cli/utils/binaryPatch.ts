@@ -37,15 +37,18 @@ export type BinaryPatchTool = 'hdiffz' | 'hpatchz';
 const HDIFFZ_OPTIONS = ['-f', '-m-6', '-c-zstd-21-24'];
 const HPATCHZ_OPTIONS = ['-f', '-m'];
 
-const TOOLS_DIR_ENV_NAME = 'HDIFFPATCH_TOOLS_DIR';
-const TOOLS_DIR_NAME = '.hdiffpatch-tools';
-const BUILD_SCRIPT_PATH = 'scripts/binary-patch/build-hdiffpatch.sh';
+export const TOOLS_DIR_ENV_NAME = 'HDIFFPATCH_TOOLS_DIR';
+export const TOOLS_DIR_NAME = '.hdiffpatch-tools';
+const BUILD_COMMAND = 'npx code-push build-patch-tools';
 
 /**
  * Finds the hdiffz/hpatchz executable, looking at `HDIFFPATCH_TOOLS_DIR` first and
  * then at a `.hdiffpatch-tools` directory in the working directory or any directory
  * above it. The tools are built from source rather than installed as a package
  * dependency, so the error explains how to get them.
+ *
+ * `build-patch-tools` (`cli/commands/buildPatchToolsCommand/index.ts`) installs into the
+ * first place this looks; a change to the lookup order has to be mirrored there.
  */
 export function resolveBinaryPatchTool(tool: BinaryPatchTool): string {
     const configuredDir = process.env[TOOLS_DIR_ENV_NAME];
@@ -56,7 +59,7 @@ export function resolveBinaryPatchTool(tool: BinaryPatchTool): string {
         }
         throw new Error(
             `${TOOLS_DIR_ENV_NAME} is set to '${configuredDir}' but it does not contain '${tool}'. ` +
-                `Build the tools with '${BUILD_SCRIPT_PATH}'.`,
+                `Build the tools with '${BUILD_COMMAND}'.`,
         );
     }
 
@@ -75,7 +78,7 @@ export function resolveBinaryPatchTool(tool: BinaryPatchTool): string {
 
     throw new Error(
         `'${tool}' not found in any '${TOOLS_DIR_NAME}' directory at or above '${process.cwd()}'. ` +
-            `Build it with '${BUILD_SCRIPT_PATH}', or set ${TOOLS_DIR_ENV_NAME} to a directory that contains it.`,
+            `Build it with '${BUILD_COMMAND}', or set ${TOOLS_DIR_ENV_NAME} to a directory that contains it.`,
     );
 }
 
