@@ -46,6 +46,9 @@ const BUILD_COMMAND = 'npx code-push build-patch-tools';
  * then at a `.hdiffpatch-tools` directory in the working directory or any directory
  * above it. The tools are built from source rather than installed as a package
  * dependency, so the error explains how to get them.
+ *
+ * `build-patch-tools` (`cli/commands/buildPatchToolsCommand/index.ts`) installs into the
+ * first place this looks; a change to the lookup order has to be mirrored there.
  */
 export function resolveBinaryPatchTool(tool: BinaryPatchTool): string {
     const configuredDir = process.env[TOOLS_DIR_ENV_NAME];
