@@ -2,6 +2,7 @@ import { Alert, AppState, Platform } from "react-native";
 import log from "./logging";
 import hoistStatics from 'hoist-non-react-statics';
 import { SemverVersioning } from './versioning/SemverVersioning'
+import invokeTelemetryCallback from './invokeTelemetryCallback';
 
 const NativeCodePushModule = require("./native/NativeCodePush");
 let NativeCodePush = NativeCodePushModule.getNativeCodePush?.() ?? NativeCodePushModule.default;
@@ -83,7 +84,7 @@ async function decideLatestReleaseIsInRollout(versioning, clientId, onRolloutSki
 
   if (!inRollout) {
     log(`Skipping update due to rollout. Bucket ${bucket} is not smaller than rollout range ${latestReleaseInfo.rollout}.`);
-    onRolloutSkipped?.(latestVersion);
+    invokeTelemetryCallback('onRolloutSkipped', onRolloutSkipped, latestVersion);
   }
 
   return inRollout;
@@ -378,11 +379,11 @@ async function tryReportStatus(statusReport, retryOnAppResume) {
       const label = statusReport.package.label;
       if (statusReport.status === "DeploymentSucceeded") {
         log(`Reporting CodePush update success (${label})`);
-        sharedCodePushOptions?.onUpdateSuccess?.(label);
+        invokeTelemetryCallback('onUpdateSuccess', sharedCodePushOptions?.onUpdateSuccess, label);
       } else {
         log(`Reporting CodePush update rollback (${label})`);
         await nativeCodePush.setLatestRollbackInfo(statusReport.package.packageHash);
-        sharedCodePushOptions?.onUpdateRollback?.(label);
+        invokeTelemetryCallback('onUpdateRollback', sharedCodePushOptions?.onUpdateRollback, label);
       }
     }
 
@@ -565,20 +566,8 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     ...options,
   };
 
-  /*
-   * A callback an app registered to observe how the update archives went must not be able
-   * to cost it an update, so it is isolated the way the other sync callbacks are: whatever
-   * it throws is logged and the install carries on. An app that registered none leaves the
-   * download exactly as it was before this option existed.
-   */
   const onUpdateArchiveResult = typeof syncOptions.onUpdateArchiveResult === "function"
-    ? (label, result) => {
-      try {
-        syncOptions.onUpdateArchiveResult(label, result);
-      } catch (error) {
-        log(`An error has occurred : ${error.stack}`);
-      }
-    }
+    ? (label, result) => invokeTelemetryCallback('onUpdateArchiveResult', syncOptions.onUpdateArchiveResult, label, result)
     : null;
 
   syncStatusChangeCallback = typeof syncStatusChangeCallback === "function"
@@ -630,14 +619,14 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
 
     const doDownloadAndInstall = async () => {
       syncStatusChangeCallback(CodePush.SyncStatus.DOWNLOADING_PACKAGE);
-      sharedCodePushOptions.onDownloadStart?.(remotePackageLabel);
+      invokeTelemetryCallback('onDownloadStart', sharedCodePushOptions.onDownloadStart, remotePackageLabel);
 
       const localPackage = await remotePackage.download(
         downloadProgressCallback,
         onUpdateArchiveResult && ((result) => onUpdateArchiveResult(remotePackageLabel, result)),
       );
 
-      sharedCodePushOptions.onDownloadSuccess?.(remotePackageLabel);
+      invokeTelemetryCallback('onDownloadSuccess', sharedCodePushOptions.onDownloadSuccess, remotePackageLabel);
 
       // Determine the correct install mode based on whether the update is mandatory or not.
       resolvedInstallMode = localPackage.isMandatory ? syncOptions.mandatoryInstallMode : syncOptions.installMode;
@@ -721,7 +710,7 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     }
   } catch (error) {
     syncStatusChangeCallback(CodePush.SyncStatus.UNKNOWN_ERROR);
-    sharedCodePushOptions?.onSyncError?.(remotePackageLabel ?? 'unknown', error);
+    invokeTelemetryCallback('onSyncError', sharedCodePushOptions?.onSyncError, remotePackageLabel ?? 'unknown', error);
     log(error.message);
     throw error;
   }
@@ -752,26 +741,26 @@ let CodePush;
  *   updateChecker: updateChecker | undefined,
  *   setUpdateChecker(updateCheckerFunction: updateChecker | undefined): void,
  *
- *   onUpdateSuccess: (label: string) => void | undefined,
- *   setOnUpdateSuccess(onUpdateSuccessFunction: (label: string) => void | undefined): void,
+ *   onUpdateSuccess: (label: string) => void | Promise<void> | undefined,
+ *   setOnUpdateSuccess(onUpdateSuccessFunction: (label: string) => void | Promise<void> | undefined): void,
  *
- *   onUpdateRollback: (label: string) => void | undefined,
- *   setOnUpdateRollback(onUpdateRollbackFunction: (label: string) => void | undefined): void,
+ *   onUpdateRollback: (label: string) => void | Promise<void> | undefined,
+ *   setOnUpdateRollback(onUpdateRollbackFunction: (label: string) => void | Promise<void> | undefined): void,
  *
- *   onDownloadStart: (label: string) => void | undefined,
- *   setOnDownloadStart(onDownloadStartFunction: (label: string) => void | undefined): void,
+ *   onDownloadStart: (label: string) => void | Promise<void> | undefined,
+ *   setOnDownloadStart(onDownloadStartFunction: (label: string) => void | Promise<void> | undefined): void,
  *
- *   onDownloadSuccess: (label: string) => void | undefined,
- *   setOnDownloadSuccess(onDownloadSuccessFunction: (label: string) => void | undefined): void,
+ *   onDownloadSuccess: (label: string) => void | Promise<void> | undefined,
+ *   setOnDownloadSuccess(onDownloadSuccessFunction: (label: string) => void | Promise<void> | undefined): void,
  *
- *   onSyncError: (label: string, error: Error) => void | undefined,
- *   setOnSyncError(onSyncErrorFunction: (label: string, error: Error) => void | undefined): void,
+ *   onSyncError: (label: string, error: Error) => void | Promise<void> | undefined,
+ *   setOnSyncError(onSyncErrorFunction: (label: string, error: Error) => void | Promise<void> | undefined): void,
  *
- *   onRolloutSkipped: (label: string, error: Error) => void | undefined,
- *   setOnRolloutSkipped(onRolloutSkippedFunction: (label: string, error: Error) => void | undefined): void,
+ *   onRolloutSkipped: (label: string, error: Error) => void | Promise<void> | undefined,
+ *   setOnRolloutSkipped(onRolloutSkippedFunction: (label: string, error: Error) => void | Promise<void> | undefined): void,
  *
- *   onUpdateArchiveResult: (label: string, result: object) => void | undefined,
- *   setOnUpdateArchiveResult(onUpdateArchiveResultFunction: (label: string, result: object) => void | undefined): void,
+ *   onUpdateArchiveResult: (label: string, result: object) => void | Promise<void> | undefined,
+ *   setOnUpdateArchiveResult(onUpdateArchiveResultFunction: (label: string, result: object) => void | Promise<void> | undefined): void,
  * }}
  */
 const sharedCodePushOptions = {

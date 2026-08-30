@@ -64,7 +64,7 @@ function diffRelease() {
  *        which only a download that had an archive to try comes back with.
  * @param installedPackage the CodePush update the app is running, if any.
  */
-function createNativeBridge({ updateArchiveResult, installedPackage } = {}) {
+function createNativeBridge({ updateArchiveResult, installedPackage, statusReport } = {}) {
   return {
     addDownloadProgressListener: jest.fn(() => ({ remove: jest.fn() })),
     downloadUpdate: jest.fn(async (updatePackage) => ({
@@ -78,9 +78,12 @@ function createNativeBridge({ updateArchiveResult, installedPackage } = {}) {
     // The rest of what a full `sync()` reaches for.
     InstallMode,
     clearPendingRestart: jest.fn(),
-    getNewStatusReport: jest.fn(async () => null),
+    getNewStatusReport: jest.fn(async () => statusReport ?? null),
     installUpdate: jest.fn(async () => {}),
     notifyApplicationReady: jest.fn(async () => {}),
+    recordStatusReported: jest.fn(),
+    saveStatusReportForRetry: jest.fn(),
+    setLatestRollbackInfo: jest.fn(async () => {}),
   };
 }
 
@@ -89,13 +92,13 @@ function createNativeBridge({ updateArchiveResult, installedPackage } = {}) {
  * native bridge live on the module itself - configured the way an app configures it: the
  * decorator registers the app-wide options, and every sync below is one the app asks for.
  *
- * @param onUpdateArchiveResult a callback the app registers on the decorator, as opposed to
- *        one it passes to a single `sync()` call.
+ * Callback options left after the bridge setup values are removed are registered on the
+ * decorator, the same way an app registers them.
  */
-function loadCodePush({ releaseHistory = {}, updateChecker, updateArchiveResult, onUpdateArchiveResult, installedPackage } = {}) {
+function loadCodePush({ releaseHistory = {}, updateChecker, updateArchiveResult, installedPackage, statusReport, ...codePushOptions } = {}) {
   jest.resetModules();
   const CodePush = require('./CodePush');
-  const nativeBridge = createNativeBridge({ updateArchiveResult, installedPackage });
+  const nativeBridge = createNativeBridge({ updateArchiveResult, installedPackage, statusReport });
 
   CodePush.setUpTestDependencies(
     null,
@@ -106,7 +109,7 @@ function loadCodePush({ releaseHistory = {}, updateChecker, updateArchiveResult,
     checkFrequency: CodePush.CheckFrequency.MANUAL,
     releaseHistoryFetcher: async () => releaseHistory,
     updateChecker,
-    onUpdateArchiveResult,
+    ...codePushOptions,
   });
 
   return { CodePush, nativeBridge };
@@ -492,6 +495,40 @@ describe('the update archive result of a sync', () => {
     expect(localPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
   });
 
+  it('installs the update when the callback returns a rejected Promise', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      updateArchiveResult: APPLIED,
+    });
+    const onUpdateArchiveResult = jest.fn(async () => {
+      throw new Error('the telemetry request failed');
+    });
+
+    const syncStatus = await CodePush.sync({ onUpdateArchiveResult });
+    await Promise.resolve();
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onUpdateArchiveResult).toHaveBeenCalledWith(LABEL, APPLIED);
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves a direct download when the callback returns a rejected Promise', async () => {
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      updateArchiveResult: APPLIED,
+    });
+    const onUpdateArchiveResult = jest.fn(async () => {
+      throw new Error('the telemetry request failed');
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    const localPackage = await remotePackage.download(undefined, onUpdateArchiveResult);
+    await Promise.resolve();
+
+    expect(onUpdateArchiveResult).toHaveBeenCalledWith(APPLIED);
+    expect(localPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
+  });
+
   it('leaves the result off the package a download resolves with', async () => {
     const { CodePush } = loadCodePush({
       releaseHistory: patchedRelease(),
@@ -503,5 +540,112 @@ describe('the update archive result of a sync', () => {
 
     expect(localPackage).toMatchObject({ label: LABEL, packageHash: PACKAGE_HASH });
     expect(localPackage).not.toHaveProperty('updateArchiveResult');
+  });
+});
+
+describe('telemetry callback errors', () => {
+  it('installs the update when onDownloadStart throws', async () => {
+    const onDownloadStart = jest.fn(() => {
+      throw new Error('the telemetry client is unavailable');
+    });
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: fullOnlyRelease(),
+      onDownloadStart,
+    });
+
+    const syncStatus = await CodePush.sync();
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onDownloadStart).toHaveBeenCalledWith(LABEL);
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('installs the update when onDownloadSuccess returns a rejected Promise', async () => {
+    const onDownloadSuccess = jest.fn(async () => {
+      throw new Error('the telemetry request failed');
+    });
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: fullOnlyRelease(),
+      onDownloadSuccess,
+    });
+
+    const syncStatus = await CodePush.sync();
+    await Promise.resolve();
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(onDownloadSuccess).toHaveBeenCalledWith(LABEL);
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the next release when onRolloutSkipped throws', async () => {
+    const onRolloutSkipped = jest.fn(() => {
+      throw new Error('the telemetry client is unavailable');
+    });
+    const { CodePush } = loadCodePush({
+      releaseHistory: {
+        ...fullOnlyRelease(),
+        '1.0.2': {
+          ...fullOnlyRelease()[LABEL],
+          rollout: 0,
+          packageHash: 'b'.repeat(64),
+        },
+      },
+      onRolloutSkipped,
+    });
+
+    const remotePackage = await CodePush.checkForUpdate();
+
+    expect(onRolloutSkipped).toHaveBeenCalledWith('1.0.2');
+    expect(remotePackage.label).toBe(LABEL);
+  });
+
+  it('rejects with the original error when onSyncError throws', async () => {
+    const downloadError = new Error('the update download failed');
+    const onSyncError = jest.fn(() => {
+      throw new Error('the telemetry client is unavailable');
+    });
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: fullOnlyRelease(),
+      onSyncError,
+    });
+    nativeBridge.downloadUpdate.mockRejectedValueOnce(downloadError);
+
+    await expect(CodePush.sync()).rejects.toBe(downloadError);
+    expect(onSyncError).toHaveBeenCalledWith(LABEL, downloadError);
+  });
+
+  it('records a successful update when onUpdateSuccess throws', async () => {
+    const statusReport = {
+      status: 'DeploymentSucceeded',
+      package: { label: LABEL, packageHash: PACKAGE_HASH },
+    };
+    const onUpdateSuccess = jest.fn(() => {
+      throw new Error('the telemetry client is unavailable');
+    });
+    const { CodePush, nativeBridge } = loadCodePush({ statusReport, onUpdateSuccess });
+
+    await CodePush.notifyAppReady();
+
+    expect(onUpdateSuccess).toHaveBeenCalledWith(LABEL);
+    expect(nativeBridge.recordStatusReported).toHaveBeenCalledWith(statusReport);
+    expect(nativeBridge.saveStatusReportForRetry).not.toHaveBeenCalled();
+  });
+
+  it('records a rollback when onUpdateRollback returns a rejected Promise', async () => {
+    const statusReport = {
+      status: 'DeploymentFailed',
+      package: { label: LABEL, packageHash: PACKAGE_HASH },
+    };
+    const onUpdateRollback = jest.fn(async () => {
+      throw new Error('the telemetry request failed');
+    });
+    const { CodePush, nativeBridge } = loadCodePush({ statusReport, onUpdateRollback });
+
+    await CodePush.notifyAppReady();
+    await Promise.resolve();
+
+    expect(onUpdateRollback).toHaveBeenCalledWith(LABEL);
+    expect(nativeBridge.recordStatusReported).toHaveBeenCalledWith(statusReport);
+    expect(nativeBridge.saveStatusReportForRetry).not.toHaveBeenCalled();
   });
 });
