@@ -20,6 +20,21 @@ binary patch는 스토어에 배포한 앱 바이너리의 내장 JS 번들을 �
 
 같은 배포 대상(binary version)이면 동일한 내장 번들이 들어있어야 합니다. 내장 번들을 보관해두면 같은 바이너리 버전을 대상으로 배포하는 업데이트는 모두 binary patch를 적용할 수 있습니다.
 
+#### Hermes 바이트코드 정렬이 중요한 이유
+
+`release`에 `--binary-bundle-path`를 전달하면 CLI는 보관한 내장 번들을 `hermesc -base-bytecode` 옵션으로 전달해 기준 번들로 사용합니다. 새 바이트코드의 내부 배치를 기준 번들에 맞춰 소스 변경과 무관한 바이트 이동을 줄이고, binary patch가 실제 변경 내용에 집중하도록 합니다.
+
+실제 앱에서 측정한 결과는 다음과 같습니다.
+
+| 조건 | 결과 |
+| --- | --- |
+| 약 25MB Hermes 번들, 5일간 153개 파일 변경 | 정렬을 적용한 HDiffPatch의 크기는 355–382KB였습니다. 정렬하지 않으면 비교한 모든 codec에서 patch가 3–5배 커졌습니다. ([PR #150](https://github.com/Soomgo-Mobile/react-native-code-push/pull/150)) |
+| 약 18MB Android 번들, 소스 23줄 변경 | `-base-bytecode`를 사용했더라도, binary와 update의 `--minify` 조건이 다르면 patch의 크기가 약 12.5배 커졌습니다. ([PR #165](https://github.com/Soomgo-Mobile/react-native-code-push/pull/165)) |
+
+두 번째 결과에서 보듯 `-base-bytecode`만 전달하는 것으로는 충분하지 않습니다. 업데이트 번들도 바이너리 내장 번들과 마찬가지로 `--minify false` 조건으로 생성해야 하며, `npx code-push` CLI는 이 옵션을 기본으로 적용합니다.
+
+측정값은 앱과 변경 내용에 따라 달라질 수 있습니다.
+
 ### asset diff
 
 asset diff는 이전에 배포한 OTA 업데이트를 기준으로 산출됩니다. 따라서 기준이 된 OTA 업데이트를 실행 중인 앱에서만 이 방식의 업데이트를 사용할 수 있습니다.
