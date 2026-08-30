@@ -1,40 +1,59 @@
 # Diff Updates
 
-[한국어](diff-updates.ko.md)
+[한국어](./diff-updates.ko.md)
 
-A release can offer the client the difference between the update and a bundle the client
-already holds, in place of the whole thing. There are two kinds of difference, and an asset
-diff is only published on a release that carries a binary patch:
+By default, the `release` command publishes a **full archive** containing the entire update. Diff updates let clients download only the differences needed for an update.
 
-- a **binary patch**, computed against the JS bundle inside the app binary. Every client on
-  that binary version holds that bundle, so every one of them can use it.
-- an **asset diff**, computed against a recently released update. Only a client running that
-  update can use it, and it carries only the assets that update does not already have, where
-  the binary patch carries every asset.
+This feature is optional. Without any additional configuration, `release` publishes only the full archive. If a diff update is unavailable or cannot be applied, the app falls back to the full archive and installs the update unless the failure is a network connection error.
 
-A client that can use neither downloads the full archive, so a release installs either way.
-All of this is optional: with none of it set up, `release` publishes the full archive alone.
+## What archives are published?
 
-Publishing patches takes two things. Binary patches need the embedded bundle of every binary
-version you release against, which is what
-[Exporting the embedded bundle](#exporting-the-embedded-bundle) sets up. Asset diffs need
-that plus a `bundleDownloader` in `code-push.config.ts`, covered under
-[Asset diff archives](#asset-diff-archives). The patch generator itself has to be built
-once before the first patch release - see
-[Prerequisites: building the patch generator](../cli/README.md#prerequisites-building-the-patch-generator).
+| Archive | Compared against | Contents | Available when |
+| --- | --- | --- | --- |
+| full | Nothing | Entire update | Always |
+| binary patch | JS bundle embedded in the app binary | JS bundle diff and all assets | The client is running the target binary version |
+| asset diff | Previous OTA update | JS bundle diff, new assets, and a list of assets to delete | The client is running the base OTA update |
 
-## Exporting the embedded bundle
+### Binary patch
 
-A binary patch is the difference between the update and the JS bundle that is already
-inside the installed app, so releasing one means holding on to that bundle: the exact
-bytes the build you shipped to the store embedded.
+A binary patch is generated against the JS bundle embedded in the app binary published to the store.
 
-The library ships a hook for each platform that copies the freshly compiled bundle out of
-the build, together with a `binary-patch-base.json` record describing it.
+Every build for the same release target (binary version) must contain the same embedded bundle. Once you archive that embedded bundle, every update targeting the same binary version can provide a binary patch.
 
-**Android** - apply the Gradle script in your app module's `android/app/build.gradle`:
+### Asset diff
 
-```groovy
+An asset diff is generated against a previously published OTA update. Therefore, only an app running that base OTA update can use it.
+
+Unlike a binary patch, which contains every asset, an asset diff contains only assets absent from the base update. The smaller the asset difference between the base update and the new release, the smaller the asset diff will be.
+
+## What to prepare before you start
+
+Publishing diff updates requires the following:
+
+1. **Export embedded bundles for binary patches**
+
+   For every binary version you support, archive the exact JS bundle embedded in the binary published to the store.
+
+2. **Configure previous archive downloads for asset diffs**
+
+   To publish asset diffs as well, implement `bundleDownloader` in `code-push.config.ts`.
+
+You must also build the patch generator once before generating patches. See [**Prerequisites: building the patch generator**](../cli/README.md#prerequisites-building-the-patch-generator) for details.
+
+## 1. Export the embedded bundle
+
+A binary patch is the difference between a new update and the JS bundle already embedded in the app. You must therefore preserve the exact JS bundle bytecode embedded in the build published to the store.
+
+The library provides an export hook for each platform. After the bundle build finishes, the hook exports:
+
+- The Hermes-compiled JS bundle (bytecode)
+- A `binary-patch-base.json` file containing bundle metadata and verification values
+
+### Android
+
+Apply the Gradle script in your app module's `android/app/build.gradle`:
+
+```gradle
 apply plugin: "com.android.application"
 apply plugin: "com.facebook.react"
 
@@ -45,118 +64,165 @@ react {
 apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"
 ```
 
-The line can go anywhere in the file (if you use `ext.codePushExportDir`, set it before the
-`apply from:` line). Every variant that bundles JS then exports to
-`android/app/build/codepush/embedded-bundle/<variant>/` after it is bundled. Pass
-`-PcodePushExportDir=<path>` (or set `ext.codePushExportDir`) to export somewhere else; the
-`<variant>` directory is appended either way.
+The `apply from` line can go anywhere in the file.
 
-**iOS** - call the export script at the end of the **"Bundle React Native code and images"**
-build phase. In Xcode, open that phase
-in your app target's **Build Phases** tab and append the last line below to its script:
+After the JS bundle is built, it is exported to:
 
-```bash
+```text
+android/app/build/codepush/embedded-bundle/<variant>/
+```
+
+To use a different export path, choose one of the following:
+
+- Pass `-PcodePushExportDir=<path>` to Gradle
+- Set `ext.codePushExportDir`
+
+If you set `ext.codePushExportDir`, place it before the `apply from` line. In either case, the `<variant>` directory is appended to the path.
+
+### iOS
+
+In Xcode, open the app target's **Build Phases** tab and find the **Bundle React Native code and images** phase. Add the final line below to the end of the existing script:
+
+```sh
 /bin/sh -c "\"$WITH_ENVIRONMENT\" \"$REACT_NATIVE_XCODE\""
 
+# Add this line
 "$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"
 ```
 
-The export lands in `$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/`.
-Set the `CODEPUSH_EXPORT_DIR` environment variable to export somewhere else; the
-`$CONFIGURATION-$PLATFORM_NAME` directory is appended either way.
+The default export path is:
 
-> [!NOTE]
-> Applying these hooks automatically through the Expo config plugin (`app.plugin.js`) is
-> not implemented yet.
+```text
+$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/
+```
 
-### Archiving the export per binary release
+To use a different export path, set the `CODEPUSH_EXPORT_DIR` environment variable. The `$CONFIGURATION-$PLATFORM_NAME` directory is still appended to the path.
 
-Whatever pipeline builds your store binary should keep that build's export somewhere
-durable, organized by binary version, so a later release can fetch the bundle that matches
-the binary it targets:
+> **Note:** The Expo config plugin (`app.plugin.js`) does not currently apply this hook automatically.
 
-```bash
-# Android, after ./gradlew :app:assembleRelease
+## 2. Archive exports per binary release
+
+The CI pipeline that builds your store binary must archive the exported JS bundle by binary version.
+
+When publishing a later OTA release, download the JS bundle for the target binary version and use it as the binary patch base bundle.
+
+The following examples are only a reference. Archive the bundles in whatever way fits your deployment pipeline.
+
+### Android example
+
+Upload the export after `./gradlew :app:assembleRelease` finishes:
+
+```sh
 aws s3 cp --recursive \
   android/app/build/codepush/embedded-bundle/release \
   "s3://your-bucket/binaries/android/$BINARY_VERSION/"
+```
 
-# iOS - point the export at a path the pipeline knows, since $BUILD_DIR only exists inside the build
+### iOS example
+
+Because `$BUILD_DIR` exists only during the build, set the export directory to a path known to your CI pipeline:
+
+```sh
 export CODEPUSH_EXPORT_DIR="$PWD/codepush-export"
-xcodebuild -workspace ios/YourApp.xcworkspace -scheme YourApp -configuration Release archive # ...
+
+xcodebuild \
+  -workspace ios/YourApp.xcworkspace \
+  -scheme YourApp \
+  -configuration Release \
+  archive # ...
+
 aws s3 cp --recursive \
   "$CODEPUSH_EXPORT_DIR/Release-iphoneos" \
   "s3://your-bucket/binaries/ios/$BINARY_VERSION/"
 ```
 
-To release a patch later, download the export and pass the bundle's path to
-`--binary-bundle-path`:
+## 3. Publish a binary patch release
 
-```bash
-aws s3 cp --recursive "s3://your-bucket/binaries/android/1.0.0/" ./binary/
-npx code-push release -b 1.0.0 -v 1.0.1 -p android \
-                      --binary-bundle-path ./binary/index.android.bundle
+Download the JS bundle for the target binary version from your archive and pass its path to `--binary-bundle-path`:
+
+```sh
+aws s3 cp --recursive \
+  "s3://your-bucket/binaries/android/1.0.0/" \
+  ./binary/
+
+npx code-push release \
+  -b 1.0.0 \
+  -v 1.0.1 \
+  -p android \
+  --binary-bundle-path ./binary/index.android.bundle
 ```
 
-`release` also uses the `binary-patch-base.json` record to verify the base bundle it was
-handed - see [Verifying the base bundle](../cli/README.md#verifying-the-base-bundle) for
-details.
+The `release` command reads the `binary-patch-base.json` file archived with the JS bundle and verifies that the supplied base bundle is correct. See [**Verifying the base bundle**](../cli/README.md#verifying-the-base-bundle) for details.
 
-## Asset diff archives
+## 4. Publish asset diff archives
 
-A release published with a binary patch can carry **asset diff archives** as well - one per
-recently released version. A diff archive holds the patch of the JS bundle, only the assets
-that version does not already have, and a manifest of the files it has to drop. The client
-copies the update it already has installed, applies those, and ends up holding exactly the
-contents of the full archive.
+When publishing a binary patch, you can also publish asset diff archives against previous OTA updates. An asset diff archive is generated for each of the N most recent updates. It is not published if its size is greater than or equal to the binary patch archive.
 
-A client tries the archives in this order and stops at the first one it can install:
+An asset diff contains only:
 
-| Order | Archive | Available when |
-|---|---|---|
-| 1 | Asset diff | the release was diffed against the update the client is running. |
-| 2 | Binary patch | always. It is built against the bundle in the app binary, which every client has. |
-| 3 | Full | always. It needs nothing installed. |
+- The JS bundle binary patch
+- New asset files absent from the base update
+- A manifest listing asset files to delete
 
-There are three exceptions to this order.
+After downloading the update, the app copies the base OTA update, patches the JS bundle, and deletes unnecessary asset files. The resulting contents are identical to the full archive update.
 
-**Not every client tries all three.** One with no asset diff to use - it is running the
-bundle in the app binary, or an update this release was not diffed against - starts at the
-binary patch.
+### Publishing conditions
 
-**A failed asset diff does not always reach the binary patch.** It does when the diff failed
-on its asset side: the merge with the installed update failing (`asset_merge_failed`), or the
-merged contents failing the package hash (`package_verification_failed`). It also does when
-the server answered the diff's URL with a status of 400 or above. The two archives are at
-URLs of their own, so a diff that could not be fetched is no reason to expect the binary
-patch cannot be either. Anything else the diff fails on lives in the bundle patch both
-archives carry byte for byte. The binary patch would fail there the same way, so the client
-goes straight to the full archive.
+An asset diff is published only when all of the following conditions are met:
 
-**A failed connection stops the download.** The next archive is behind the same network,
-and the full one is the largest of the three, so trying it would only fail again more
-slowly. The client reports the connection error instead. A server that answered is
-different: a 404 on one archive is no reason to skip the next.
+1. The release is a binary patch release created with `release --binary-bundle-path`.
+2. `bundleDownloader` is implemented in `code-push.config.ts`.
+3. `--diff-base-count` is greater than `0`. The default is `3`.
 
-`onUpdateArchiveResult` reports every archive that was tried - see
-[Telemetry callbacks](telemetry-callbacks.md#what-onupdatearchiveresult-reports).
-
-### Enabling them
-
-Diff archives are published only when all three of these hold:
-
-- the release is a binary patch release (`release --binary-bundle-path`),
-- `code-push.config.ts` implements `bundleDownloader`, so the CLI can fetch the earlier releases to diff against,
-- `--diff-base-count` is greater than `0` (it defaults to `3`).
+The CLI uses `bundleDownloader` to download previous updates that serve as asset diff bases.
 
 ```ts
 bundleDownloader: async (archive, platform, identifier = 'staging') => {
-    const downloadedFilePath = path.join(os.tmpdir(), archive.packageHash);
-    const storageKey = `bundles/${platform}/${identifier}/full-bundle/${archive.packageHash}`;
-    // fetch storageKey from your storage (S3, Supabase, ...) to downloadedFilePath
-    return { downloadedFilePath };
+  const downloadedFilePath = path.join(os.tmpdir(), archive.packageHash);
+  const storageKey =
+    `bundles/${platform}/${identifier}/full-bundle/${archive.packageHash}`;
+
+  // Download the archive at storageKey from S3, Supabase, or another
+  // storage provider to downloadedFilePath.
+
+  // Return the downloadedFilePath.
+  return { downloadedFilePath };
 },
 ```
 
-See [Asset diff archives](../cli/README.md#asset-diff-archives) for what the release
-publishes.
+See [**Asset diff archives**](../cli/README.md#asset-diff-archives) for details about which asset diff archives are generated and published.
+
+## Update download and fallback order
+
+When downloading an update, the app tries the smallest archive first.
+
+| Order | Archive | Selected when |
+| --- | --- | --- |
+| 1 | asset diff | A diff exists against the OTA update currently running |
+| 2 | binary patch | The asset diff is unavailable or applying the asset differences fails |
+| 3 | full | The binary patch is unavailable or applying the patch fails |
+
+### When asset diff is skipped
+
+The app starts with the binary patch when no asset diff is available, including when:
+
+- The app is running the bundle embedded in the app binary (the first OTA update)
+- No asset diff was generated against the current OTA update
+
+### Choosing the next archive after an asset diff failure
+
+The fallback path depends on the failure:
+
+| Failure | Next action | Reason |
+| --- | --- | --- |
+| `asset_merge_failed` | Try the binary patch | The asset differences could not be applied to the installed update. Replacing all assets may still succeed |
+| `package_verification_failed` | Try the binary patch | The final hash of the contents merged from the asset diff does not match. Replacing all assets may still succeed |
+| The asset diff download URL returns HTTP `400` or higher | Try the binary patch | The asset diff and binary patch use separate download URLs, so failure to download one does not mean the other is unavailable |
+| Applying the bundle patch fails | Download the full archive | The asset diff and binary patch apply the same JS bundle patch, so falling back to the binary patch is likely to fail as well |
+| Network connection error | Report the error without falling back | The next option uses the same network, and the full archive is larger, so another attempt would likely fail more slowly |
+
+Connection errors and server response errors are handled differently. For example, a `404` response from the asset diff download URL means the server was reached, so there is no reason to skip the next option—the binary patch or full archive.
+
+## Observing results
+
+The `onUpdateArchiveResult` callback reports the result of every update the app tried. To collect which archive was selected and why fallback occurred, see [**Telemetry callbacks**](./telemetry-callbacks.md#what-onupdatearchiveresult-reports).

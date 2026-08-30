@@ -1,145 +1,158 @@
 # Telemetry Callbacks
 
-[한국어](telemetry-callbacks.ko.md)
+[한국어](./telemetry-callbacks.ko.md)
 
-`CodePushOptions` takes optional callbacks that report what an update did. They exist to be
-observed and nothing more: the library neither stores what they report nor sends it
-anywhere, so an app that wants any of it in its telemetry sends it itself. Registering none
-changes nothing about how updates behave, and a callback that throws is logged to the
-console rather than failing the update it is reporting on.
+`CodePushOptions` provides optional callbacks for observing an update's progress and result.
 
-For the per-option reference, alongside every other option, see
-[`CodePushOptions`](api-js.md#codepushoptions).
+The callbacks are **for observation only**.
 
-## The callbacks
+- The library does not store or send callback data. Your app must send the data itself to record it in telemetry.
+- Registering callbacks does not change update behavior.
+- An update does not fail if a callback throws.
 
-| Callback | Called when | Receives |
-|---|---|---|
-| `onDownloadStart` | the download of an available update begins | `(label)` |
-| `onDownloadSuccess` | the download of an available update has completed. The install happens afterwards, so this says nothing about whether the update could be installed | `(label)` |
-| `onUpdateArchiveResult` | an update published with a binary patch has been downloaded, before it is installed | `(label, result)` |
-| `onUpdateSuccess` | an installed update has run successfully, as of the [`notifyAppReady`](api-js.md#codepushnotifyappready) that marks it successful | `(label)` |
-| `onUpdateRollback` | an installed update failed to run and was rolled back to the previous version | `(label)` |
-| `onRolloutSkipped` | the device falls outside the latest release's active rollout, so the update check leaves that release out of the candidates | `(label)` |
-| `onSyncError` | the sync ends in the [`SyncStatus.UNKNOWN_ERROR`](api-js.md#syncstatus) state | `(label, error)` |
+See `CodePushOptions` for the other available options.
 
-`label` is the release the report is about. `onSyncError` passes `"unknown"` instead when
-the sync failed before a release was resolved.
+## When is each callback called?
 
-> [!NOTE]
-> The typings declare a second `error` parameter on `onRolloutSkipped`, but the runtime only
-> ever passes the label.
+| Callback | Called when | Receives | Notes |
+| --- | --- | --- | --- |
+| `onDownloadStart` | The download of an available update begins | `(label)` | Indicates only that the download has started. |
+| `onDownloadSuccess` | The download of an available update finishes | `(label)` | Installation and successful execution are not guaranteed yet. |
+| `onUpdateArchiveResult` | A binary patch or asset diff update has finished downloading, before installation | `(label, result)` | Shows which archive was used and whether patch fallback occurred. |
+| `onUpdateSuccess` | An installed update runs and is confirmed successful through `notifyAppReady` | `(label)` | This is the point to record an actual update success. |
+| `onUpdateRollback` | An installed update fails to run and rolls back to the previous version | `(label)` | This is separate from download or installation success. |
+| `onRolloutSkipped` | The device is outside the active rollout, so the latest release is excluded from the candidates | `(label)` | The release was not deployed to this device. |
+| `onSyncError` | `sync()` ends with `SyncStatus.UNKNOWN_ERROR` | `(label, error)` | Classify the cause by `error.code`, not `error.message`. |
 
-## What `error` carries
+`label` is the release being reported. (Example: `"1.0.3"`) If `sync()` fails before a release is resolved, `onSyncError` receives `"unknown"`.
 
-Group reports by `error.code`, not by the message: the message is localized on iOS and is
-the exception's own words on Android.
+> **Note:** The type definition for `onRolloutSkipped` includes a second `error` parameter, but the runtime passes no value for it, so it is always `undefined`.
 
-| Platform | `error.code` | Example |
-|---|---|---|
-| iOS | the [`NSURLError`](https://developer.apple.com/documentation/foundation/1508628-url_loading_system_error_codes) code as a string, or `-1` for an error CodePush raised itself | `"-1005"`, the connection dropped |
-| Android | the category of the failure | `"CODE_PUSH_NETWORK"`, the connection dropped |
+## How to record errors
 
-Android categories:
+Group errors by `error.code`, not `error.message`.
 
-| Code | Means | Worth downloading again |
-|---|---|---|
-| `CODE_PUSH_NETWORK` | The connection dropped, timed out, or never opened. | Once the network is back |
-| `CODE_PUSH_HTTP` | The server answered with a status of 400 or above. The status is in the message. | Depends on the status |
-| `CODE_PUSH_INTEGRITY` | The downloaded contents do not hash to the release's package hash, or hold no JS bundle by the name the app looks for. | No |
-| `CODE_PUSH_UNKNOWN` | Anything else. | Unknown |
+On iOS, the message may be localized. On Android, it includes the original error text. By contrast, `error.code` is better suited for aggregation and alert conditions.
 
-`CodePush.sync()` rejects with the same error, so a caller that awaits it does not need
-this callback.
+| Platform | `error.code` format | Example |
+| --- | --- | --- |
+| iOS | An `NSURLError` code as a string. Errors raised directly by CodePush use `-1`. | `"-1005"`: connection lost |
+| Android | A category that represents the cause of the failure. | `"CODE_PUSH_NETWORK"` |
 
-## Registering them
+### Android error codes
 
-Pass them to the `CodePush({ ... })` wrapper from
-["CodePush-ify" Your App](../README.md#4-codepush-ify-your-app). They run for every sync,
-whatever the `checkFrequency` is, including the `CodePush.sync()` calls you make yourself.
+| Code | Meaning | Worth downloading again |
+| --- | --- | --- |
+| `CODE_PUSH_NETWORK` | The connection was lost, timed out, or could not be opened. | Worth retrying after the network recovers |
+| `CODE_PUSH_HTTP` | The server responded with an HTTP status of `400` or above. The message contains the status code. | Depends on the status code |
+| `CODE_PUSH_INTEGRITY` | The downloaded contents do not match the release's `package hash`, or do not contain a JS bundle with the name the app expects. | No |
+| `CODE_PUSH_UNKNOWN` | Any other error. | Unknown |
 
-```typescript
+`CodePush.sync()` also rejects with the same error. Therefore, callers that directly await the result of `sync()` do not need to register `onSyncError` separately.
+
+## Registering callbacks
+
+Pass the callbacks to the `CodePush({ ... })` wrapper when applying CodePush to your app.
+
+Callbacks registered this way run for every `sync()`, regardless of `checkFrequency`, including `CodePush.sync()` calls made directly by the app.
+
+```ts
 export default CodePush({
-  checkFrequency: CodePush.CheckFrequency.MANUAL, // or something else
-  releaseHistoryFetcher: releaseHistoryFetcher,
+  checkFrequency: CodePush.CheckFrequency.MANUAL,
+  releaseHistoryFetcher,
   onUpdateSuccess: (label) => {
-    // Send it to your own telemetry, if you want it there.
+    // Send to your own telemetry if needed.
   },
   onUpdateArchiveResult: (label, result) => {
-    // Send it to your own telemetry, if you want it there.
+    // Send to your own telemetry if needed.
   },
 })(MyApp);
 ```
 
-`onUpdateArchiveResult` is the only callback that you can also pass to an individual
-`sync()` call. Passing it there overrides the registered one for that call - to tag the
-result of one particular sync, for instance.
+### Registering a callback for a specific `sync()`
 
-```typescript
+`onUpdateArchiveResult` is the only telemetry callback that can also be passed to an individual `sync()` call.
+
+A callback passed to an individual call overrides the `onUpdateArchiveResult` registered on the wrapper for that call. For example, you can use it to record results from a specific action with a separate tag.
+
+```ts
 CodePush.sync({
   onUpdateArchiveResult: (label, result) => {
-    // Send it to your own telemetry, if you want it there.
+    // Record only the result of this sync call.
   },
 });
 ```
 
-## What `onUpdateArchiveResult` reports
+## Understanding `onUpdateArchiveResult`
 
-A release published with a binary patch offers the client patch archives to download in
-place of the full one. See
-[Asset diff archives](diff-updates.md#asset-diff-archives) for what those are and when a
-release carries them. This callback reports which of them the download came from, and what
-happened to the ones it did not.
+For a diff update, the client can try a patch archive before the full archive.
+
+- `asset-diff`: The difference from a previous OTA update
+- `binary-patch`: The difference from the bundle embedded in the app binary
+- `full`: The entire update
+
+`onUpdateArchiveResult` tells you:
+
+1. Which patch archive was used to build the update that will be applied
+2. Whether the client gave up applying a patch and downloaded the full archive
+3. How long each patch attempt took and why it fell back
+
+The `full` archive itself is not included in `attempts`.
 
 ### `UpdateArchiveResult`
 
 | Field | Type | Description |
-|---|---|---|
-| `status` | `"applied" \| "fallback"` | Whether one of the patch archives produced the update, or the full archive had to be downloaded instead. |
-| `archive` | `UpdateArchive` | The archive of the last attempt: the one the update came from, or the last one given up on. |
-| `fallbackReason` | `ArchiveFallbackReason` | Why the full archive had to be downloaded. Absent on `"applied"`, and when the last attempt ended in an error no applier has a word for. |
-| `totalDurationMs` | `number` | How long the whole patch path took, from the first archive starting to download to the last attempt being finished with. The full download that follows a fallback is not part of it. |
-| `attempts` | `UpdateArchiveAttempt[]` | Every archive that was tried, in the order it was tried. The full archive is never among them. |
+| --- | --- | --- |
+| `status` | `"applied" \| "fallback"` | Whether a patch archive produced the update or the full archive was required. |
+| `archive` | `UpdateArchive` | The archive that produced the update, or the last patch archive that was abandoned. |
+| `fallbackReason` | `ArchiveFallbackReason` | Why the full archive was required. There is no value when `status` is `"applied"`. It may also be absent if the last attempt ended with an error that did not produce a reason code. |
+| `totalDurationMs` | `number` | The time from the start of the first patch download until the final patch attempt finished. It does not include the full download that follows a fallback. |
+| `attempts` | `UpdateArchiveAttempt[]` | Every patch archive attempted, in order. It does not include the full archive. |
 
 `UpdateArchive` is `"binary-patch"` or `"asset-diff"`.
 
 ### `UpdateArchiveAttempt`
 
 | Field | Type | Description |
-|---|---|---|
-| `archive` | `UpdateArchive` | Which archive this attempt downloaded. |
-| `fallbackReason` | `ArchiveFallbackReason` | Why this archive was given up on. Absent for the attempt the update came from. |
-| `durationMs` | `number` | How long this attempt ran, whichever way it ended. |
-| `applyDurationMs` | `number` | How long the applier took to rebuild the bundle from this archive's patch. Absent when the attempt ended before the bundle was restored. |
+| --- | --- | --- |
+| `archive` | `UpdateArchive` | The archive downloaded for this attempt. |
+| `fallbackReason` | `ArchiveFallbackReason` | Why this archive was abandoned. The field is absent on the attempt that produced the update. |
+| `durationMs` | `number` | How long this attempt took, whether it succeeded or failed. |
+| `applyDurationMs` | `number` | How long it took to restore the bundle from this archive's patch. The field is absent if the attempt ended before the bundle was restored. |
 
-Most downloads leave a single attempt. A second one appears when an asset diff failed on its
-asset side - the merge with the installed update failing (`asset_merge_failed`), or the
-merged contents failing the package hash (`package_verification_failed`). The client then
-tries the binary patch, which carries every asset and depends on nothing installed. A diff
-that failed in the bundle patch both archives carry skips the binary patch and goes straight
-to the full archive, because it would fail there the same way.
+### How to read the `attempts` array
 
-### `fallbackReason`
+Most downloads record only one attempt.
 
-Every platform's applier reports the same words, so a rollout can be judged by them
-whichever platform it is running on.
+A second attempt may be recorded if the asset diff fails while applying the asset differences, or if the asset diff URL returns an HTTP status of 400 or above.
+
+1. The client tries `asset-diff`.
+2. It tries `binary-patch` if the asset diff could not be merged with the installed update (`asset_merge_failed`), the merged result failed package hash verification (`package_verification_failed`), or the asset diff URL returned an HTTP status of 400 or above.
+3. If `binary-patch` also cannot be applied, the client downloads the full archive.
+
+By contrast, if the shared bundle patch step fails for an asset diff, the binary patch is certain to fail in the same way. The client skips the binary patch and downloads the full archive immediately.
+
+## `fallbackReason`
+
+Both platforms report fallback reason codes. This allows telemetry to be aggregated using the same criteria without interpreting platform-specific error messages.
 
 | Reason | Description |
-|---|---|
+| --- | --- |
 | `base_bundle_unavailable` | The bundle inside the app binary could not be opened or read. |
-| `base_hash_mismatch` | The bundle inside the app binary is not the one the patch was computed against. |
-| `invalid_manifest` | The manifest is missing, malformed, points outside the archive, or asks for too much. |
-| `unsupported_format` | The patch was produced by a format or a codec this client cannot apply. |
-| `patch_apply_failed` | The applier refused the patch, or the restored bundle could not be written. |
-| `target_verification_failed` | The restored bundle is not the one the manifest promised. |
-| `asset_merge_failed` | The asset diff could not be merged with the installed update it was built against. |
-| `package_verification_failed` | The update restored from the patch did not pass the checks that follow the restore. |
+| `base_hash_mismatch` | The bundle inside the app binary differs from the bundle used as the base when the patch was generated. |
+| `invalid_manifest` | The manifest is missing or malformed, points outside the archive, or requests an operation beyond the permitted limits. |
+| `unsupported_format` | The patch was generated in a format or with a codec that the client cannot apply. |
+| `patch_apply_failed` | The applier rejected the patch, or the resulting bundle could not be used. |
+| `target_verification_failed` | The resulting bundle does not match what the manifest specified. |
+| `asset_merge_failed` | The asset diff could not be merged with the installed update it was based on. |
+| `package_verification_failed` | The result of applying the patch failed verification. |
 
-### A fallback is not a failed update
+## A fallback is not an update failure
 
-The update is downloaded in full instead and installed as usual. Nothing about the update
-depends on what this callback is told.
+`status: "fallback"` means the patch path was abandoned, not that the update itself failed.
 
-A fallback does show in `downloadProgressCallback`, though: each download after one reports
-a progress stream of its own, counting `receivedBytes` from zero again against its own
-`totalBytes`.
+The app then attempts to download and install the full archive. The result received by this callback does not affect update behavior.
+
+A fallback also appears in `downloadProgressCallback`. Each download that starts after a fallback has an independent progress stream, so `receivedBytes` is calculated afresh against each archive's `totalBytes`. For releases that can fall back, interpret recorded progress as **per-archive progress**, not cumulative progress for the entire update.
+
+If a progress bar or percentage is displayed in the UI, it may move back to a lower value when fallback occurs and then fill again.

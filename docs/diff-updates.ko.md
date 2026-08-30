@@ -1,25 +1,57 @@
 # Diff 업데이트
 
-[English](diff-updates.md)
+[English](./diff-updates.md)
 
-릴리스는 업데이트 전체를 내려주는 대신, 업데이트와 클라이언트가 이미 가진 번들 사이의 차이만 제공할 수 있습니다. 차이는 두 종류이고, asset diff는 binary patch를 담은 릴리스에서만 배포됩니다.
+release 명령은 기본적으로 업데이트 전체를 담은 **full 아카이브**를 배포합니다. Diff 업데이트를 업데이트에 필요한 차이만 내려받도록 할 수 있습니다.
 
-- **binary patch**는 스토어에 올린 앱 바이너리가 내장한 JS 번들을 기준으로 계산합니다. 같은 바이너리 버전을 설치한 기기는 내장 번들이 모두 동일하므로, 그 버전을 쓰는 클라이언트는 전부 binary patch를 적용할 수 있습니다.
-- **asset diff**는 최근에 배포한 OTA 업데이트를 기준으로 계산합니다. 기준이 된 업데이트를 실행 중인 클라이언트만 적용할 수 있습니다. binary patch가 모든 asset을 담는 것과 달리, 기준 업데이트에 없는 asset만 담습니다.
+이 기능은 선택 사항입니다. 아무것도 설정하지 않으면 `release`는 full 아카이브만 배포합니다. 또한 diff 업데이트를 사용할 수 없거나 적용에 실패해도, 네트워크 연결 오류가 아닌 한 앱은 full 아카이브로 fallback하여 업데이트를 설치합니다.
 
-둘 다 쓸 수 없는 클라이언트는 full 아카이브를 내려받으므로 어느 경우에도 릴리스는 설치됩니다. 이 기능은 전부 선택 사항입니다. 아무것도 설정하지 않으면 `release`는 full 아카이브만 배포합니다.
+## 어떤 아카이브가 배포되나요?
 
-patch를 배포하려면 두 가지가 필요합니다. binary patch에는 기준으로 삼는 바이너리 버전마다 내장 번들이 있어야 하고, 이 준비는 [내장 번들 export하기](#내장-번들-export하기)에서 설명합니다. asset diff에는 그에 더해 `code-push.config.ts`의 `bundleDownloader`가 필요하며 [asset diff 아카이브](#asset-diff-아카이브)에서 다룹니다. patch 생성 도구 자체는 첫 patch 릴리스 전에 한 번 빌드해야 합니다. [사전 준비: patch 생성 도구 빌드](../cli/README.ko.md#사전-준비-patch-생성-도구-빌드)를 참고하세요.
+| 아카이브 | 비교 기준 | 포함 내용 | 사용할 수 있는 상황 |
+| --- | --- | --- | --- |
+| full | 없음 | 업데이트 전체 | 언제든 사용 가능 |
+| binary patch | 앱 바이너리에 내장된 JS 번들 | JS 번들 차이와 모든 asset | 비교 기준 바이너리 버전을 실행 중인 경우 |
+| asset diff | 이전 OTA 업데이트 | JS 번들 차이, 새 asset, 삭제할 asset 목록 | 비교 기준 OTA 업데이트를 실행 중인 경우 |
 
-## 내장 번들 export하기
+### binary patch
 
-binary patch는 업데이트와 설치된 앱 안에 이미 들어 있는 JS 번들의 차이입니다. patch를 배포한다는 것은 그 번들, 즉 스토어에 올린 빌드가 내장한 바이트를 그대로 보관해 둔다는 뜻입니다.
+binary patch는 스토어에 배포한 앱 바이너리의 내장 JS 번들을 기준으로 산출됩니다.
 
-라이브러리는 플랫폼마다 훅을 제공합니다. 이 훅은 방금 컴파일된 번들을 빌드에서 복사해 내보내고, 그 번들을 설명하는 `binary-patch-base.json` 기록을 함께 남깁니다.
+같은 배포 대상(binary version)이면 동일한 내장 번들이 들어있어야 합니다. 내장 번들을 보관해두면 같은 바이너리 버전을 대상으로 배포하는 업데이트는 모두 binary patch를 적용할 수 있습니다.
 
-**Android** - 앱 모듈의 `android/app/build.gradle`에 Gradle 스크립트를 적용합니다.
+### asset diff
 
-```groovy
+asset diff는 이전에 배포한 OTA 업데이트를 기준으로 산출됩니다. 따라서 기준이 된 OTA 업데이트를 실행 중인 앱에서만 이 방식의 업데이트를 사용할 수 있습니다.
+
+binary patch가 모든 asset을 담는 것과 달리, asset diff에는 기준 업데이트에 없던 asset만 포함됩니다. 기준 업데이트와 새 릴리스의 asset 차이가 작을수록 이 업데이트의 크기도 작아집니다.
+
+## 시작하기 전에 준비할 것
+
+Diff 업데이트를 배포하려면 다음이 필요합니다.
+
+1. **binary patch용 내장 번들 export**
+   지원할 바이너리 버전마다, 실제 스토어 바이너리에 들어간 JS 번들을 보관해야 합니다.
+
+2. **asset diff용 이전 아카이브 다운로드 설정**
+   asset diff도 배포하려면 `code-push.config.ts`에 `bundleDownloader`를 구현해야 합니다.
+
+또한 패치 생성 전에 생성 도구를 한 번 빌드해야 합니다. 자세한 내용은 [**사전 준비: patch 생성 도구 빌드**](../cli/README.ko.md#사전-준비-patch-생성-도구-빌드)를 참고하세요.
+
+## 1. 내장 번들 export하기
+
+binary patch는 새 업데이트와 앱 안에 이미 들어 있는 JS 번들의 차이를 비교해 만들어집니다. 따라서 스토어에 올린 빌드가 내장한 JS 번들 바이트코드를 그대로 보관해야 합니다.
+
+라이브러리는 플랫폼별 export 훅을 제공합니다. 훅은 번들 빌드가 끝난 뒤 다음을 export합니다.
+
+- Hermes 컴파일된 JS 번들 (바이트코드)
+- 번들의 정보와 검증 값을 담은 `binary-patch-base.json`
+
+### Android
+
+앱 모듈의 `android/app/build.gradle`에 Gradle 스크립트를 적용합니다.
+
+```gradle
 apply plugin: "com.android.application"
 apply plugin: "com.facebook.react"
 
@@ -30,86 +62,165 @@ react {
 apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"
 ```
 
-이 줄은 파일 안 어디에 두어도 됩니다. `ext.codePushExportDir`를 쓴다면 `apply from:` 줄보다 앞에서 설정해야 합니다. 그러면 JS를 번들링하는 variant마다 번들링을 마친 뒤 `android/app/build/codepush/embedded-bundle/<variant>/`로 export합니다. 다른 위치로 내보내려면 `-PcodePushExportDir=<path>`를 전달하거나 `ext.codePushExportDir`를 설정하세요. 어느 쪽이든 `<variant>` 디렉터리가 뒤에 붙습니다.
+`apply from`은 파일 안 어디에 두어도 좋습니다.
 
-**iOS** - **"Bundle React Native code and images"** build phase의 마지막에서 export 스크립트를 호출합니다. Xcode에서 앱 타깃의 **Build Phases** 탭을 열어 그 phase를 찾고, 스크립트 끝에 아래 마지막 줄을 덧붙입니다.
+앱 빌드 과정에서 JS 번들이 끝나면 다음 경로로 번들을 내보냅니다.
 
-```bash
+```text
+android/app/build/codepush/embedded-bundle/<variant>/
+```
+
+만약 경로를 다른 위치로 설정하려면 다음 중 한 가지 방법을 사용하세요.
+
+- Gradle 실행 시 `-PcodePushExportDir=<path>` 전달
+- `ext.codePushExportDir` 설정
+
+`ext.codePushExportDir`를 설정한다면 `apply from`보다 앞에 두어야 합니다. 어느 방법을 사용해도 마지막에 `<variant>` 디렉터리가 붙습니다.
+
+### iOS
+
+Xcode에서 앱 타깃의 **Build Phases** 탭을 열고 **Bundle React Native code and images** phase를 찾습니다. 기존 스크립트의 마지막에 아래 줄을 추가합니다.
+
+```sh
 /bin/sh -c "\"$WITH_ENVIRONMENT\" \"$REACT_NATIVE_XCODE\""
 
+# 추가하세요
 "$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"
 ```
 
-export 결과는 `$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/`에 생깁니다. 다른 위치로 내보내려면 `CODEPUSH_EXPORT_DIR` 환경 변수를 설정하세요. 어느 쪽이든 `$CONFIGURATION-$PLATFORM_NAME` 디렉터리가 뒤에 붙습니다.
+기본 export 경로는 다음과 같습니다.
 
-> [!NOTE]
-> Expo config plugin(`app.plugin.js`)으로 이 훅을 자동 적용하는 기능은 아직 구현되지 않았습니다.
+```text
+$BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/
+```
 
-### 바이너리 릴리스별로 export 보관하기
+만약 경로를 다른 위치로 설정하려면 `CODEPUSH_EXPORT_DIR` 환경 변수를 설정하세요. 이 경우에도 마지막에 `$CONFIGURATION-$PLATFORM_NAME` 디렉터리가 붙습니다.
 
-스토어 바이너리를 빌드하는 파이프라인은 빌드마다 나온 export를 바이너리 버전별로 정리해 오래 남는 곳에 보관해야 합니다. 이후 릴리스가 대상 바이너리에 맞는 번들을 가져올 수 있어야 하기 때문입니다.
+> **참고:** Expo config plugin(`app.plugin.js`)으로 이 훅을 자동 적용하는 기능은 아직 제공하지 않습니다.
 
-```bash
-# Android, ./gradlew :app:assembleRelease 실행 후
+## 2. 바이너리 릴리스별 export 보관하기
+
+스토어 바이너리를 빌드하는 CI 파이프라인은 export한 JS 번들을 바이너리 버전별로 구분해 보관해야 합니다.
+
+나중에 OTA 릴리스를 배포할 때 대상 바이너리 버전의 JS 번들을 내려받아 binary patch의 base 번들로 사용합니다.
+
+다음 내용은 예시일 뿐이며, 각자의 배포 파이프라인에 맞는 방식으로 번들을 보관하세요.
+
+### Android 예시
+
+`./gradlew :app:assembleRelease`가 끝난 뒤 export 결과를 업로드합니다.
+
+```sh
 aws s3 cp --recursive \
   android/app/build/codepush/embedded-bundle/release \
   "s3://your-bucket/binaries/android/$BINARY_VERSION/"
+```
 
-# iOS - $BUILD_DIR는 빌드 안에서만 존재하므로, 파이프라인이 아는 경로로 export 위치를 지정한다
+### iOS 예시
+
+`$BUILD_DIR`는 빌드 안에서만 존재하므로, CI가 알고 있는 경로를 export 경로로 지정합니다.
+
+```sh
 export CODEPUSH_EXPORT_DIR="$PWD/codepush-export"
-xcodebuild -workspace ios/YourApp.xcworkspace -scheme YourApp -configuration Release archive # ...
+
+xcodebuild \
+  -workspace ios/YourApp.xcworkspace \
+  -scheme YourApp \
+  -configuration Release \
+  archive # ...
+
 aws s3 cp --recursive \
   "$CODEPUSH_EXPORT_DIR/Release-iphoneos" \
   "s3://your-bucket/binaries/ios/$BINARY_VERSION/"
 ```
 
-이후 patch를 배포할 때는 보관해 둔 export를 내려받아 번들 경로를 `--binary-bundle-path`에 전달합니다.
+## 3. binary patch 릴리스 배포하기
 
-```bash
-aws s3 cp --recursive "s3://your-bucket/binaries/android/1.0.0/" ./binary/
-npx code-push release -b 1.0.0 -v 1.0.1 -p android \
-                      --binary-bundle-path ./binary/index.android.bundle
+배포 대상 바이너리 버전의 JS 번들을 보관해둔 곳에서 내려받고, 해당 JS 번들의 경로를 `--binary-bundle-path`에 전달합니다.
+
+```sh
+aws s3 cp --recursive \
+  "s3://your-bucket/binaries/android/1.0.0/" \
+  ./binary/
+
+npx code-push release \
+  -b 1.0.0 \
+  -v 1.0.1 \
+  -p android \
+  --binary-bundle-path ./binary/index.android.bundle
 ```
 
-`release`는 export에 함께 담긴 `binary-patch-base.json` 기록으로 전달받은 base 번들이 맞는지 검증하기도 합니다. 자세한 내용은 [base 번들 검증](../cli/README.ko.md#base-번들-검증)을 참고하세요.
+`release` 명령은 JS 번들과 함께 보관했던 `binary-patch-base.json` 파일을 읽어 전달한 base 번들이 올바른지도 검증합니다. 자세한 내용은 [**base 번들 검증**](../cli/README.ko.md#base-번들-검증)을 참고하세요.
 
-## asset diff 아카이브
+## 4. asset diff 아카이브 배포하기
 
-binary patch로 배포한 릴리스는 **asset diff 아카이브**도 함께 담을 수 있습니다. 최근에 배포한 버전마다 하나씩입니다. diff 아카이브는 JS 번들의 patch, 기준이 된 버전에 아직 없는 asset, 삭제해야 하는 파일 목록 manifest만 담습니다. 클라이언트는 이미 설치한 기준 업데이트를 복사한 뒤 patch와 manifest를 적용하고, 결과적으로 full 아카이브와 똑같은 내용을 갖게 됩니다.
+binary patch를 배포할 때 이전 OTA 업데이트를 기준으로 한 asset diff 아카이브도 함께 배포할 수 있습니다. 최근 업데이트 N개에 대해 각각 asset diff 아카이브가 추가로 생성됩니다. (만약 asset diff 아카이브의 크기가 binary patch 아카이브보다 같거나 크면 배포되지는 않습니다.)
 
-클라이언트는 아래 순서로 아카이브를 시도하고, 설치할 수 있는 첫 번째 아카이브에서 멈춥니다.
+asset diff에는 다음만 포함됩니다.
 
-| 순서 | 아카이브 | 사용 조건 |
-|---|---|---|
-| 1 | asset diff | 클라이언트가 실행 중인 업데이트를 기준으로 릴리스가 diff를 만들어 둔 경우입니다. |
-| 2 | binary patch | 항상 쓸 수 있습니다. 모든 클라이언트가 가진 앱 바이너리의 번들을 기준으로 만들기 때문입니다. |
-| 3 | full | 항상 쓸 수 있습니다. 설치된 업데이트가 없어도 됩니다. |
+- JS 번들 binary patch
+- 기준 업데이트에 없던 새 asset 파일들
+- 삭제할 asset 파일 목록 manifest 파일
 
-이 순서에는 예외가 세 가지 있습니다.
-
-**모든 클라이언트가 셋을 다 시도하지는 않습니다.** 쓸 수 있는 asset diff가 없는 클라이언트는 binary patch에서 시작합니다. 앱 바이너리의 번들을 실행 중이거나, 새 릴리스가 diff를 만들지 않은 업데이트를 실행 중인 경우입니다.
-
-**asset diff가 실패해도 항상 binary patch로 넘어가지는 않습니다.** diff가 asset 영역에서 실패했다면 넘어갑니다. 설치된 업데이트와 병합하지 못했거나(`asset_merge_failed`), 병합된 내용이 package hash 검증에 실패한 경우(`package_verification_failed`)입니다. 서버가 diff의 URL에 400 이상으로 응답했을 때도 넘어갑니다. 두 아카이브는 서로 다른 URL에 있으니, diff를 받지 못했다고 해서 binary patch도 받지 못하리라 단정할 수 없습니다. 그 밖의 실패는 두 아카이브가 byte 단위로 똑같이 담고 있는 bundle patch에서 일어납니다. binary patch도 같은 방식으로 실패하므로 곧바로 full 아카이브를 내려받습니다.
-
-**연결이 실패하면 다운로드가 거기서 멈춥니다.** 다음 아카이브도 같은 네트워크 뒤에 있고 full 아카이브는 셋 중 가장 큽니다. 이어서 시도해 봐야 더 느리게 실패할 뿐이므로, 클라이언트는 연결 오류를 그대로 알립니다. 서버가 응답한 경우는 다릅니다. 한 아카이브의 404는 다음 아카이브를 건너뛸 이유가 되지 않습니다.
-
-`onUpdateArchiveResult`는 시도한 아카이브를 모두 보고합니다. [텔레메트리 콜백](telemetry-callbacks.ko.md#onupdatearchiveresult가-보고하는-내용)을 참고하세요.
+앱은 업데이트 다운로드 후 기준 OTA 업데이트를 복사한 뒤 JS 번들을 패치하고 불필요한 asset 파일들을 삭제합니다. 그 결과 남는 내용은 full 아카이브 업데이트와 동일합니다.
 
 ### 배포 조건
 
-diff 아카이브는 아래 세 조건이 모두 성립할 때만 배포됩니다.
+asset diff는 아래 조건이 모두 충족될 때만 배포됩니다.
 
-- binary patch 릴리스여야 합니다(`release --binary-bundle-path`).
-- `code-push.config.ts`가 `bundleDownloader`를 구현해야 합니다. CLI가 diff의 기준이 될 이전 릴리스를 내려받는 데 사용합니다.
-- `--diff-base-count`가 `0`보다 커야 합니다. 기본값은 `3`입니다.
+1. binary patch 릴리스여야 합니다. 즉, `release --binary-bundle-path`를 사용해야 합니다.
+2. `code-push.config.ts`에 `bundleDownloader`가 구현되어 있어야 합니다.
+3. `--diff-base-count` 옵션 값이 `0`보다 커야 합니다. 기본값은 `3`입니다.
+
+`bundleDownloader`는 CLI가 asset diff의 기준이 될 이전 업데이트를 내려받을 때 사용합니다.
 
 ```ts
 bundleDownloader: async (archive, platform, identifier = 'staging') => {
-    const downloadedFilePath = path.join(os.tmpdir(), archive.packageHash);
-    const storageKey = `bundles/${platform}/${identifier}/full-bundle/${archive.packageHash}`;
-    // storageKey를 스토리지(S3, Supabase, ...)에서 downloadedFilePath로 내려받는다
-    return { downloadedFilePath };
+  const downloadedFilePath = path.join(os.tmpdir(), archive.packageHash);
+  const storageKey =
+    `bundles/${platform}/${identifier}/full-bundle/${archive.packageHash}`;
+
+  // storageKey의 아카이브를 S3, Supabase 등의 저장소에서
+  // downloadedFilePath로 내려받도록 구현하세요.
+
+  // downloadedFilePath 경로를 반환하세요.
+  return { downloadedFilePath };
 },
 ```
 
-릴리스가 실제로 무엇을 배포하는지는 [asset diff archive](../cli/README.ko.md#asset-diff-archive)를 참고하세요.
+실제로 어떤 asset diff 아카이브가 생성되고 배포되는지는 [**asset diff archive**](../cli/README.ko.md#asset-diff-archive)를 참고하세요.
+
+## 업데이트 다운로드와 fallback 순서
+
+업데이트를 다운로드할 때 작은 아카이브부터 시도합니다.
+
+| 순서 | 아카이브 | 선택 조건 |
+| --- | --- | --- |
+| 1 | asset diff | 현재 실행 중인 OTA 업데이트를 기준으로 한 diff가 있는 경우 |
+| 2 | binary patch | asset diff를 사용할 수 없거나, asset 차이점 적용에 실패한 경우 |
+| 3 | full | binary patch를 사용할 수 없거나 패치 적용에 실패한 경우 |
+
+### asset diff를 건너뛰는 경우
+
+다음 경우에는 asset diff가 없으므로 binary patch부터 시도합니다.
+
+- 앱 바이너리에 내장된 번들을 실행 중인 경우 (첫 번째 OTA 업데이트)
+- 현재 OTA 업데이트를 기준으로 asset diff를 만들지 않은 경우
+
+### asset diff 실패 시 다음 아카이브를 선택하는 기준
+
+실패 원인에 따라 fallback 경로가 달라집니다.
+
+| 실패 상황 | 다음 동작 | 이유 |
+| --- | --- | --- |
+| `asset_merge_failed` | binary patch 시도 | 설치된 업데이트에 asset 차이를 적용하지 못함. 모든 asset을 받아 교체하는 방식은 성공할 수 있음 |
+| `package_verification_failed` | binary patch 시도 | asset diff로 병합한 결과의 최종 hash가 맞지 않음. 모든 asset을 받아 교체하는 방식은 성공할 수 있음 |
+| asset diff 다운로드 URL이 HTTP `400` 이상 응답 | binary patch 시도 | asset diff와 binary patch의 다운로드 URL은 각각 별개이므로, 하나를 받지 못했다고 다른 하나도 받을 수 없는 것은 아님 |
+| bundle patch 적용 실패 | full 아카이브 다운로드 | asset diff와 binary patch는 JS 번들에 동일한 patch를 수행하므로 binary patch로 fallback 해도 실패할 가능성이 높음 |
+| 네트워크 연결 오류 | fallback하지 않고 오류 보고 | 다음 방식 역시 동일한 네트워크를 사용하고, full 아카이브는 사이즈도 더 크므로 이어서 시도해도 더 느리게 실패할 가능성이 큼 |
+
+연결 오류와 서버 응답 오류는 다르게 처리합니다. 예를 들어 asset diff 다운로드 URL이 `404`를 반환한 경우에는 서버 연결은 성공한 상태이므로, 다음 수단인 binary patch나 full 아카이브를 건너뛸 이유가 없습니다.
+
+## 결과 관찰
+
+`onUpdateArchiveResult` 콜백은 앱이 시도한 모든 업데이트의 결과를 보고합니다. 실제로 어떤 아카이브가 선택되었는지, 어떤 이유로 fallback했는지 수집하려면 [**텔레메트리 콜백**](./telemetry-callbacks.ko.md#onupdatearchiveresult-이해하기)을 참고하세요.
