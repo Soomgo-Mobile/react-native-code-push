@@ -8,7 +8,7 @@ The callbacks are **for observation only**.
 
 - The library does not store or send callback data. Your app must send the data itself to record it in telemetry.
 - Registering callbacks does not change update behavior.
-- An update does not fail if a callback throws.
+- Callback failures do not affect update behavior.
 
 See `CodePushOptions` for the other available options.
 
