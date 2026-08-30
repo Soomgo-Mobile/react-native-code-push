@@ -20,6 +20,19 @@ A binary patch is generated against the JS bundle embedded in the app binary pub
 
 Every build for the same release target (binary version) must contain the same embedded bundle. Once you archive that embedded bundle, every update targeting the same binary version can provide a binary patch.
 
+#### Why Hermes bytecode alignment matters
+
+When you pass `--binary-bundle-path` to `release`, the CLI uses the archived embedded bundle as the base for `hermesc -base-bytecode`. This aligns the internal layout of the new bytecode with the base bundle, reducing byte movements unrelated to source changes so that the binary patch can focus on the actual changes.
+
+Measurements from real-world apps showed the following results:
+
+| Conditions | Result |
+| --- | --- |
+| An approximately 25MB Hermes bundle with 153 files changed over five days | The aligned HDiffPatch was 355–382KB. Without alignment, patches from every codec tested were 3–5 times larger. ([PR #150](https://github.com/Soomgo-Mobile/react-native-code-push/pull/150)) |
+| An approximately 18MB Android bundle with 23 lines of source changes | Even with `-base-bytecode`, mismatched `--minify` settings between the binary and update made the patch about 12.5 times as large. ([PR #165](https://github.com/Soomgo-Mobile/react-native-code-push/pull/165)) |
+
+As the second result shows, passing `-base-bytecode` alone is not sufficient. The update must also be generated with `--minify false` to match the embedded binary bundle, and the CLI applies this option by default. Actual results vary by app and change set.
+
 ### Asset diff
 
 An asset diff is generated against a previously published OTA update. Therefore, only an app running that base OTA update can use it.
