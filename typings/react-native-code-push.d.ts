@@ -211,27 +211,27 @@ export interface CodePushOptions extends SyncOptions {
     /**
      * Callback function that is called when the update installation succeeds.
      */
-    onUpdateSuccess?: (label: string) => void;
+    onUpdateSuccess?: (label: string) => void | Promise<void>;
     /**
      * Callback function that is called when the update rolled back.
      */
-    onUpdateRollback?: (label: string) => void;
+    onUpdateRollback?: (label: string) => void | Promise<void>;
     /**
      * Callback function that is called when download starts.
      */
-    onDownloadStart?: (label: string) => void;
+    onDownloadStart?: (label: string) => void | Promise<void>;
     /**
      * Callback function that is called when download finished successfully.
      */
-    onDownloadSuccess?: (label: string) => void;
+    onDownloadSuccess?: (label: string) => void | Promise<void>;
     /**
      * Callback function that is called when sync process failed.
      */
-    onSyncError?: (label: string, error: Error) => void;
+    onSyncError?: (label: string, error: Error) => void | Promise<void>;
     /**
      * Callback function that is called when rollout is skipped.
      */
-    onRolloutSkipped?: (label: string, error: Error) => void;
+    onRolloutSkipped?: (label: string, error: Error) => void | Promise<void>;
 }
 
 export interface DownloadProgress {
@@ -321,7 +321,7 @@ export interface RemotePackage extends Package {
      */
     download(
         downloadProgressCallback?: DownloadProgressCallback,
-        updateArchiveResultCallback?: (result: UpdateArchiveResult) => void,
+        updateArchiveResultCallback?: (result: UpdateArchiveResult) => void | Promise<void>,
     ): Promise<LocalPackage>;
 
     /**
@@ -404,7 +404,7 @@ export interface SyncOptions {
      * depends on the callback: registering none changes nothing, and one that throws is
      * logged and does not fail the download it is reporting on.
      */
-    onUpdateArchiveResult?: (label: string, result: UpdateArchiveResult) => void;
+    onUpdateArchiveResult?: (label: string, result: UpdateArchiveResult) => void | Promise<void>;
 
     /**
      * Specifies whether to ignore the update if the installation fails.

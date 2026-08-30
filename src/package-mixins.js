@@ -1,4 +1,4 @@
-const log = require("./logging");
+const invokeTelemetryCallback = require("./invokeTelemetryCallback");
 
 // This function is used to augment remote and local
 // package objects with additional functionality/properties
@@ -42,14 +42,10 @@ module.exports = (NativeCodePush) => {
           // taken off the package and reported on its own, leaving the package exactly what
           // the native side saved.
           const { updateArchiveResult, ...downloadedPackage } = downloadResult ?? {};
-          if (updateArchiveResult && updateArchiveResultCallback) {
+          if (updateArchiveResult) {
             // The result is an observation, so an observer that throws must not turn a
             // downloaded update into a failed one.
-            try {
-              updateArchiveResultCallback(updateArchiveResult);
-            } catch (error) {
-              log(`The update archive result callback threw: ${error?.message ?? error}`);
-            }
+            invokeTelemetryCallback('onUpdateArchiveResult', updateArchiveResultCallback, updateArchiveResult);
           }
 
           return { ...downloadedPackage, ...local };
