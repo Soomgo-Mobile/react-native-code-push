@@ -36,6 +36,10 @@
 @interface CodePush : RCTEventEmitter
 #endif
 
+/*
+ * Returns the bundle embedded in the binary, without resolving an installed update.
+ * The update pipeline uses this as the base for binary patches and asset diffs.
+ */
 + (NSURL *)binaryBundleURL;
 /*
  * This method is used to retrieve the URL for the most recent
@@ -64,8 +68,10 @@
                    subdirectory:(NSString *)resourceSubdirectory
                          bundle:(NSBundle *)resourceBundle;
 
+/* Internal storage root used by CodePushPackage. */
 + (NSString *)getApplicationSupportDirectory;
 
+/* Returns the embedded assets path used as the base for asset diffs. */
 + (NSString *)bundleAssetsPath;
 
 /*
@@ -76,9 +82,8 @@
 + (void)overrideAppVersion:(NSString *)appVersion;
 
 /*
- * This method allows dynamically setting the app's
- * deployment key, in addition to setting it via
- * the Info.plist file's CodePushDeploymentKey setting.
+ * Retained for compatibility. The current implementation ignores the argument
+ * and uses the deprecated deployment key placeholder.
  */
 + (void)setDeploymentKey:(NSString *)deploymentKey;
 
