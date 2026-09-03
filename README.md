@@ -394,27 +394,6 @@ module.exports = Config;
   - Modifying an existing release history with the `update-history` command.
 
 
-**(2) For `code-push.config.ts` (TypeScript) to work properly, you may need to update your `tsconfig.json`.**
-
-```diff
-  {
-    "extends": "@react-native/typescript-config/tsconfig.json",
-    // ...
-    "include": [
-      // ...
-+     "code-push.config.ts"
-    ],
-+   "ts-node": {
-+     "compilerOptions": {
-+       "module": "CommonJS",
-+       "types": ["node"]
-+     }
-+   }
-  }
-
-```
-
-
 ### 6. Diff Updates (Optional)
 
 In place of the full archive, a release can offer a binary patch computed against the JS
