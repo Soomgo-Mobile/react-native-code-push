@@ -6,7 +6,6 @@
 
 - **Node.js** >= 18
 - React Native 프로젝트에서 **Hermes** 엔진 활성화
-- **ts-node** (선택 사항, 설정 파일이 `.ts`인 경우 필요)
 
 ## 빠른 시작
 

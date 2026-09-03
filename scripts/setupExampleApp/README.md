@@ -81,7 +81,7 @@ Modifies `package.json` to wire up the local library:
 - Adds an npm `sync-local-library` script pointing to `syncLocalLibrary.ts`.
 - Adds a version-aware `setup:pods` convenience script.
 - Registers `sync-local-library` as a `postinstall` hook so every `npm install` keeps the local build in sync.
-- Installs required dev dependencies if missing: `ts-node`, `axios`, `@types/node`, `@supabase/supabase-js`.
+- Installs required dev dependencies if missing: `tsx`, `axios`, `@types/node`, `@supabase/supabase-js`.
 
 ### iOS prebuild behavior by React Native version
 
@@ -99,11 +99,11 @@ Legacy architecture is orthogonal to this opt-in for RN `0.81.x`. If you run pod
 
 Copies the config template from `Examples/CodePushDemoApp/code-push.config.example.supabase.ts` into the project root as `code-push.config.ts`.
 
-### 6. configure-ts-node
+### 6. configure-tsconfig
 
 Updates `tsconfig.json`:
 - Ensures `include` covers `**/*.ts`, `**/*.tsx`, and `code-push.config.ts`.
-- Adds a `ts-node` section with `module: "CommonJS"` and `types: ["node"]` so that npm scripts can execute TypeScript files directly via ts-node.
+- Adds `code-push.config.ts` to `include` so the editor type-checks it. The CLI itself loads the file with tsx, which ships with the library.
 
 ### 7. apply-app-template
 

@@ -35,3 +35,6 @@ jobs:
         run: |
           npm run build:cli
           node bin/code-push.js build-patch-tools --print-hash > /dev/null
+          # Loads a TypeScript config file that uses `export default` and a tsconfig `paths` alias,
+          # from its project directory the way a user runs the CLI.
+          (cd cli/__fixtures__/ts-config-project && node ../../../bin/code-push.js show-history -b 1.0.0 -p ios | grep -q '"packageHash": "fixture"')

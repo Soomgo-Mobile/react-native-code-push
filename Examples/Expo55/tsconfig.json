@@ -17,14 +17,5 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "code-push.config.ts"
-  ],
-  "ts-node": {
-    "compilerOptions": {
-      "module": "CommonJS",
-      "moduleResolution": "Node",
-      "types": [
-        "node"
-      ]
-    }
-  }
+  ]
 }
