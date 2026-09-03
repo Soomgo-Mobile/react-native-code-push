@@ -8,13 +8,5 @@
   "exclude": [
     "**/node_modules",
     "**/Pods"
-  ],
-  "ts-node": {
-    "compilerOptions": {
-      "module": "CommonJS",
-      "types": [
-        "node"
-      ]
-    }
-  }
+  ]
 }
