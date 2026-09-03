@@ -51,7 +51,7 @@ const EXPO_LOCAL_RELEASE_ANDROID_SCRIPT_NAME = "release:android-local";
 const APP_TEMPLATE_IDENTIFIER_PLACEHOLDER = "__IDENTIFIER__";
 
 const REQUIRED_DEV_DEPENDENCIES: Array<{name: string; version?: string}> = [
-  {name: "ts-node"},
+  {name: "tsx"},
   {name: "axios"},
   {name: "@types/node", version: "^22"},
   {name: "@supabase/supabase-js"}
@@ -101,9 +101,9 @@ const setupSteps: SetupStep[] = [
     run: configureLocalCodeLink
   },
   {
-    name: "configure-ts-node",
-    description: "Configure ts-node runtime options",
-    run: configureTsNodeOptions
+    name: "configure-tsconfig",
+    description: "Add code-push.config.ts to tsconfig include",
+    run: configureTsconfigInclude
   },
   {
     name: "create-code-push-config",
@@ -283,15 +283,9 @@ async function configureLocalCodeLink(context: SetupContext): Promise<void> {
 function ensureScripts(packageJson: TemplatePackageJson, context: SetupContext) {
   const scripts = packageJson.scripts ?? {};
   const syncScriptPath = path.resolve(__dirname, "../setupExampleApp/syncLocalLibrary.ts");
-  const tsNodeProjectPath = path.resolve(__dirname, "../setupExampleApp/tsconfig.json");
   const relativeScriptPath = path.relative(context.projectPath, syncScriptPath);
-  const relativeTsNodeProjectPath = path.relative(context.projectPath, tsNodeProjectPath);
   const normalizedPath = relativeScriptPath.split(path.sep).join(path.posix.sep);
-  const normalizedProjectPath = relativeTsNodeProjectPath
-    .split(path.sep)
-    .join(path.posix.sep);
-  scripts[TEMPLATE_SYNC_SCRIPT_NAME] =
-    `ts-node --project ${JSON.stringify(normalizedProjectPath)} ${JSON.stringify(normalizedPath)}`;
+  scripts[TEMPLATE_SYNC_SCRIPT_NAME] = `tsx ${JSON.stringify(normalizedPath)}`;
   scripts[EXPO_LOCAL_RELEASE_IOS_SCRIPT_NAME] =
     "npx expo run:ios --configuration Release --no-bundler";
   scripts[EXPO_LOCAL_RELEASE_ANDROID_SCRIPT_NAME] =
@@ -307,7 +301,8 @@ function ensureScripts(packageJson: TemplatePackageJson, context: SetupContext) 
   packageJson.scripts = scripts;
 }
 
-async function configureTsNodeOptions(context: SetupContext): Promise<void> {
+// The CLI loads code-push.config.ts on its own (tsx); listing it in `include` only lets the editor type-check it.
+async function configureTsconfigInclude(context: SetupContext): Promise<void> {
   const tsconfigPath = path.join(context.projectPath, "tsconfig.json");
   if (!fs.existsSync(tsconfigPath)) {
     fs.writeFileSync(
@@ -328,9 +323,6 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
 
   const tsconfig = parsed.config as {
     include?: string[];
-    ["ts-node"]?: {
-      compilerOptions?: { module?: string; moduleResolution?: string; types?: string[] };
-    };
     [key: string]: unknown;
   };
 
@@ -342,14 +334,6 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
     }
   }
   tsconfig.include = includeEntries;
-
-  tsconfig["ts-node"] = {
-    compilerOptions: {
-      module: "CommonJS",
-      moduleResolution: "Node",
-      types: ["node"]
-    }
-  };
 
   const serialized = `${JSON.stringify(tsconfig, null, 2)}\n`;
   if (serialized !== originalContent) {

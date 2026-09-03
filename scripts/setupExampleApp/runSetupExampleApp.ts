@@ -95,9 +95,9 @@ const setupSteps: SetupStep[] = [
     run: createCodePushConfigFile
   },
   {
-    name: "configure-ts-node",
-    description: "Configure ts-node runtime options",
-    run: configureTsNodeOptions
+    name: "configure-tsconfig",
+    description: "Add code-push.config.ts to tsconfig include",
+    run: configureTsconfigInclude
   },
   {
     name: "apply-app-template",
@@ -417,7 +417,7 @@ async function configureLocalCodeLink(context: SetupContext): Promise<void> {
 }
 
 const REQUIRED_DEV_DEPENDENCIES: Array<{name: string; version?: string}> = [
-  {name: "ts-node"},
+  {name: "tsx"},
   {name: "axios"},
   {name: "@types/node", version: "^22"},
   {name: "@supabase/supabase-js"}
@@ -466,7 +466,7 @@ function ensureLocalCodePushSyncScript(
   );
   const relativeScriptPath = path.relative(projectRealPath, syncScriptPath);
   const normalizedPath = relativeScriptPath.split(path.sep).join(path.posix.sep);
-  const syncScriptCommand = `ts-node --project tsconfig.json ${JSON.stringify(
+  const syncScriptCommand = `tsx ${JSON.stringify(
     normalizedPath
   )}`;
 
@@ -532,7 +532,8 @@ async function createCodePushConfigFile(context: SetupContext): Promise<void> {
   fs.copyFileSync(templatePath, destinationPath);
 }
 
-async function configureTsNodeOptions(context: SetupContext): Promise<void> {
+// The CLI loads code-push.config.ts on its own (tsx); listing it in `include` only lets the editor type-check it.
+async function configureTsconfigInclude(context: SetupContext): Promise<void> {
   const tsconfigPath = path.join(context.projectPath, "tsconfig.json");
   if (!fs.existsSync(tsconfigPath)) {
     throw new Error(`Cannot find tsconfig.json: ${tsconfigPath}`);
@@ -549,9 +550,6 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
 
   const tsconfig = parsed.config as {
     include?: string[];
-    ["ts-node"]?: {
-      compilerOptions?: { module?: string; types?: string[] };
-    };
     [key: string]: unknown;
   };
 
@@ -563,13 +561,6 @@ async function configureTsNodeOptions(context: SetupContext): Promise<void> {
     }
   }
   tsconfig.include = includeEntries;
-
-  tsconfig["ts-node"] = {
-    compilerOptions: {
-      module: "CommonJS",
-      types: ["node"]
-    }
-  };
 
   const serialized = `${JSON.stringify(tsconfig, null, 2)}\n`;
   if (serialized !== originalContent) {

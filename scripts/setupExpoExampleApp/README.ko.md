@@ -24,8 +24,6 @@ scripts/setupExpoExampleApp/
 npm run setup-expo-example-app -- --sdk <sdk-version>
 ```
 
-이 스크립트는 `scripts/setupExampleApp/tsconfig.json` TypeScript 설정을 재사용합니다.
-
 ### CLI 옵션
 
 | 플래그 | 설명 | 기본값 |
@@ -76,7 +74,7 @@ npm run setup-expo-example-app -- --sdk 54 -w /tmp/examples
    - `postinstall`에 `sync-local-library` 등록/연결
 4. 로컬 실행에 필요한 dev dependency 보강
 5. `code-push.config.ts` 템플릿 복사
-6. `ts-node` 실행을 위한 `tsconfig.json` 업데이트
+6. `tsconfig.json`의 `include`에 `code-push.config.ts` 추가
 7. CodePush 테스트용 `App.tsx` 템플릿 적용
 8. Expo Router 홈 라우트가 `App.tsx`를 렌더하도록 연결
 9. `npm install` 실행
