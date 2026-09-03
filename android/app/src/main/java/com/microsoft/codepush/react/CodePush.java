@@ -51,6 +51,9 @@ public class CodePush extends TurboReactPackage {
         return mServerUrl;
     }
 
+    /**
+     * Entry point used by React Native autolinking to create and retain the package instance.
+     */
     public static synchronized CodePush getInstance(Context context, boolean isDebugMode) {
         if (mCurrentInstance == null) {
             mCurrentInstance = new CodePush(context, isDebugMode);
