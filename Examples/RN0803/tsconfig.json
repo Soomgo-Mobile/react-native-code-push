@@ -4,13 +4,5 @@
     "**/*.ts",
     "**/*.tsx",
     "code-push.config.ts"
-  ],
-  "ts-node": {
-    "compilerOptions": {
-      "module": "CommonJS",
-      "types": [
-        "node"
-      ]
-    }
-  }
+  ]
 }
