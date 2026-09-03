@@ -81,7 +81,7 @@ npm run setup-example-app -- -v 0.83.1 --force-recreate
 - `syncLocalLibrary.ts`를 가리키는 `sync-local-library` npm 스크립트를 추가합니다.
 - RN 버전에 따라 달라지는 `setup:pods` 편의 스크립트를 추가합니다.
 - `postinstall` 훅에 `sync-local-library`를 등록하여, `npm install` 시마다 로컬 빌드가 자동 동기화되도록 합니다.
-- 누락된 필수 dev dependencies를 설치합니다: `ts-node`, `axios`, `@types/node`, `@supabase/supabase-js`.
+- 누락된 필수 dev dependencies를 설치합니다: `tsx`, `axios`, `@types/node`, `@supabase/supabase-js`.
 
 ### RN 버전별 iOS prebuild 동작
 
@@ -99,11 +99,11 @@ RN `0.81.x`에서는 legacy architecture 설정과 prebuild opt-in이 서로 독
 
 `Examples/CodePushDemoApp/code-push.config.example.supabase.ts` 템플릿 파일을 프로젝트 루트에 `code-push.config.ts`로 복사합니다.
 
-### 6. configure-ts-node
+### 6. configure-tsconfig
 
 `tsconfig.json`을 수정합니다:
 - `include`에 `**/*.ts`, `**/*.tsx`, `code-push.config.ts`를 추가합니다.
-- `ts-node` 섹션에 `module: "CommonJS"`, `types: ["node"]`를 설정하여 npm 스크립트에서 ts-node로 TypeScript 파일을 직접 실행할 수 있게 합니다.
+- `include`에 `code-push.config.ts`를 넣어 편집기가 타입 검사를 하게 합니다. CLI는 라이브러리에 포함된 tsx로 이 파일을 직접 읽습니다.
 
 ### 7. apply-app-template
 
