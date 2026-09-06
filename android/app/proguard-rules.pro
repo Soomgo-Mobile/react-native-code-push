@@ -21,10 +21,6 @@
     private final ** mBundleLoader;
 }
 # bridgeless
--keepclassmembers class com.facebook.react.defaults.DefaultReactHostDelegate {
-    private ** jsBundleLoader;
-}
-# bridgeless
 -keepclassmembers class * extends com.facebook.react.runtime.ReactHostDelegate {
     private ** jsBundleLoader;
     private ** _jsBundleLoader;
@@ -34,9 +30,6 @@
     private final ** mReactHostDelegate; # RN < 0.81
     private final ** reactHostDelegate; # RN 0.81+
 }
-
-# Can't find referenced class org.bouncycastle.**
--dontwarn com.nimbusds.jose.**
 
 # The binary patch applier is found by name from the native library.
 -keepclasseswithmembernames class com.microsoft.codepush.react.HDiffPatchNative {
