@@ -6,6 +6,7 @@ CLI for [`@bravemobile/react-native-code-push`](../README.md). Bundles, releases
 
 - **Node.js** >= 18
 - **Hermes** engine enabled in your React Native project
+- **tsx** or **ts-node** (optional — only needed if your config file is `.ts`; `tsx` recommended)
 
 ## Quick Start
 

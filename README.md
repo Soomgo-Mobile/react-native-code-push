@@ -394,6 +394,40 @@ module.exports = Config;
   - Modifying an existing release history with the `update-history` command.
 
 
+**(2) A `code-push.config.ts` (TypeScript) file needs a loader installed.**
+
+Install `tsx`, which requires no further setup:
+
+```bash
+npm install --save-dev tsx
+```
+
+`ts-node` also keeps working, and is used when `tsx` is not installed. Note that `ts-node` is no
+longer maintained, so support for it is **deprecated and will be removed in a future major
+version** — please migrate to `tsx`. Until then, `ts-node` needs the following `tsconfig.json`
+setup:
+
+```diff
+  {
+    "extends": "@react-native/typescript-config/tsconfig.json",
+    // ...
+    "include": [
+      // ...
++     "code-push.config.ts"
+    ],
++   "ts-node": {
++     "compilerOptions": {
++       "module": "CommonJS",
++       "types": ["node"]
++     }
++   }
+  }
+
+```
+
+A `code-push.config.js` (JavaScript) file needs neither.
+
+
 ### 6. Diff Updates (Optional)
 
 In place of the full archive, a release can offer a binary patch computed against the JS
