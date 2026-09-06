@@ -35,6 +35,10 @@ function requireTsConfig(projectRequire: NodeRequire, filePath: string): { defau
   }
 
   if (canResolve(projectRequire, 'ts-node/register')) {
+    console.warn(
+      'warn: Loading the config file with ts-node, which is no longer maintained. Support for it ' +
+        'will be removed in a future major version - please install tsx instead (`npm i -D tsx`).',
+    );
     projectRequire('ts-node/register');
     return projectRequire(filePath);
   }
