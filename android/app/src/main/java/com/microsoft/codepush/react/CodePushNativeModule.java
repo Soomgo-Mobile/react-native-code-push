@@ -59,6 +59,15 @@ public class CodePushNativeModule extends NativeCodePushSpec {
     private  boolean _restartInProgress = false;
     private  ArrayList<Boolean> _restartQueue = new ArrayList<>();
 
+    /**
+     * Whether the React Native instance this module was created for is still the one running.
+     *
+     * A reload replaces the instance while work this module started can still be in flight,
+     * and a frame callback posted to the process-wide choreographer outlives the executor
+     * this module shuts down. Read from whichever thread that work is on, so it is volatile.
+     */
+    private volatile boolean mGenerationAlive = true;
+
     public CodePushNativeModule(ReactApplicationContext reactContext, CodePush codePush, CodePushUpdateManager codePushUpdateManager, CodePushTelemetryManager codePushTelemetryManager, SettingsManager settingsManager) {
         super(reactContext);
 
@@ -85,6 +94,7 @@ public class CodePushNativeModule extends NativeCodePushSpec {
 
     @Override
     public void invalidate() {
+        mGenerationAlive = false;
         clearLifecycleEventListener();
         mBackgroundExecutor.shutdownNow();
         super.invalidate();
@@ -264,6 +274,14 @@ public class CodePushNativeModule extends NativeCodePushSpec {
     }
 
     private void emitDownloadProgressEvent(DownloadProgress downloadProgress) {
+        // Every progress event arrives here, including the ones a frame callback delivers
+        // after this module was invalidated: shutting the executor down does not cancel a
+        // callback already posted to the choreographer, and the context it would emit
+        // through has been destroyed by then.
+        if (!mGenerationAlive) {
+            return;
+        }
+
         if (mEventEmitterCallback != null) {
             emitOnDownloadProgress(downloadProgress.createWritableMap());
             return;
@@ -275,6 +293,13 @@ public class CodePushNativeModule extends NativeCodePushSpec {
     }
 
     private void restartAppInternal(boolean onlyIfUpdateIsPending) {
+        // A restart requested by an instance that has been replaced would reload the one
+        // that replaced it, which nobody asked for.
+        if (!mGenerationAlive) {
+            CodePushUtils.log("Ignoring a restart requested by a React Native instance that is no longer running");
+            return;
+        }
+
         if (this._restartInProgress) {
             CodePushUtils.log("Restart request queued until the current restart is completed");
             this._restartQueue.add(onlyIfUpdateIsPending);
