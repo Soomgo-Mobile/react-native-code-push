@@ -16,6 +16,7 @@
   },
   "include": ["./**/*.ts"],
   "exclude": [
-    "dist"
+    "dist",
+    "**/__fixtures__"
   ]
 }

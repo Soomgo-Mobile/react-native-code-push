@@ -102,10 +102,18 @@
   },
   "peerDependencies": {
     "expo": ">=50.0.0",
-    "react-native": "*"
+    "react-native": "*",
+    "ts-node": ">=10",
+    "tsx": ">=4"
   },
   "peerDependenciesMeta": {
     "expo": {
+      "optional": true
+    },
+    "ts-node": {
+      "optional": true
+    },
+    "tsx": {
       "optional": true
     }
   },
@@ -129,6 +137,7 @@
     "react": "19.2.3",
     "react-native": "0.84.1",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.13",
     "typescript": "5.0.4",
     "typescript-eslint": "^8.11.0"
   },

@@ -394,7 +394,18 @@ module.exports = Config;
   - Modifying an existing release history with the `update-history` command.
 
 
-**(2) For `code-push.config.ts` (TypeScript) to work properly, you may need to update your `tsconfig.json`.**
+**(2) A `code-push.config.ts` (TypeScript) file needs a loader installed.**
+
+Install `tsx`, which requires no further setup:
+
+```bash
+npm install --save-dev tsx
+```
+
+`ts-node` also keeps working, and is used when `tsx` is not installed. Note that `ts-node` is no
+longer maintained, so support for it is **deprecated and will be removed in a future major
+version** — please migrate to `tsx`. Until then, `ts-node` needs the following `tsconfig.json`
+setup:
 
 ```diff
   {
@@ -413,6 +424,8 @@ module.exports = Config;
   }
 
 ```
+
+A `code-push.config.js` (JavaScript) file needs neither.
 
 
 ### 6. Diff Updates (Optional)
