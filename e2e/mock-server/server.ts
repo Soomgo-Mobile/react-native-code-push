@@ -1,4 +1,6 @@
 import express from "express";
+import fs from "fs";
+import path from "path";
 import { getMockDataDir, getMockServerPort } from "../config";
 import type { Server } from "http";
 
@@ -73,6 +75,43 @@ export function startMockServer(platform: Platform): Promise<void> {
     app.get("/e2e/update-archive-result", (_req: express.Request, res: express.Response) => {
       res.status(204).end();
     });
+
+    // A reload racing an in-flight download only says something while the download is
+    // still running, and a Metro bundle arrives over localhost in a single chunk. When a
+    // scenario asks for it, archives are served in slices spread over that many
+    // milliseconds so the reload lands in the middle of one.
+    const slowDownloadMs = Number(process.env.E2E_SLOW_DOWNLOAD_MS ?? 0);
+    if (slowDownloadMs > 0) {
+      app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+        // Archives are served under /bundles with a hash for a name, so what is throttled
+        // follows from where the file is rather than from what it is called.
+        if (!req.path.startsWith("/bundles/")) {
+          return next();
+        }
+        const filePath = path.join(dataDir, path.normalize(req.path));
+        if (!filePath.startsWith(dataDir) || !fs.existsSync(filePath)) {
+          return next();
+        }
+
+        const body = fs.readFileSync(filePath);
+        const sliceCount = 20;
+        const sliceSize = Math.ceil(body.length / sliceCount);
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Length", String(body.length));
+
+        let offset = 0;
+        const writeNextSlice = () => {
+          if (offset >= body.length) {
+            res.end();
+            return;
+          }
+          res.write(body.subarray(offset, offset + sliceSize));
+          offset += sliceSize;
+          setTimeout(writeNextSlice, slowDownloadMs / sliceCount);
+        };
+        writeNextSlice();
+      });
+    }
 
     app.use(express.static(dataDir));
 

@@ -1,0 +1,42 @@
+appId: ${APP_ID}
+---
+# A reload fired while an update is still downloading leaves the finishing download talking
+# to a runtime that is gone: the progress callback of the generation that started the
+# download reaches the JS side after that generation was torn down.
+#
+# The download is throttled by the mock server for this scenario, so the reload lands while
+# it is still running.
+- launchApp:
+    clearState: true
+- runFlow:
+    when:
+      platform: Android
+    file: ../flows/shared/android-dismiss-overlays.yaml
+- runFlow:
+    when:
+      platform: iOS
+    file: ../flows/shared/ios-dismiss-overlays.yaml
+- assertVisible: "React Native.*"
+
+# The release is optional, so it installs on the next restart rather than restarting by
+# itself, and the app stays on screen for the whole download.
+- tapOn: "Check for updates"
+
+# The download has to still be running when the restart is tapped. Without this the
+# scenario can pass having proved nothing.
+- assertVisible: "Result: DOWNLOADING_PACKAGE"
+
+- tapOn: "Restart app"
+
+- waitForAnimationToEnd:
+    timeout: 25000
+- tapOn:
+    text: "(?i)^wait$"
+    optional: true
+
+# Survived the reload: the process is still the app and it still answers taps.
+- assertVisible: "React Native.*"
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "METADATA_.*"
