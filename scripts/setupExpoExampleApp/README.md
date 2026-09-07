@@ -24,8 +24,6 @@ Run from the repository root:
 npm run setup-expo-example-app -- --sdk <sdk-version>
 ```
 
-This script reuses TypeScript settings from `scripts/setupExampleApp/tsconfig.json`.
-
 ### CLI Options
 
 | Flag | Description | Default |
@@ -76,7 +74,7 @@ The script runs these steps in order:
    - Adds/extends `postinstall` to run `sync-local-library`.
 4. Ensures required dev dependencies for local scripts.
 5. Copies `code-push.config.ts` template.
-6. Updates `tsconfig.json` for `ts-node`.
+6. Adds `code-push.config.ts` to `include` in `tsconfig.json`.
 7. Replaces `App.tsx` with the CodePush test template.
 8. Wires Expo Router home route to render `App.tsx`.
 9. Runs `npm install`.
