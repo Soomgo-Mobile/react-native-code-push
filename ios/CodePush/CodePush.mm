@@ -1,6 +1,7 @@
 #import <React/RCTAssert.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTConvert.h>
+#import <React/RCTInvalidating.h>
 #import <React/RCTEventDispatcher.h>
 #import <React/RCTRootView.h>
 #import <React/RCTUtils.h>
@@ -8,7 +9,9 @@
 
 #import "CodePush.h"
 
-@interface CodePush () <RCTFrameUpdateObserver
+#include <atomic>
+
+@interface CodePush () <RCTFrameUpdateObserver, RCTInvalidating
 #ifdef RCT_NEW_ARCH_ENABLED
 , NativeCodePushSpec
 #endif
@@ -32,6 +35,17 @@
     BOOL _allowed;
     BOOL _restartInProgress;
     NSMutableArray *_restartQueue;
+
+    /*
+     * Whether the React Native instance this module was created for is still the one
+     * running.
+     *
+     * A reload starts the next instance before the one being replaced has finished being
+     * torn down, so work this instance started can still be running with nothing left to
+     * hand its result to. Read from whichever thread that work is on, written when the
+     * instance is invalidated, so it is atomic.
+     */
+    std::atomic<bool> _generationAlive;
 }
 
 RCT_EXPORT_MODULE()
@@ -307,7 +321,42 @@ static NSString *const LatestRollbackCountKey = @"count";
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+/*
+ * Called when the React Native instance this module belongs to is being replaced.
+ *
+ * A download in flight keeps this module alive past that point, and the suspend timer and
+ * the resume notifications keep it reachable too. None of them may act afterwards: the
+ * runtime they would report to is gone, and the restart they would trigger belongs to a
+ * generation that is no longer on screen.
+ */
+- (void)invalidate
+{
+    _generationAlive.store(false);
+
+    [_appSuspendTimer invalidate];
+    _appSuspendTimer = nil;
+    _hasResumeListener = NO;
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+
+#ifndef RCT_NEW_ARCH_ENABLED
+    [super invalidate];
+#endif
+}
+
+/* Whether this module still belongs to the React Native instance that is running. */
+- (BOOL)isGenerationAlive
+{
+    return _generationAlive.load();
+}
+
 - (void)dispatchDownloadProgressEvent {
+  // The download that is reporting here can be one this module started before the app was
+  // reloaded, in which case the event emitter it would reach belongs to a runtime that has
+  // been torn down.
+  if (![self isGenerationAlive]) {
+    return;
+  }
+
   // Notify the script-side about the progress
   NSDictionary *progress = @{
     @"totalBytes" : [NSNumber numberWithLongLong:_latestExpectedContentLength],
@@ -375,6 +424,7 @@ static NSString *const LatestRollbackCountKey = @"count";
     _restartInProgress = NO;
     _restartQueue = [NSMutableArray arrayWithCapacity:1];
     _lastProgressEventTime = 0;
+    _generationAlive.store(true);
 
     self = [super init];
     if (self) {
@@ -533,6 +583,11 @@ static NSString *const LatestRollbackCountKey = @"count";
  */
 - (void)loadBundle
 {
+    if (![self isGenerationAlive]) {
+        CPLog(@"Ignoring a reload requested by a React Native instance that is no longer running.");
+        return;
+    }
+
     @synchronized([CodePush class]) {
         hasInitializedUpdateAfterRestartForCurrentLoad = NO;
     }
@@ -802,6 +857,11 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
 
 - (void)restartAppInternal:(BOOL)onlyIfUpdateIsPending
 {
+    if (![self isGenerationAlive]) {
+        CPLog(@"Ignoring a restart requested by a React Native instance that is no longer running.");
+        return;
+    }
+
     if (_restartInProgress) {
         CPLog(@"Restart request queued until the current restart is completed.");
         [_restartQueue addObject:@(onlyIfUpdateIsPending)];
