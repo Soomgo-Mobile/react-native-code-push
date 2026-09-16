@@ -12,6 +12,7 @@ type Options = {
     mandatory?: boolean;
     enable?: boolean;
     rollout?: number;
+    minimumBackgroundDuration?: number;
 }
 
 program.command('update-history')
@@ -24,12 +25,22 @@ program.command('update-history')
     .option('-m, --mandatory <bool>', 'make the release to be mandatory', parseBoolean, undefined)
     .option('-e, --enable <bool>', 'make the release to be enabled', parseBoolean, undefined)
     .option('--rollout <number>', 'rollout percentage (0-100)', parseFloat, undefined)
+    .option('--minimum-background-duration <seconds>', 'seconds the app must have been in the background before this update is applied on resume. Overrides the minimumBackgroundDuration sync option.', parseDecimalInt, undefined)
     .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
-        if (typeof options.mandatory !== "boolean" && typeof options.enable !== "boolean") {
+        if (typeof options.mandatory !== "boolean"
+            && typeof options.enable !== "boolean"
+            && typeof options.rollout !== "number"
+            && typeof options.minimumBackgroundDuration !== "number") {
             console.error('No options specified. Exiting the program.')
             process.exit(1)
+        }
+
+        if (options.minimumBackgroundDuration !== undefined
+            && (!Number.isInteger(options.minimumBackgroundDuration) || options.minimumBackgroundDuration < 0)) {
+            console.error('--minimum-background-duration must be a whole number of seconds, 0 or greater.');
+            process.exit(1);
         }
 
         await updateReleaseHistory(
@@ -41,9 +52,16 @@ program.command('update-history')
             options.identifier,
             options.mandatory,
             options.enable,
-            options.rollout
+            options.rollout,
+            options.minimumBackgroundDuration
         )
     });
+
+// Not `parseInt` itself: commander hands a coercion function the current value as its
+// second argument, which `parseInt` reads as the radix.
+function parseDecimalInt(value: string): number {
+    return parseInt(value, 10);
+}
 
 function parseBoolean(value: string) {
     if (value === 'true') return true;

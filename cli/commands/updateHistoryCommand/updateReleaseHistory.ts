@@ -11,6 +11,7 @@ export async function updateReleaseHistory(
     mandatory: boolean | undefined,
     enable: boolean | undefined,
     rollout: number | undefined,
+    minimumBackgroundDuration: number | undefined,
 ): Promise<void> {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
@@ -20,6 +21,8 @@ export async function updateReleaseHistory(
     if (typeof mandatory === "boolean") updateInfo.mandatory = mandatory;
     if (typeof enable === "boolean") updateInfo.enabled = enable;
     if (typeof rollout === "number") updateInfo.rollout = rollout;
+    // 0 is what lowers the wait to "apply on the next resume", so truthiness cannot decide here.
+    if (typeof minimumBackgroundDuration === "number") updateInfo.minimumBackgroundDuration = minimumBackgroundDuration;
 
     try {
         await stageReleaseHistoryFile(binaryVersion, releaseHistory, platform, (jsonFilePath) =>

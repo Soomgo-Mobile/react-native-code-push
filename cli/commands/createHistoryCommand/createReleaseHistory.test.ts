@@ -96,8 +96,8 @@ describe("staging the release history a config is handed", () => {
         };
 
         await Promise.all([
-            updateReleaseHistory("1.0.1", BINARY_VERSION, getReleaseHistory, setReleaseHistory, "ios", "RN0840", undefined, false, undefined),
-            updateReleaseHistory("1.0.1", BINARY_VERSION, getReleaseHistory, setReleaseHistory, "android", "RN0840", undefined, false, undefined),
+            updateReleaseHistory("1.0.1", BINARY_VERSION, getReleaseHistory, setReleaseHistory, "ios", "RN0840", undefined, false, undefined, undefined),
+            updateReleaseHistory("1.0.1", BINARY_VERSION, getReleaseHistory, setReleaseHistory, "android", "RN0840", undefined, false, undefined, undefined),
         ]);
 
         expect(staged.ios).toContain("ios-url");
