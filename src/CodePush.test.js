@@ -649,3 +649,60 @@ describe('telemetry callback errors', () => {
     expect(nativeBridge.saveStatusReportForRetry).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A release can ask for its own minimum background duration - how long the app has to have
+ * been in the background before an update installed with `ON_NEXT_RESUME` is applied. The
+ * app passes a duration to `sync` for the releases that ask for nothing, and whichever of
+ * the two wins is what the native module is given when the update is installed.
+ */
+describe('the minimum background duration an update is installed with', () => {
+  /** The release the CLI writes when the release carries its own background duration. */
+  function releaseAskingFor(minimumBackgroundDuration) {
+    const history = fullOnlyRelease();
+    history[LABEL].minimumBackgroundDuration = minimumBackgroundDuration;
+    return history;
+  }
+
+  /** The background duration the native module is given, in seconds. */
+  function installedMinimumBackgroundDuration(nativeBridge) {
+    expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
+    return nativeBridge.installUpdate.mock.calls[0][2];
+  }
+
+  it('takes the one the release history entry asks for over the one the sync call passes', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: releaseAskingFor(600) });
+
+    const syncStatus = await CodePush.sync({
+      installMode: InstallMode.ON_NEXT_RESUME,
+      minimumBackgroundDuration: 3600,
+    });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(installedMinimumBackgroundDuration(nativeBridge)).toBe(600);
+  });
+
+  it('keeps the one the sync call passes when the release history entry asks for none', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: fullOnlyRelease() });
+
+    const syncStatus = await CodePush.sync({
+      installMode: InstallMode.ON_NEXT_RESUME,
+      minimumBackgroundDuration: 3600,
+    });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(installedMinimumBackgroundDuration(nativeBridge)).toBe(3600);
+  });
+
+  it('runs a release that asks for zero seconds on the next resume, however long the sync call would have waited', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: releaseAskingFor(0) });
+
+    const syncStatus = await CodePush.sync({
+      installMode: InstallMode.ON_NEXT_RESUME,
+      minimumBackgroundDuration: 3600,
+    });
+
+    expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
+    expect(installedMinimumBackgroundDuration(nativeBridge)).toBe(0);
+  });
+});

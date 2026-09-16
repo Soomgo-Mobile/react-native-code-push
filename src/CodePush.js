@@ -200,6 +200,11 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
            * back on when the diff fails on its asset side.
            */
           asset_diff_download_url: diffPackageDownloadUrl,
+          /**
+           * Only present when the release asked for a background duration of its own, which
+           * then wins over the one the `sync` call passes.
+           */
+          minimum_background_duration: latestReleaseInfo.minimumBackgroundDuration,
           // (`enabled` will always be true in the release information obtained from the previous process.)
           is_available: latestReleaseInfo.enabled,
           package_hash: latestReleaseInfo.packageHash,
@@ -308,6 +313,11 @@ function mapToRemotePackageMetadata(updateInfo) {
       : {}),
     ...(updateInfo.asset_diff_download_url
       ? { assetDiffDownloadUrl: updateInfo.asset_diff_download_url }
+      : {}),
+    // Presence is read off the type, not off truthiness, so that a release asking for `0`
+    // seconds keeps its own value instead of looking like a release that asked for nothing.
+    ...(typeof updateInfo.minimum_background_duration === 'number'
+      ? { minimumBackgroundDuration: updateInfo.minimum_background_duration }
       : {}),
   };
 }
@@ -552,6 +562,7 @@ const sync = (() => {
  */
 async function syncInternal(options = {}, syncStatusChangeCallback, downloadProgressCallback, handleBinaryVersionMismatchCallback) {
   let resolvedInstallMode;
+  let resolvedMinimumBackgroundDuration;
   const syncOptions = {
     deploymentKey: null,
     ignoreFailedUpdates: true,
@@ -596,8 +607,8 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
           if (resolvedInstallMode == CodePush.InstallMode.ON_NEXT_RESTART) {
             log("Update is installed and will be run on the next app restart.");
           } else if (resolvedInstallMode == CodePush.InstallMode.ON_NEXT_RESUME) {
-            if (syncOptions.minimumBackgroundDuration > 0) {
-              log(`Update is installed and will be run after the app has been in the background for at least ${syncOptions.minimumBackgroundDuration} seconds.`);
+            if (resolvedMinimumBackgroundDuration > 0) {
+              log(`Update is installed and will be run after the app has been in the background for at least ${resolvedMinimumBackgroundDuration} seconds.`);
             } else {
               log("Update is installed and will be run when the app next resumes.");
             }
@@ -630,9 +641,11 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
 
       // Determine the correct install mode based on whether the update is mandatory or not.
       resolvedInstallMode = localPackage.isMandatory ? syncOptions.mandatoryInstallMode : syncOptions.installMode;
+      // `??` rather than `||`, so a release asking for `0` seconds keeps its own value.
+      resolvedMinimumBackgroundDuration = remotePackage.minimumBackgroundDuration ?? syncOptions.minimumBackgroundDuration;
 
       syncStatusChangeCallback(CodePush.SyncStatus.INSTALLING_UPDATE);
-      await localPackage.install(resolvedInstallMode, syncOptions.minimumBackgroundDuration, () => {
+      await localPackage.install(resolvedInstallMode, resolvedMinimumBackgroundDuration, () => {
         syncStatusChangeCallback(CodePush.SyncStatus.UPDATE_INSTALLED);
       });
 

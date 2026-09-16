@@ -44,6 +44,13 @@ export interface ReleaseInfo {
      */
     diffPackages?: Record<string, string>;
     packageHash: string;
+    /**
+     * The minimum number of seconds the app has to have been in the background before this
+     * release is applied, with the same meaning as `SyncOptions.minimumBackgroundDuration`.
+     * When it is present it takes precedence over the value passed to `sync`, so a single
+     * release can be applied sooner or later than the app asks for by default.
+     */
+    minimumBackgroundDuration?: number;
     rollout?: number;
 }
 
@@ -73,6 +80,11 @@ export interface UpdateCheckResponse {
     should_run_binary_version?: boolean;
     update_app_version?: boolean;
     is_mandatory?: boolean;
+    /**
+     * The minimum number of seconds the app has to have been in the background before this
+     * update is applied. It is only present when the release asked for one of its own.
+     */
+    minimum_background_duration?: number;
 }
 
 /**
@@ -345,6 +357,13 @@ export interface RemotePackage extends Package {
      * `UpdateArchiveResult`.
      */
     assetDiffDownloadUrl?: string;
+
+    /**
+     * The minimum number of seconds the app has to have been in the background before this
+     * update is applied. It is only present when the release history entry set it, and it
+     * then takes precedence over the `minimumBackgroundDuration` passed to `sync`.
+     */
+    minimumBackgroundDuration?: number;
 }
 
 export interface SyncOptions {
@@ -372,6 +391,7 @@ export interface SyncOptions {
      * only applies to updates which are installed using `InstallMode.ON_NEXT_RESUME` or `InstallMode.ON_NEXT_SUSPEND`, and can be useful
      * for getting your update in front of end users sooner, without being too obtrusive. Defaults to `0`, which has the effect of applying
      * the update immediately after a resume or unless the app suspension is long enough to not matter, regardless how long it was in the background.
+     * A `minimumBackgroundDuration` set on the release history entry of the update being installed takes precedence over this option.
      */
     minimumBackgroundDuration?: number;
 
