@@ -101,7 +101,7 @@ Maestro 드라이버 두 개가 나눠 씁니다. 이 부하에서 타이밍 민
    - `02-optional-update-on-restart-button` — 앱 내 "Restart app" 버튼을 누를 때
    - `03-optional-update-on-resume-after-20s` — 앱이 백그라운드에 20초 이상 머문 뒤 포그라운드로 돌아올 때 `ON_NEXT_RESUME`으로 업데이트가 적용되는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
    - `04-optional-update-on-suspend-after-20s` — 앱이 백그라운드에 20초 이상 머무는 동안 `ON_NEXT_SUSPEND`로 업데이트가 적용되고, 다음 포그라운드 진입 시 반영된 번들이 보이는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
-   - `05-optional-update-on-resume-history-0s-over-sync-20s` — 앱의 `sync`가 20초를 요청했더라도 `--minimum-background-duration 0`으로 배포한 릴리스가 첫 resume에서 적용되는지 확인합니다. 릴리스에 적힌 값이 sync 옵션보다 우선합니다.
+   - `05-optional-update-on-resume-history-0s-over-sync-20s` — 앱의 `sync`가 20초를 요청했더라도 `--minimum-background-duration 0`으로 배포한 릴리스가 처음 포그라운드로 돌아올 때 적용되는지 확인합니다. 릴리스에 적힌 값이 sync 옵션보다 우선합니다.
    - `06-optional-update-on-resume-history-20s-over-sync-0s` — 앱의 `sync`가 대기 없음을 요청했더라도 `--minimum-background-duration 20`으로 배포한 릴리스가 백그라운드 2초 뒤에는 적용되지 않고 20초 뒤에 적용되는지 확인합니다. `--exclude-timing-sensitive`를 주지 않으면 실행됩니다.
 
 ### Phase 6 — 바이너리 패치 업데이트 (`flows-binary-patch/`)
