@@ -841,6 +841,14 @@ describe("release --minimum-background-duration", () => {
         expect(releaseHistories[0][APP_VERSION].minimumBackgroundDuration).toBe(600);
     });
 
+    it("releases a background wait of zero seconds as zero, not as an unset option", async () => {
+        const staged = await stageBundleOutput("zero-minimum-background-duration");
+
+        const { releaseHistories } = await runRelease(staged, { minimumBackgroundDuration: 0 });
+
+        expect(releaseHistories[0][APP_VERSION].minimumBackgroundDuration).toBe(0);
+    });
+
     it("leaves the release saying nothing about the background wait when the option is not given", async () => {
         const staged = await stageBundleOutput("no-minimum-background-duration");
 
