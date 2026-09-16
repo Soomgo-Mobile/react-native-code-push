@@ -49,6 +49,7 @@ export async function release(
     onOversizedPatch: OversizedPatchPolicy = DEFAULT_OVERSIZED_PATCH_POLICY,
     bundleDownloader?: CliConfigInterface['bundleDownloader'],
     diffBaseCount: number = DEFAULT_DIFF_BASE_COUNT,
+    minimumBackgroundDuration?: number,
 ): Promise<void> {
     if (baseBundlePath) {
         // Checked before the bundler runs, so the wrong base bundle costs a second rather
@@ -167,6 +168,7 @@ export async function release(
         enable,
         rollout,
         Object.keys(diffPackages).length > 0 ? diffPackages : undefined,
+        minimumBackgroundDuration,
     )
 
     if (!skipCleanup) {

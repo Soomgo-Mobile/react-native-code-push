@@ -32,6 +32,7 @@ const ARG_INDEX = {
     onOversizedPatch: 20,
     bundleDownloader: 21,
     diffBaseCount: 22,
+    minimumBackgroundDuration: 23,
 } as const;
 
 /**
@@ -142,6 +143,34 @@ describe("release command options", () => {
         }) as never);
 
         await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--diff-base-count', value]))
+            .rejects.toThrow('process.exit(1)');
+
+        const { release } = await import("./release.js");
+        expect(jest.mocked(release)).not.toHaveBeenCalled();
+    });
+
+    it("passes the chosen minimum background duration through to the release", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--minimum-background-duration', '600']);
+
+        expect(args[ARG_INDEX.minimumBackgroundDuration]).toBe(600);
+    });
+
+    it("leaves the minimum background duration unset when the option is not given, so the sync option decides", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1']);
+
+        expect(args[ARG_INDEX.minimumBackgroundDuration]).toBeUndefined();
+    });
+
+    it.each([
+        ['is negative', '-1'],
+        ['is not a number at all', 'soon'],
+    ])("rejects a minimum background duration that %s", async (_caseName, value) => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+            throw new Error(`process.exit(${code})`);
+        }) as never);
+
+        await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--minimum-background-duration', value]))
             .rejects.toThrow('process.exit(1)');
 
         const { release } = await import("./release.js");

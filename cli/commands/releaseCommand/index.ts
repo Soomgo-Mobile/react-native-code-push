@@ -31,6 +31,7 @@ type Options = {
     binaryBundlePath?: string;
     onOversizedPatch: OversizedPatchPolicy;
     diffBaseCount: number;
+    minimumBackgroundDuration?: number;
 }
 
 program.command('release')
@@ -57,6 +58,7 @@ program.command('release')
         .choices(OVERSIZED_PATCH_POLICIES)
         .default(DEFAULT_OVERSIZED_PATCH_POLICY))
     .option('--diff-base-count <number>', 'how many recent releases to build asset diff archives against (0 disables). Requires `bundleDownloader` in the config file.', parseDecimalInt, DEFAULT_DIFF_BASE_COUNT)
+    .option('--minimum-background-duration <seconds>', 'seconds the app must have been in the background before this update is applied on resume. Overrides the minimumBackgroundDuration sync option.', parseDecimalInt)
     .action(async (options: Options) => {
         const config = findAndReadConfigFile(process.cwd(), options.config);
 
@@ -67,6 +69,12 @@ program.command('release')
 
         if (!Number.isInteger(options.diffBaseCount) || options.diffBaseCount < 0) {
             console.error('--diff-base-count must be a whole number of releases, 0 or greater.');
+            process.exit(1);
+        }
+
+        if (options.minimumBackgroundDuration !== undefined
+            && (!Number.isInteger(options.minimumBackgroundDuration) || options.minimumBackgroundDuration < 0)) {
+            console.error('--minimum-background-duration must be a whole number of seconds, 0 or greater.');
             process.exit(1);
         }
 
@@ -102,6 +110,7 @@ program.command('release')
             options.onOversizedPatch,
             config.bundleDownloader,
             options.diffBaseCount,
+            options.minimumBackgroundDuration,
         )
 
         console.log('🚀 Release completed.')
