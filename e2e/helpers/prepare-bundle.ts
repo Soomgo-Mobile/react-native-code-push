@@ -31,6 +31,8 @@ interface PrepareBundleOptions {
   assetMarkers?: AssetMarker[];
   /** Skipped when the release should join the history that is already being served. */
   createHistory?: boolean;
+  /** Written on the release history entry; the app then waits this long instead of what `sync` asked. */
+  minimumBackgroundDuration?: number;
 }
 
 export function setReleasingBundle(appPath: string, platform: "ios" | "android", value: boolean): void {
@@ -213,6 +215,7 @@ export async function prepareBundle(
       mandatory,
       framework,
       options.binaryBundlePath,
+      options.minimumBackgroundDuration,
     );
   } finally {
     if (releaseMarkerVersion) {
@@ -236,6 +239,7 @@ function runCodePushRelease(
   mandatory: boolean,
   framework?: "expo",
   binaryBundlePath?: string,
+  minimumBackgroundDuration?: number,
 ): Promise<void> {
   const { frameworkArgs, entryFile } = getCodePushReleaseArgs(appPath, framework);
   return runCodePushCommand(appPath, platform, [
@@ -249,6 +253,10 @@ function runCodePushRelease(
     "-e", entryFile,
     "-m", mandatory ? "true" : "false",
     ...(binaryBundlePath ? ["--binary-bundle-path", binaryBundlePath] : []),
+    // Checked against the type, because 0 is a value a release can ask for.
+    ...(typeof minimumBackgroundDuration === "number"
+      ? ["--minimum-background-duration", String(minimumBackgroundDuration)]
+      : []),
   ]);
 }
 

@@ -128,6 +128,7 @@ export function readReleaseHistory(
   packageHash: string;
   binaryPatchDownloadUrl?: string;
   diffPackages?: Record<string, string>;
+  minimumBackgroundDuration?: number;
 }> {
   return JSON.parse(fs.readFileSync(getHistoryFilePath(platform, identifier, binaryVersion), "utf8"));
 }
