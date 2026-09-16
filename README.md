@@ -501,6 +501,8 @@ npx code-push release --framework expo --binary-version 1.0.0 --app-version 1.0.
 > `--app-version` should be greater than `--binary-version` (SemVer comparison).
 
 - `--rollout`: The rollout percentage for the update. (0~100, inclusive)
+- `--minimum-background-duration`: The number of seconds the app must have been in the background before this update is applied on resume. (whole seconds, 0 or greater)
+  - The value set on the release takes precedence over the `minimumBackgroundDuration` passed to `sync`, and `0` applies the update on the next resume.
 
 #### `update-history`
 
@@ -509,6 +511,8 @@ Update the release history for a specific CodePush update.
 - Use the `--mandatory` option to make the update as mandatory or optional.
 - Use the `--rollout` option to change the rollout percentage of the update. (0~100, inclusive)
   - If the rollout percentage is reduced, users who fall outside the new target will have their rollout canceled and rollback to the previous latest version.
+- Use the `--minimum-background-duration` option to change how many seconds the app must have been in the background before the update is applied on resume. (whole seconds, 0 or greater)
+  - It can be lowered after a release has gone out - setting it to `0`, for example, applies the update on the next resume instead of waiting.
 
 **Example:**
 - Rollback the CodePush update `1.0.1` (targeting the binary app version `1.0.0`).
