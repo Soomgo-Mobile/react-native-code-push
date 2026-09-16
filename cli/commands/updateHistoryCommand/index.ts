@@ -37,6 +37,14 @@ program.command('update-history')
             process.exit(1)
         }
 
+        // `Number.isFinite` is what rejects a non-numeric `--rollout`: `parseFloat` turns it into
+        // NaN, and both `NaN < 0` and `NaN > 100` are false.
+        if (options.rollout !== undefined
+            && (!Number.isFinite(options.rollout) || options.rollout < 0 || options.rollout > 100)) {
+            console.error('Rollout percentage number must be between 0 and 100 (inclusive).');
+            process.exit(1);
+        }
+
         if (options.minimumBackgroundDuration !== undefined
             && (!Number.isInteger(options.minimumBackgroundDuration) || options.minimumBackgroundDuration < 0)) {
             console.error('--minimum-background-duration must be a whole number of seconds, 0 or greater.');

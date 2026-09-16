@@ -116,4 +116,14 @@ describe("update-history command options", () => {
 
         expect(saved).toHaveLength(0);
     });
+
+    it.each([
+        ['a percentage above 100', '150'],
+        ['a percentage that is not a number', 'abc'],
+    ])("rejects %s and saves nothing", async (_scenario, rollout) => {
+        await expect(runUpdateHistoryCommand(['--rollout', rollout]))
+            .rejects.toThrow('process.exit(1)');
+
+        expect(saved).toHaveLength(0);
+    });
 });
