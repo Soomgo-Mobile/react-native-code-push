@@ -109,6 +109,7 @@ npx code-push release [options]
 | `-m, --mandatory <bool>` | Make the release mandatory | `false` |
 | `--enable <bool>` | Enable the release | `true` |
 | `--rollout <number>` | Rollout percentage (0-100) | — |
+| `--minimum-background-duration <seconds>` | Seconds the app must have been in the background before this update is applied on resume (`ON_NEXT_RESUME` / `ON_NEXT_SUSPEND` installs only). Overrides the `minimumBackgroundDuration` sync option; `0` applies it on the next resume | — |
 | `--skip-bundle <bool>` | Skip bundle step (use existing bundle) | `false` |
 | `--hash-calc <bool>` | Calculate hash from existing bundle (requires `--skip-bundle true`) | — |
 | `--skip-cleanup <bool>` | Skip output directory cleanup | `false` |
@@ -302,8 +303,9 @@ npx code-push update-history [options]
 | `-m, --mandatory <bool>` | Set mandatory flag | — |
 | `-e, --enable <bool>` | Enable or disable the release | — |
 | `--rollout <number>` | Rollout percentage (0-100) | — |
+| `--minimum-background-duration <seconds>` | Seconds the app must have been in the background before this update is applied on resume (`ON_NEXT_RESUME` / `ON_NEXT_SUSPEND` installs only). Overrides the `minimumBackgroundDuration` sync option; `0` applies it on the next resume | — |
 
-You must pass at least one of `--mandatory`, `--enable`, or `--rollout`.
+You must pass at least one of `--mandatory`, `--enable`, `--rollout`, or `--minimum-background-duration`.
 
 ```bash
 # Disable a release
@@ -351,7 +353,8 @@ The release history is a JSON object keyed by app version. For example, the hist
     "mandatory": false,
     "downloadUrl": "https://storage.example.com/bundles/ios/staging/a1b2c3...",
     "packageHash": "a1b2c3...",
-    "rollout": 100
+    "rollout": 100,
+    "minimumBackgroundDuration": 600
   },
   "1.0.2": {
     "enabled": true,
