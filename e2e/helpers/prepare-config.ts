@@ -3,6 +3,7 @@ import path from "path";
 import { getAppEntryPath, getAppSourceEntryPath, getMockServerHost } from "../config";
 
 const RESUME_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (20s)";
+const RESUME_NO_WAIT_SYNC_BUTTON_TITLE = "Sync ON_NEXT_RESUME (0s)";
 const SUSPEND_SYNC_BUTTON_TITLE = "Sync ON_NEXT_SUSPEND (20s)";
 const ALERT_SYNC_BUTTON_TITLE = "Sync with updateDialog";
 const ALERT_DIALOG_TITLE = "E2E Update Dialog";
@@ -108,6 +109,7 @@ function injectUpdateArchiveResultProbe(content: string): string {
 function injectResumeSyncSupport(content: string): string {
   if (
     content.includes(RESUME_SYNC_BUTTON_TITLE)
+    && content.includes(RESUME_NO_WAIT_SYNC_BUTTON_TITLE)
     && content.includes(SUSPEND_SYNC_BUTTON_TITLE)
     && content.includes(ALERT_SYNC_BUTTON_TITLE)
   ) {
@@ -121,6 +123,28 @@ function injectResumeSyncSupport(content: string): string {
     "        installMode: CodePush.InstallMode.ON_NEXT_RESUME,",
     "        mandatoryInstallMode: CodePush.InstallMode.ON_NEXT_RESUME,",
     "        minimumBackgroundDuration: 20,",
+    "      },",
+    "      status => {",
+    "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",
+    "      },",
+    "      ({ receivedBytes, totalBytes }) => {",
+    "        setProgress(Math.round((receivedBytes / totalBytes) * 100));",
+    "      },",
+    "      mismatch => {",
+    "        console.log('CodePush mismatch', JSON.stringify(mismatch, null, 2));",
+    "      },",
+    "    ).catch(error => {",
+    "      console.error(error);",
+    "      console.log('Sync failed', error.message ?? 'Unknown error');",
+    "    });",
+    "  }, []);",
+    "",
+    "  const handleSyncOnNextResumeWithoutWait = useCallback(() => {",
+    "    CodePush.sync(",
+    "      {",
+    "        installMode: CodePush.InstallMode.ON_NEXT_RESUME,",
+    "        mandatoryInstallMode: CodePush.InstallMode.ON_NEXT_RESUME,",
+    "        minimumBackgroundDuration: 0,",
     "      },",
     "      status => {",
     "        setSyncResult(findKeyByValue(CodePush.SyncStatus, status) ?? '');",
@@ -202,6 +226,7 @@ function injectResumeSyncSupport(content: string): string {
       `${indent}<Button title="Check for updates" onPress={handleSync} />`,
       `${indent}<Button title="${ALERT_SYNC_BUTTON_TITLE}" onPress={handleSyncWithUpdateDialog} />`,
       `${indent}<Button title="${RESUME_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextResume} />`,
+      `${indent}<Button title="${RESUME_NO_WAIT_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextResumeWithoutWait} />`,
       `${indent}<Button title="${SUSPEND_SYNC_BUTTON_TITLE}" onPress={handleSyncOnNextSuspend} />`,
     ].join("\n");
   });

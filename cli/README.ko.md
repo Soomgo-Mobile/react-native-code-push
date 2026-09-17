@@ -111,6 +111,7 @@ npx code-push release [options]
 | `-m, --mandatory <bool>` | 필수 업데이트로 설정 | `false` |
 | `--enable <bool>` | 릴리스 활성화 여부 | `true` |
 | `--rollout <number>` | 롤아웃 비율 (0–100) | — |
+| `--minimum-background-duration <seconds>` | 이 업데이트가 적용되기 전까지 앱이 백그라운드에 머물러야 하는 시간(초). `ON_NEXT_RESUME`, `ON_NEXT_SUSPEND` 설치에만 적용되며 sync 옵션의 `minimumBackgroundDuration`보다 우선합니다. `0`이면 다음 포그라운드 진입 때 바로 적용합니다 | — |
 | `--skip-bundle <bool>` | 번들 단계 건너뛰기 (기존 번들 사용) | `false` |
 | `--hash-calc <bool>` | 기존 번들에서 해시 계산 (`--skip-bundle true` 필요) | — |
 | `--skip-cleanup <bool>` | 출력 디렉토리 정리 건너뛰기 | `false` |
@@ -300,8 +301,9 @@ npx code-push update-history [options]
 | `-m, --mandatory <bool>` | 필수 업데이트 플래그 설정 | — |
 | `-e, --enable <bool>` | 릴리스 활성화 또는 비활성화 | — |
 | `--rollout <number>` | 롤아웃 비율 (0–100) | — |
+| `--minimum-background-duration <seconds>` | 이 업데이트가 적용되기 전까지 앱이 백그라운드에 머물러야 하는 시간(초). `ON_NEXT_RESUME`, `ON_NEXT_SUSPEND` 설치에만 적용되며 sync 옵션의 `minimumBackgroundDuration`보다 우선합니다. `0`이면 다음 포그라운드 진입 때 바로 적용합니다 | — |
 
-`--mandatory`, `--enable`, `--rollout` 중 하나 이상을 반드시 지정해야 합니다.
+`--mandatory`, `--enable`, `--rollout`, `--minimum-background-duration` 중 하나 이상을 반드시 지정해야 합니다.
 
 **예시:**
 
@@ -353,7 +355,8 @@ npx code-push show-history -b 1.0.0 -p ios
     "mandatory": false,
     "downloadUrl": "https://storage.example.com/bundles/ios/staging/a1b2c3...",
     "packageHash": "a1b2c3...",
-    "rollout": 100
+    "rollout": 100,
+    "minimumBackgroundDuration": 600
   },
   "1.0.2": {
     "enabled": true,

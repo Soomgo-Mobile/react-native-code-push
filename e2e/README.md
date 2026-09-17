@@ -66,7 +66,7 @@ flaking under that load, `--exclude-timing-sensitive` and `--retry-count` are th
 | `--framework <type>` | No | Use `expo` for Expo example apps |
 | `--simulator <name>` | No | iOS simulator name (auto-detects booted simulator, defaults to "iPhone 16") |
 | `--maestro-only` | No | Skip build step, only run test flows |
-| `--exclude-timing-sensitive` | No | Skip timing-sensitive optional scenarios (`03`, `04`). Default: off, so local runs include them |
+| `--exclude-timing-sensitive` | No | Skip timing-sensitive optional scenarios (`03`, `04`, `06`). Default: off, so local runs include them |
 
 ## What It Does
 
@@ -97,12 +97,14 @@ The test runner (`e2e/run.ts`) executes these phases in order:
 
 ### Phase 4 — Optional Install Modes (`flows-optional/`)
 
-12. **Prepare optional release per scenario** — For each scenario, recreates history and deploys a non-mandatory release (`-m false`) using `npx code-push release`.
+12. **Prepare optional release per scenario** — For each scenario, recreates history and deploys a non-mandatory release (`-m false`) using `npx code-push release`. Scenarios `05` and `06` also pass `--minimum-background-duration`, so the release itself carries the wait.
 13. **Run optional update flows** — Verifies optional updates are applied when:
    - `01-optional-update-on-relaunch` — The app is killed and relaunched.
    - `02-optional-update-on-restart-button` — The in-app "Restart app" button is pressed.
    - `03-optional-update-on-resume-after-20s` — Verifies `ON_NEXT_RESUME` applies the update when the app returns to foreground after staying in background for at least 20 seconds. Runs unless `--exclude-timing-sensitive` is passed.
    - `04-optional-update-on-suspend-after-20s` — Verifies `ON_NEXT_SUSPEND` applies the update while the app stays in background for at least 20 seconds, so the updated bundle is visible on the next foreground. Runs unless `--exclude-timing-sensitive` is passed.
+   - `05-optional-update-on-resume-history-0s-over-sync-20s` — Verifies a release published with `--minimum-background-duration 0` is applied on the first resume even though the app's `sync` asked for 20 seconds: the release's value wins.
+   - `06-optional-update-on-resume-history-20s-over-sync-0s` — Verifies a release published with `--minimum-background-duration 20` is not applied after a 2 second background and is applied after 20 seconds, even though the app's `sync` asked for no wait. Runs unless `--exclude-timing-sensitive` is passed.
 
 ### Phase 6 — Binary Patch Updates (`flows-binary-patch/`)
 

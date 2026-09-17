@@ -9,7 +9,7 @@ import { buildApp } from "./helpers/build-app";
 import { startMockServer, stopMockServer } from "./mock-server/server";
 import { assertArtifactStorageLayout, clearArtifactLog } from "./helpers/artifact-storage";
 import { assertFullArchivesOnly, startRecordingDownloads } from "./helpers/download-order";
-import { assertReleaseOffersNoPatch } from "./helpers/binary-patch-fixtures";
+import { assertReleaseOffersNoPatch, readReleaseHistory } from "./helpers/binary-patch-fixtures";
 import { runBinaryPatchPhase } from "./helpers/binary-patch-phase";
 import { runAssetDiffPhase } from "./helpers/asset-diff-phase";
 import { assertExportedBundleMatchesBinary } from "./helpers/embedded-bundle-export";
@@ -31,6 +31,8 @@ interface OptionalUpdateScenario {
   name: string;
   releaseVersion: string;
   flowPath: string;
+  /** Released onto the history entry, so the app waits this long instead of what `sync` asked. */
+  minimumBackgroundDuration?: number;
 }
 
 interface AlertUpdateScenario {
@@ -373,6 +375,12 @@ async function runPlatformScenarios(context: PlatformRunContext): Promise<void> 
       releaseVersion: "1.1.2",
       flowPath: path.resolve(__dirname, "flows-optional/02-optional-update-on-restart-button.yaml"),
     },
+    {
+      name: "apply on resume when the release asks for no wait, over a 20 second sync option",
+      releaseVersion: "1.1.5",
+      flowPath: path.resolve(__dirname, "flows-optional/05-optional-update-on-resume-history-0s-over-sync-20s.yaml"),
+      minimumBackgroundDuration: 0,
+    },
   ];
 
   if (!excludeTimingSensitive) {
@@ -386,6 +394,12 @@ async function runPlatformScenarios(context: PlatformRunContext): Promise<void> 
         name: "apply on suspend after 20 seconds",
         releaseVersion: "1.1.4",
         flowPath: path.resolve(__dirname, "flows-optional/04-optional-update-on-suspend-after-20s.yaml"),
+      },
+      {
+        name: "apply on resume after the 20 seconds the release asks for, over a no-wait sync option",
+        releaseVersion: "1.1.6",
+        flowPath: path.resolve(__dirname, "flows-optional/06-optional-update-on-resume-history-20s-over-sync-0s.yaml"),
+        minimumBackgroundDuration: 20,
       },
     );
   }
@@ -406,8 +420,17 @@ async function runPlatformScenarios(context: PlatformRunContext): Promise<void> 
         releaseVersion: scenario.releaseVersion,
         mandatory: false,
         releaseMarkerVersion: scenario.releaseVersion,
+        minimumBackgroundDuration: scenario.minimumBackgroundDuration,
       },
     );
+
+    if (scenario.minimumBackgroundDuration !== undefined) {
+      // A scenario about the released duration would quietly test nothing without it on the entry.
+      const entry = readReleaseHistory(platform, releaseIdentifier, "1.0.0")[scenario.releaseVersion];
+      if (entry?.minimumBackgroundDuration !== scenario.minimumBackgroundDuration) {
+        throw new Error(`[${platform}] release ${scenario.releaseVersion} should carry minimumBackgroundDuration ${scenario.minimumBackgroundDuration}, history has ${String(entry?.minimumBackgroundDuration)}`);
+      }
+    }
 
     await withRetry(
       `run-maestro: optional update (${scenario.name})`,

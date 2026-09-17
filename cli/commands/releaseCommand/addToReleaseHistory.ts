@@ -15,6 +15,7 @@ export async function addToReleaseHistory(
     enable: boolean,
     rollout: number | undefined,
     diffPackages: Record<string, string> | undefined,
+    minimumBackgroundDuration: number | undefined,
 ): Promise<void> {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
@@ -47,6 +48,11 @@ export async function addToReleaseHistory(
 
     if (typeof rollout === 'number') {
         newReleaseHistory[appVersion].rollout = rollout;
+    }
+
+    // An entry without it leaves the wait to the sync option, so 0 has to be written.
+    if (typeof minimumBackgroundDuration === 'number') {
+        newReleaseHistory[appVersion].minimumBackgroundDuration = minimumBackgroundDuration;
     }
 
     try {

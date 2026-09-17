@@ -142,6 +142,7 @@ type ReleaseOverrides = {
     releaseHistory?: ReleaseHistoryInterface;
     bundleDownloader?: CliConfigInterface['bundleDownloader'];
     diffBaseCount?: number;
+    minimumBackgroundDuration?: number;
 };
 
 async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}) {
@@ -176,6 +177,7 @@ async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}
         overrides.onOversizedPatch,
         overrides.bundleDownloader,
         overrides.diffBaseCount,
+        overrides.minimumBackgroundDuration,
     );
 
     return { uploads, releaseHistories: history.saved, uploadCountsWhenHistorySaved };
@@ -827,5 +829,31 @@ describe("release with asset diff bases", () => {
         const { uploads } = await runRelease(staged, { binaryBundlePath: baseFixture });
 
         expect(path.basename(uploads[0].filePath)).toBe(staged.bundleFileName);
+    });
+});
+
+describe("release --minimum-background-duration", () => {
+    it("records the background wait on the release it publishes", async () => {
+        const staged = await stageBundleOutput("minimum-background-duration");
+
+        const { releaseHistories } = await runRelease(staged, { minimumBackgroundDuration: 600 });
+
+        expect(releaseHistories[0][APP_VERSION].minimumBackgroundDuration).toBe(600);
+    });
+
+    it("releases a background wait of zero seconds as zero, not as an unset option", async () => {
+        const staged = await stageBundleOutput("zero-minimum-background-duration");
+
+        const { releaseHistories } = await runRelease(staged, { minimumBackgroundDuration: 0 });
+
+        expect(releaseHistories[0][APP_VERSION].minimumBackgroundDuration).toBe(0);
+    });
+
+    it("leaves the release saying nothing about the background wait when the option is not given", async () => {
+        const staged = await stageBundleOutput("no-minimum-background-duration");
+
+        const { releaseHistories } = await runRelease(staged);
+
+        expect(releaseHistories[0][APP_VERSION]).not.toHaveProperty('minimumBackgroundDuration');
     });
 });
