@@ -58,7 +58,6 @@
     "!ios/build",
     "!ios/CodePushTests",
     "!android/build",
-    "!android/app/build",
     "!android/local.properties",
     "!cpp/binarypatch/host",
     "!**/__tests__",
