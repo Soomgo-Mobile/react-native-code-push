@@ -6,7 +6,7 @@ project(codepush-binarypatch C)
 # the other platform compile the very same files. Referencing them where they are is
 # what keeps the appliers of the platforms from drifting apart, so they are deliberately
 # not copied into this directory.
-set(BINARY_PATCH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../cpp/binarypatch)
+set(BINARY_PATCH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../cpp/binarypatch)
 
 add_library(codepush-binarypatch SHARED
         ${CMAKE_CURRENT_SOURCE_DIR}/binarypatch_jni.c
