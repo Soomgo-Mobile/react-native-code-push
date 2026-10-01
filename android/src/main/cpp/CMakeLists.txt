@@ -34,5 +34,9 @@ target_compile_definitions(codepush-binarypatch PRIVATE
         ZSTD_DISABLE_ASM=1
         _IS_USED_MULTITHREAD=0)
 
+target_link_options(codepush-binarypatch PRIVATE
+        "-Wl,-z,max-page-size=16384"
+        "-Wl,-z,common-page-size=16384")
+
 find_library(log-lib log)
 target_link_libraries(codepush-binarypatch ${log-lib})
