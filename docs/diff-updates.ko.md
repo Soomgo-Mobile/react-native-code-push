@@ -62,7 +62,33 @@ binary patch는 새 업데이트와 앱 안에 이미 들어 있는 JS 번들의
 - Hermes 컴파일된 JS 번들 (바이트코드)
 - 번들의 정보와 검증 값을 담은 `binary-patch-base.json`
 
-### Android
+### 자동 설정
+
+React Native CLI 프로젝트는 다음 명령으로 양 플랫폼의 export 훅을 추가할 수 있습니다. 초기 설정이 이미 완료된 프로젝트에도 사용할 수 있습니다.
+
+```sh
+npx code-push init --diff-updates
+```
+
+Expo 프로젝트는 CodePush config plugin에 `diffUpdates` 옵션을 전달한 뒤 `npx expo prebuild`를 실행합니다.
+
+이미 plugin을 등록한 프로젝트는 기존 항목을 아래 배열형 항목으로 교체하세요. 다른 plugin 항목은 유지합니다.
+
+```json
+{
+  "expo": {
+    "plugins": [
+      ["@bravemobile/react-native-code-push", { "diffUpdates": true }]
+    ]
+  }
+}
+```
+
+이렇게 하면 아래의 export 훅 설정을 자동으로 추가하며, 실제 네이티브 빌드시 번들 파일을 내보내고 검증 파일을 생성합니다. 패치 생성 도구 빌드, 내보낸 번들의 보관, OTA 배포 설정은 별도로 준비해야 합니다.
+
+자동 설정을 사용했다면 아래의 수동 훅 추가는 생략할 수 있습니다. 플랫폼별 export 경로와 경로 변경 방법은 자동/수동 설정 모두 동일합니다.
+
+### Android 수동 설정
 
 앱 모듈의 `android/app/build.gradle`에 Gradle 스크립트를 적용합니다.
 
@@ -92,7 +118,7 @@ android/app/build/codepush/embedded-bundle/<variant>/
 
 `ext.codePushExportDir`를 설정한다면 `apply from`보다 앞에 두어야 합니다. 어느 방법을 사용해도 마지막에 `<variant>` 디렉터리가 붙습니다.
 
-### iOS
+### iOS 수동 설정
 
 Xcode에서 앱 타깃의 **Build Phases** 탭을 열고 **Bundle React Native code and images** phase를 찾습니다. 기존 스크립트의 마지막에 아래 줄을 추가합니다.
 
@@ -110,8 +136,6 @@ $BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/
 ```
 
 만약 경로를 다른 위치로 설정하려면 `CODEPUSH_EXPORT_DIR` 환경 변수를 설정하세요. 이 경우에도 마지막에 `$CONFIGURATION-$PLATFORM_NAME` 디렉터리가 붙습니다.
-
-> **참고:** Expo config plugin(`app.plugin.js`)으로 이 훅을 자동 적용하는 기능은 아직 제공하지 않습니다.
 
 ## 2. 바이너리 릴리스별 export 보관하기
 

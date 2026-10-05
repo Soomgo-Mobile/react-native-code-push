@@ -62,7 +62,33 @@ The library provides an export hook for each platform. After the bundle build fi
 - The Hermes-compiled JS bundle (bytecode)
 - A `binary-patch-base.json` file containing bundle metadata and verification values
 
-### Android
+### Automatic setup
+
+For React Native CLI projects, add the export hooks for both platforms with the following command. It also works in projects where initial setup is already complete.
+
+```sh
+npx code-push init --diff-updates
+```
+
+For Expo projects, pass `diffUpdates` to the CodePush config plugin, then run `npx expo prebuild`.
+
+If the plugin is already registered, replace its existing entry with the array entry below. Keep the other plugin entries.
+
+```json
+{
+  "expo": {
+    "plugins": [
+      ["@bravemobile/react-native-code-push", { "diffUpdates": true }]
+    ]
+  }
+}
+```
+
+This automatically adds the export hooks described below. During native builds, the hooks export the bundle file and generate the verification record. Build the patch generator, archive the exported bundles, and configure OTA releases separately.
+
+If you use automatic setup, skip adding the hooks manually below. The export paths and path overrides described for each platform apply to both setup methods.
+
+### Android manual setup
 
 Apply the Gradle script in your app module's `android/app/build.gradle`:
 
@@ -92,7 +118,7 @@ To use a different export path, choose one of the following:
 
 If you set `ext.codePushExportDir`, place it before the `apply from` line. In either case, the `<variant>` directory is appended to the path.
 
-### iOS
+### iOS manual setup
 
 In Xcode, open the app target's **Build Phases** tab and find the **Bundle React Native code and images** phase. Add the final line below to the end of the existing script:
 
@@ -110,8 +136,6 @@ $BUILD_DIR/codepush/embedded-bundle/$CONFIGURATION-$PLATFORM_NAME/
 ```
 
 To use a different export path, set the `CODEPUSH_EXPORT_DIR` environment variable. The `$CONFIGURATION-$PLATFORM_NAME` directory is still appended to the path.
-
-> **Note:** The Expo config plugin (`app.plugin.js`) does not currently apply this hook automatically.
 
 ## 2. Archive exports per binary release
 
