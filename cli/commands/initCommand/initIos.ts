@@ -3,7 +3,7 @@ import fs from "fs";
 // @ts-expect-error -- types for "xcode" are not available
 import xcode from "xcode";
 
-export async function initIos() {
+export async function initIos(diffUpdates = false) {
     console.log('log: Running iOS setup...');
     const projectDir = path.join(process.cwd(), 'ios');
     const files = fs.readdirSync(projectDir);
@@ -24,6 +24,30 @@ export async function initIos() {
         await setupSwift(appDelegatePath, projectDir, projectName);
     } else {
         await setupObjectiveC(appDelegatePath);
+    }
+
+    if (diffUpdates) {
+        const projectPath = path.join(projectDir, xcodeprojFile, 'project.pbxproj');
+        const project = xcode.project(projectPath);
+        project.parseSync();
+        const appTarget = project.getTarget('com.apple.product-type.application');
+        const phaseId = appTarget?.target.buildPhases.find(
+            (phase: { comment: string; value: string }) => phase.comment === 'Bundle React Native code and images',
+        )?.value;
+        const phase = phaseId && project.hash.project.objects.PBXShellScriptBuildPhase[phaseId];
+
+        if (!phase) {
+            throw new Error('Could not find Bundle React Native code and images in the app target.');
+        }
+
+        const script = JSON.parse(phase.shellScript);
+        if (!script.includes('export-embedded-bundle.sh')) {
+            // Export must not hide a failure of the preceding bundle command.
+            const failFastPrefix = /^\s*set -e(?:\r?\n|$)/.test(script) ? '' : 'set -e\n';
+            phase.shellScript = JSON.stringify(`${failFastPrefix}${script}\n"$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"\n`);
+            fs.writeFileSync(projectPath, project.writeSync());
+            console.log('log: Configured iOS embedded bundle export.');
+        }
     }
 
     console.log('log: Please run `cd ios && pod install` to complete the setup.');

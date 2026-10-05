@@ -1,4 +1,4 @@
-const { withMainApplication, WarningAggregator } = require('expo/config-plugins');
+const { withMainApplication, withAppBuildGradle, WarningAggregator } = require('expo/config-plugins');
 
 const IMPORT_CODE_PUSH = 'import com.microsoft.codepush.react.CodePush';
 const RN_082_MARKER = 'ExpoReactHostFactory.getDefaultReactHost(';
@@ -87,6 +87,21 @@ const withAndroidMainApplicationDependency = (config) => {
   });
 };
 
+const withAndroidDiffUpdates = (config) => {
+  return withAppBuildGradle(config, (action) => {
+    if (action.modResults.language !== 'groovy') {
+      throw new Error('CodePush diff update setup requires a Groovy app build.gradle.');
+    }
+
+    if (!action.modResults.contents.includes('codepush-export.gradle')) {
+      action.modResults.contents += '\napply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"\n';
+    }
+
+    return action;
+  });
+};
+
 module.exports = {
   withAndroidMainApplicationDependency,
+  withAndroidDiffUpdates,
 };

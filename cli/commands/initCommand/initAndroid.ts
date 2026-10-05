@@ -60,9 +60,18 @@ function addJsBundleFilePathArgument(mainApplicationContent: string) {
     });
 }
 
-export async function initAndroid() {
+export async function initAndroid(diffUpdates = false) {
     console.log('log: Running Android setup...');
     await applyMainApplication();
+
+    if (diffUpdates) {
+        const gradlePath = path.join(process.cwd(), 'android', 'app', 'build.gradle');
+        const contents = fs.readFileSync(gradlePath, 'utf-8');
+        if (!contents.includes('codepush-export.gradle')) {
+            fs.writeFileSync(gradlePath, `${contents}${EOL}apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"${EOL}`);
+            console.log('log: Configured Android embedded bundle export.');
+        }
+    }
 }
 
 async function applyMainApplication() {
