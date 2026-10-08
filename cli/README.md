@@ -170,8 +170,8 @@ and a record that cannot be read only warns.
 A patch bundle still carries every asset of the update, and a client that already has an
 earlier update installed has most of those assets on disk. So with `bundleDownloader` in
 the config file, a binary patch release publishes one more artifact per recent release:
-`<packageHash>-diff-<basePackageHash>.zip`, holding the bundle patch, only the assets that
-release does not already have, and a manifest of the files it has to drop. A client holding
+`<packageHash>-diff-<basePackageHash>.zip`, holding a patch of the JS bundle computed against
+that release's own bundle, only the assets that release does not already have, and a manifest of the files it has to drop. A client holding
 that release copies its installed update, applies those, and ends up with the same
 `packageHash` the full bundle would have produced.
 
