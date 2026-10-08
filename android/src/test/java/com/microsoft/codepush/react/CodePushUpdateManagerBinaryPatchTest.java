@@ -23,7 +23,7 @@ import java.util.Set;
 
 /**
  * Which archives an update is downloaded from, and how a failed one picks the next rung:
- * the patch archive after an asset-side diff failure, the full archive after every other.
+ * the patch archive after any diff failure, the full archive after the patch archive's.
  */
 public class CodePushUpdateManagerBinaryPatchTest {
 
@@ -157,22 +157,24 @@ public class CodePushUpdateManagerBinaryPatchTest {
     }
 
     @Test
-    public void skipsThePatchArchiveWhenTheDiffFailedInTheBundlePatchBothArchivesCarry() throws IOException {
+    public void fallsBackToThePatchArchiveWhenTheDiffFailedInItsBundlePatch() throws IOException {
         RecordingUpdateManager updateManager = new RecordingUpdateManager(mDocumentsDirectory,
+                ArchiveRestoreResult.success());
+        updateManager.patchOutcomesByUrl.put(DIFF_ARCHIVE_URL,
                 ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_BASE_HASH_MISMATCH));
 
         JSONObject patchResult = updateManager.downloadPackage(updatePackage(PATCH_ARCHIVE_URL, DIFF_ARCHIVE_URL),
                 BUNDLE_FILE_NAME, ignoreProgress());
 
-        // Both archives carry the same bundle patch, so the patch archive would fail the
-        // same way and is passed over for the full one.
-        assertEquals(Arrays.asList(DIFF_ARCHIVE_URL, FULL_ARCHIVE_URL), updateManager.downloadedUrls);
-        assertEquals("fallback", patchResult.optString("status", null));
-        assertEquals("asset-diff", patchResult.optString("archive", null));
-        assertEquals(ArchiveRestoreResult.REASON_BASE_HASH_MISMATCH, patchResult.optString("fallbackReason", null));
-        assertEquals(1, patchResult.optJSONArray("attempts").length());
+        // The diff patches the installed update's bundle and the patch archive the app
+        // binary's, so a diff that failed in its bundle patch says nothing about the other.
+        assertEquals(Arrays.asList(DIFF_ARCHIVE_URL, PATCH_ARCHIVE_URL), updateManager.downloadedUrls);
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        JSONObject diffAttempt = patchResult.optJSONArray("attempts").optJSONObject(0);
+        assertEquals(ArchiveRestoreResult.REASON_BASE_HASH_MISMATCH, diffAttempt.optString("fallbackReason", null));
         assertFalse("an attempt that never restored the bundle has no apply to report",
-                patchResult.optJSONArray("attempts").optJSONObject(0).has("applyDurationMs"));
+                diffAttempt.has("applyDurationMs"));
     }
 
     @Test

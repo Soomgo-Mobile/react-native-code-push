@@ -184,10 +184,9 @@ export interface UpdateArchiveResult {
      * among them, because it is downloaded only once the patch path has given up.
      *
      * Most downloads leave a single entry. A second one appears when the asset diff failed
-     * after its bundle was restored - an asset-side failure the patch archive is not
-     * implicated in - and the patch archive was tried in its place. A diff that fails before
-     * its bundle is restored skips the patch archive instead, because both archives carry the
-     * same bundle patch and it would fail the same way.
+     * and the patch archive was tried in its place: the diff patches the installed update's
+     * bundle and the patch archive the app binary's, so however the diff failed, the patch
+     * archive may still apply.
      */
     attempts: UpdateArchiveAttempt[];
 }

@@ -197,7 +197,7 @@ async function checkForUpdate(handleBinaryVersionMismatchCallback = null) {
           /**
            * The diff stands next to the patch url rather than in its place, so that the
            * native side can try the diff first and still hold the patch archive to fall
-           * back on when the diff fails on its asset side.
+           * back on when the diff fails.
            */
           asset_diff_download_url: diffPackageDownloadUrl,
           /**

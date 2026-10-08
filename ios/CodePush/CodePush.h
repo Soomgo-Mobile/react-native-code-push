@@ -165,7 +165,6 @@ failCallback:(void (^)(NSError *err))failCallback;
 + (NSError *)errorWithMessage:(NSString *)errorMessage httpStatusCode:(NSInteger)statusCode;
 + (BOOL)isCodePushError:(NSError *)error;
 + (BOOL)isNetworkFailure:(NSError *)error;
-+ (BOOL)isHttpStatusError:(NSError *)error;
 
 @end
 

@@ -286,10 +286,9 @@ public class CodePushUpdateManagerDownloadTest {
 
     @Test
     public void fallsBackToThePatchArchiveWhenTheInstalledPackageIsGoneFromDisk() throws IOException {
-        // The metadata still names the installed update, but its files are gone: the merge
-        // has nothing to read, which is a failure of the merge itself rather than of its
-        // result - and the one failure the patch archive, carrying every asset, is not
-        // implicated in.
+        // The metadata still names the installed update, but its files are gone: the diff
+        // has no bundle to patch, while the patch archive patches the app binary's and
+        // carries every asset.
         installBaseUpdate();
         FileUtils.deleteDirectoryAtPath(new File(
                 new File(mDocumentsDirectory, CodePushConstants.CODE_PUSH_FOLDER_PREFIX),
@@ -307,7 +306,7 @@ public class CodePushUpdateManagerDownloadTest {
         assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/patch.zip"), mServer.requestedPaths());
         assertEquals("applied", patchResult.optString("status", null));
         assertEquals("binary-patch", patchResult.optString("archive", null));
-        assertEquals(ArchiveRestoreResult.REASON_ASSET_MERGE_FAILED,
+        assertEquals(ArchiveRestoreResult.REASON_BASE_BUNDLE_UNAVAILABLE,
                 patchResult.optJSONArray("attempts").optJSONObject(0).optString("fallbackReason", null));
         assertInstalledContents(updateHash, updateContents);
     }
@@ -383,21 +382,28 @@ public class CodePushUpdateManagerDownloadTest {
     }
 
     @Test
-    public void skipsThePatchArchiveWhenTheAssetDiffFailsInItsBundlePatch() throws IOException {
-        // Both archives carry that patch byte for byte, so an applier that refused it here
-        // would refuse it there - and trying it would put a second doomed download in front
-        // of the full one.
+    public void fallsBackToThePatchArchiveWhenTheAssetDiffPatchesAnotherBundle() throws IOException {
+        // The diff was computed against a bundle the installed update does not hold. The
+        // patch archive patches the app binary's bundle instead, so it is still worth trying.
+        installBaseUpdate();
         Map<String, byte[]> updateContents = assetDiffTargetContents();
         String updateHash = packageHashOf(updateContents);
-        String diffUrl = serve("/diff.zip", zipOf(assetDiffArchiveContents(DROPPED_ASSET_PATH)));
+        String manifestPath = CONTENTS_DIR_NAME + "/" + CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME;
+        Map<String, byte[]> diffContents = assetDiffArchiveContents(DROPPED_ASSET_PATH);
+        diffContents.put(manifestPath, patchArchiveContents(
+                bytes("the bundle of an update that is not installed"), PATCH_FROM_INSTALLED).get(manifestPath));
+        String diffUrl = serve("/diff.zip", zipOf(diffContents));
         String patchUrl = serve("/patch.zip", zipOf(patchArchiveContentsForAssetDiffTarget()));
         String fullUrl = serve("/full.zip", zipOf(updateContents));
 
-        JSONObject patchResult = updateManager(applierRefusingThePatch()).downloadPackage(
+        JSONObject patchResult = updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
                 updatePackageWithAssetDiff(updateHash, fullUrl, patchUrl, diffUrl), BUNDLE_FILE_NAME, ignoreProgress());
 
-        assertEquals(Arrays.asList("/diff.zip", "/full.zip"), mServer.requestedPaths());
-        assertEquals(1, patchResult.optJSONArray("attempts").length());
+        assertEquals(Arrays.asList("/installed.zip", "/diff.zip", "/patch.zip"), mServer.requestedPaths());
+        assertEquals("applied", patchResult.optString("status", null));
+        assertEquals("binary-patch", patchResult.optString("archive", null));
+        assertEquals(ArchiveRestoreResult.REASON_BASE_HASH_MISMATCH,
+                patchResult.optJSONArray("attempts").optJSONObject(0).optString("fallbackReason", null));
         assertInstalledContents(updateHash, updateContents);
     }
 
