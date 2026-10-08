@@ -11,6 +11,19 @@ let PackageMixins = NativeCodePush ? require("./package-mixins")(NativeCodePush)
 
 const DEPLOYMENT_KEY = 'deprecated_deployment_key';
 
+/**
+ * The typings declare these objects as numeric enums, which TypeScript lets an app read by
+ * value as well as by name (`SyncStatus[7]`). So each one also carries its names under its
+ * values, the way a compiled numeric enum does.
+ */
+function toNumericEnum(members) {
+  const numericEnum = { ...members };
+  Object.entries(members).forEach(([name, value]) => {
+    numericEnum[value] = name;
+  });
+  return numericEnum;
+}
+
 function getNativeCodePush() {
   if (!NativeCodePush) {
     const NativeCodePushModule = require("./native/NativeCodePush");
@@ -956,15 +969,15 @@ Object.assign(CodePush, {
     const nativeCodePush = requireNativeCodePush("clearUpdates");
     return nativeCodePush.clearUpdates();
   },
-  InstallMode: {
+  InstallMode: toNumericEnum({
     IMMEDIATE: InstallMode.IMMEDIATE, // Restart the app immediately
     ON_NEXT_RESTART: InstallMode.ON_NEXT_RESTART, // Don't artificially restart the app. Allow the update to be "picked up" on the next app restart
     ON_NEXT_RESUME: InstallMode.ON_NEXT_RESUME, // Restart the app the next time it is resumed from the background
     ON_NEXT_SUSPEND: InstallMode.ON_NEXT_SUSPEND, // Restart the app _while_ it is in the background,
     // but only after it has been in the background for "minimumBackgroundDuration" seconds (0 by default),
     // so that user context isn't lost unless the app suspension is long enough to not matter
-  },
-  SyncStatus: {
+  }),
+  SyncStatus: toNumericEnum({
     UP_TO_DATE: 0, // The running app is up-to-date
     UPDATE_INSTALLED: 1, // The app had an optional/mandatory update that was successfully downloaded and is about to be installed.
     UPDATE_IGNORED: 2, // The app had an optional update and the end-user chose to ignore it
@@ -974,13 +987,13 @@ Object.assign(CodePush, {
     AWAITING_USER_ACTION: 6,
     DOWNLOADING_PACKAGE: 7,
     INSTALLING_UPDATE: 8,
-  },
-  CheckFrequency: {
+  }),
+  CheckFrequency: toNumericEnum({
     ON_APP_START: 0,
     ON_APP_RESUME: 1,
     MANUAL: 2,
-  },
-  UpdateState,
+  }),
+  UpdateState: toNumericEnum(UpdateState),
   DeploymentStatus: {
     FAILED: "DeploymentFailed",
     SUCCEEDED: "DeploymentSucceeded",

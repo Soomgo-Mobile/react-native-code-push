@@ -706,3 +706,19 @@ describe('the minimum background duration an update is installed with', () => {
     expect(installedMinimumBackgroundDuration(nativeBridge)).toBe(0);
   });
 });
+
+describe('the numeric enums the typings declare', () => {
+  it('names a sync status by the value a sync status callback is given', () => {
+    const { CodePush } = loadCodePush();
+
+    expect(CodePush.SyncStatus[CodePush.SyncStatus.DOWNLOADING_PACKAGE]).toBe('DOWNLOADING_PACKAGE');
+  });
+
+  it('names an install mode, a check frequency and an update state by their values', () => {
+    const { CodePush } = loadCodePush();
+
+    expect(CodePush.InstallMode[CodePush.InstallMode.ON_NEXT_RESUME]).toBe('ON_NEXT_RESUME');
+    expect(CodePush.CheckFrequency[CodePush.CheckFrequency.MANUAL]).toBe('MANUAL');
+    expect(CodePush.UpdateState[CodePush.UpdateState.PENDING]).toBe('PENDING');
+  });
+});
