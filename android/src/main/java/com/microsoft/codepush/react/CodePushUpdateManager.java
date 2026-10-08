@@ -165,13 +165,13 @@ public class CodePushUpdateManager {
                                       DownloadProgressCallback progressCallback) throws IOException {
         // A release that was published with a binary patch offers up to three archives of
         // the same update. The asset diff is the smallest and is tried first, the patch
-        // archive stands in when the diff fails on its asset side, and the full archive is
-        // always there when none of it works out.
+        // archive stands in when the diff fails, and the full archive is always there when
+        // none of it works out. The two patches are computed against different bundles, so
+        // however the diff failed, the patch archive is still worth trying.
         String binaryPatchDownloadUrl = optArchiveDownloadUrl(updatePackage, CodePushConstants.BINARY_PATCH_DOWNLOAD_URL_KEY);
         String assetDiffDownloadUrl = optArchiveDownloadUrl(updatePackage, CodePushConstants.ASSET_DIFF_DOWNLOAD_URL_KEY);
 
         ArchiveAttemptLog patchAttempt = null;
-        boolean patchArchiveWorthTrying = binaryPatchDownloadUrl != null;
         if (assetDiffDownloadUrl != null) {
             patchAttempt = new ArchiveAttemptLog();
             patchAttempt.beginAttempt(ArchiveAttemptLog.ARCHIVE_ASSET_DIFF);
@@ -179,19 +179,9 @@ public class CodePushUpdateManager {
                     assetDiffDownloadUrl, patchAttempt)) {
                 return patchAttempt.result();
             }
-
-            // The patch archive is worth trying when nothing about how the diff failed
-            // implicates it. A diff that failed after restoring its bundle failed on its
-            // asset side, which the patch archive does not share; a diff the server never
-            // served is a verdict on one URL, and the patch archive is at another. Anything
-            // else failed in the bundle patch both archives carry byte for byte, so the
-            // patch archive would fail the same way and trying it would only put a second
-            // doomed download in front of the full one.
-            patchArchiveWorthTrying = patchArchiveWorthTrying
-                    && (patchAttempt.currentAttemptRestoredBundle() || patchAttempt.currentAttemptWasNotServed());
         }
 
-        if (patchArchiveWorthTrying) {
+        if (binaryPatchDownloadUrl != null) {
             if (patchAttempt == null) {
                 patchAttempt = new ArchiveAttemptLog();
             }
@@ -270,7 +260,7 @@ public class CodePushUpdateManager {
             // running out of it is a failure this has to absorb like any other: by the time
             // it lands here the arrays are unreachable, and the full archive is downloaded
             // to disk in chunks rather than held.
-            patchAttempt.recordFallbackAfterError(e);
+            patchAttempt.recordFallbackAfterError();
             CodePushUtils.log(e);
             CodePushUtils.log("The " + patchAttempt.currentArchive()
                     + " archive could not be applied. Falling back.");
@@ -408,12 +398,20 @@ public class CodePushUpdateManager {
             FileUtils.unzipFile(downloadFile, unzippedFolderPath);
             FileUtils.deleteFileOrFolderSilently(downloadFile);
 
+            String diffManifestFilePath = CodePushUtils.appendPathComponent(unzippedFolderPath,
+                    CodePushConstants.DIFF_MANIFEST_FILE_NAME);
+            boolean isDiffUpdate = FileUtils.fileAtPathExists(diffManifestFilePath);
+
             // Rebuild the JS bundle the archive only carries a patch of, which leaves the
-            // contents identical to the ones the full archive would have delivered.
+            // contents identical to the ones the full archive would have delivered. An asset
+            // diff patches the bundle of the installed update it merges into, a patch
+            // archive the bundle inside the app binary.
             if (isBinaryPatchUpdate) {
                 long patchStartTime = System.currentTimeMillis();
-                ArchiveRestoreResult patchResult = mBinaryPatch.restoreBundle(unzippedFolderPath,
-                        getBinaryPatchFolderPath(), expectedBundleFileName);
+                ArchiveRestoreResult patchResult = isDiffUpdate
+                        ? mBinaryPatch.restoreBundleFromInstalledUpdate(unzippedFolderPath,
+                                getBinaryPatchFolderPath(), getCurrentPackageFolderPath())
+                        : mBinaryPatch.restoreBundle(unzippedFolderPath, getBinaryPatchFolderPath(), expectedBundleFileName);
                 if (!patchResult.succeeded()) {
                     return patchResult;
                 }
@@ -424,9 +422,6 @@ public class CodePushUpdateManager {
             }
 
             // Merge contents with current update based on the manifest
-            String diffManifestFilePath = CodePushUtils.appendPathComponent(unzippedFolderPath,
-                    CodePushConstants.DIFF_MANIFEST_FILE_NAME);
-            boolean isDiffUpdate = FileUtils.fileAtPathExists(diffManifestFilePath);
             if (isDiffUpdate) {
                 try {
                     String currentPackageFolderPath = getCurrentPackageFolderPath();
@@ -444,8 +439,7 @@ public class CodePushUpdateManager {
                     diffManifestFile.delete();
                 } catch (Exception e) {
                     // A merge that cannot complete has a word of its own, because it says
-                    // the diff went wrong on its asset side - the one failure the patch
-                    // archive, which carries every asset, is not implicated in.
+                    // the diff went wrong on its asset side rather than in its bundle patch.
                     if (isBinaryPatchUpdate) {
                         CodePushUtils.log(e);
                         return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_ASSET_MERGE_FAILED);

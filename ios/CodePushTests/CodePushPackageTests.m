@@ -166,6 +166,13 @@ static NSData *CPTestBytes(NSString *text) {
                                              error:nil];
 }
 
+/* The manifest of an asset diff, whose patch was computed against the installed update's bundle. */
+- (NSData *)assetDiffPatchManifest {
+    NSMutableDictionary *manifest = CPTestValidPatchManifest();
+    manifest[@"baseBundleHash"] = CPTestSha256Hex(CPTestFixture(@"installed.bundle"));
+    return [NSJSONSerialization dataWithJSONObject:manifest options:kNilOptions error:nil];
+}
+
 /*
  * The update's full archive, which is also the contents every archive of it has to add up
  * to and so the folder the package hash is computed over.
@@ -189,7 +196,7 @@ static NSData *CPTestBytes(NSString *text) {
 /* The full archive of the release that is installed when the asset diff arrives. */
 - (NSString *)stageInstalledArchiveContents {
     return [self stageContents:@{
-        @"CodePush/main.jsbundle": CPTestBytes(@"the bundle of the update already installed"),
+        @"CodePush/main.jsbundle": CPTestFixture(@"installed.bundle"),
         @"CodePush/assets/logo.png": CPTestBytes(@"an image the update ships with"),
         @"CodePush/assets/legacy.png": CPTestBytes(@"an image the newer update leaves behind"),
     }];
@@ -206,10 +213,10 @@ static NSData *CPTestBytes(NSString *text) {
 }
 
 /*
- * An asset diff archive: the patch archive carrying only the assets the update changes, plus
- * the manifest of the files to delete at the archive root, beside the contents directory the
- * manifest's paths are relative to. An asset the installed package already holds unchanged is
- * not shipped at all - the client copies it over.
+ * An asset diff archive: a patch from the installed update's bundle and only the assets the
+ * update changes, plus the manifest of the files to delete at the archive root, beside the
+ * contents directory the manifest's paths are relative to. An asset the installed package
+ * already holds unchanged is not shipped at all - the client copies it over.
  */
 - (NSString *)stageAssetDiffArchiveContentsDeleting:(NSArray<NSString *> *)deletedFiles {
     return [self stageAssetDiffArchiveContentsWithManifest:
@@ -222,8 +229,8 @@ static NSData *CPTestBytes(NSString *text) {
 - (NSString *)stageAssetDiffArchiveContentsWithManifest:(NSData *)manifest {
     return [self stageContents:@{
         @"hotcodepush.json": manifest,
-        @"CodePush/codepush-binary-patch.json": [self patchManifest],
-        @"CodePush/main.jsbundle.patch": CPTestFixture(@"update.patch"),
+        @"CodePush/codepush-binary-patch.json": [self assetDiffPatchManifest],
+        @"CodePush/main.jsbundle.patch": CPTestFixture(@"installed-update.patch"),
         @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
     }];
 }
@@ -528,9 +535,10 @@ static NSData *CPTestBytes(NSString *text) {
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 
-- (void)testReportsAnAssetMergeFailureWhenTheInstalledPackageIsGoneFromDisk {
-    // The metadata still names the installed update, but its files are gone: the merge has
-    // nothing to read, which is a failure of the merge itself rather than of its result.
+- (void)testFallsBackToThePatchArchiveWhenTheInstalledPackageIsGoneFromDisk {
+    // The metadata still names the installed update, but its files are gone: the diff has
+    // no bundle to patch, while the patch archive patches the app binary's and carries
+    // every asset.
     NSString *installedHash = [self installPackageWithContents:[self stageInstalledArchiveContents]];
     [[NSFileManager defaultManager] removeItemAtPath:[CodePushPackage getPackageFolderPath:installedHash]
                                                error:nil];
@@ -551,7 +559,7 @@ static NSData *CPTestBytes(NSString *text) {
     XCTAssertNil(error);
     XCTAssertEqualObjects(result[@"status"], @"applied");
     XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
-    XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonAssetMergeFailed);
+    XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonBaseBundleUnavailable);
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 
@@ -632,14 +640,9 @@ static NSData *CPTestBytes(NSString *text) {
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 
-- (void)testSkipsThePatchArchiveWhenTheAssetDiffUrlAnswersWithNoStatusAtAll {
-    // A URL that answers with nothing - no archive and no status to read it by - left no
-    // verdict of any kind, and the full download is the one that cannot fail, so a client is
-    // never walked through two doomed downloads on its way there. A server that answers a
-    // status is the other case: that is a verdict on one URL and the patch archive is at
-    // another, so it is tried. The archives here are served as files, which have no status
-    // to answer with, so that case is covered by the Android suite and by
-    // CodePushErrorUtilsTests rather than here.
+- (void)testTriesThePatchArchiveWhenTheAssetDiffCannotBeDownloaded {
+    // A diff that never arrived says nothing about the patch archive at its own URL, which
+    // is still worth a download before the full archive.
     [self installPackageWithContents:[self stageInstalledArchiveContents]];
     NSString *updateStaging = [self stageAssetDiffTargetContents];
     NSString *packageHash = CPTestFolderHash(updateStaging);
@@ -654,13 +657,17 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    [self assertFallbackResult:result reason:nil];
-    XCTAssertEqualObjects(result[@"archive"], @"asset-diff");
-    XCTAssertEqual([result[@"attempts"] count], (NSUInteger)1, @"the patch archive was passed over");
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
+    XCTAssertEqual([result[@"attempts"] count], (NSUInteger)2);
+    XCTAssertNil(result[@"attempts"][0][@"fallbackReason"],
+                 @"a diff that never arrived has no reason the appliers have a word for");
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 
-- (void)testSkipsThePatchArchiveWhenTheAssetDiffFailsInTheBundlePatchBothArchivesCarry {
+- (void)testFallsBackToThePatchArchiveWhenTheAssetDiffFailsInItsBundlePatch {
+    // The diff patches the installed update's bundle and the patch archive the app binary's,
+    // so a diff that failed in its bundle patch says nothing about the other.
     [self installPackageWithContents:[self stageInstalledArchiveContents]];
     NSString *updateStaging = [self stageAssetDiffTargetContents];
     NSString *packageHash = CPTestFolderHash(updateStaging);
@@ -678,27 +685,17 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    // Both archives carry the same bundle patch, so the patch archive could only fail the
-    // same way and is passed over for the full one.
-    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonPatchApplyFailed];
-    XCTAssertEqualObjects(result[@"archive"], @"asset-diff");
-    XCTAssertEqual([result[@"attempts"] count], (NSUInteger)1, @"the patch archive was passed over");
+    XCTAssertEqualObjects(result[@"status"], @"applied");
+    XCTAssertEqualObjects(result[@"archive"], @"binary-patch");
+    XCTAssertEqualObjects(result[@"attempts"][0][@"fallbackReason"], CodePushArchiveFallbackReasonPatchApplyFailed);
     XCTAssertNil(result[@"attempts"][0][@"applyDurationMs"],
                  @"an attempt that never restored the bundle has no apply to report");
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 
-- (void)testCopiesTheBundledResourcesWhenAnAssetDiffArrivesWithNoInstalledPackage {
-    // The platforms part here. With nothing installed there is no package to merge into, so
-    // this one copies the bundle and the assets out of the app binary and merges the diff
-    // into those - the update installs. The other platform has no such copy to make: its
-    // merge leaves the update short of the files the diff counts on, the folder hash refuses
-    // it, and the full archive is downloaded instead.
-    NSString *updateStaging = [self stageContents:@{
-        @"CodePush/main.jsbundle": CPTestFixture(@"target.bundle"),
-        @"CodePush/assets/binary.png": CPTestBytes(@"an asset that shipped inside the binary"),
-        @"CodePush/assets/badge.png": CPTestBytes(@"an image only the newer update ships"),
-    }];
+- (void)testFallsBackToTheFullArchiveWhenAnAssetDiffArrivesWithNoInstalledPackage {
+    // Nothing is installed, so there is no bundle for the diff's patch to apply to.
+    NSString *updateStaging = [self stageAssetDiffTargetContents];
     NSString *packageHash = CPTestFolderHash(updateStaging);
 
     NSError *error = nil;
@@ -710,7 +707,7 @@ static NSData *CPTestBytes(NSString *text) {
     } error:&error];
 
     XCTAssertNil(error);
-    XCTAssertEqualObjects(result[@"status"], @"applied");
+    [self assertFallbackResult:result reason:CodePushArchiveFallbackReasonBaseBundleUnavailable];
     [self assertInstalledContentsOf:packageHash matchStaging:updateStaging];
 }
 

@@ -33,15 +33,6 @@ static NSString *const CodePushHttpStatusCodeKey = @"CodePushHttpStatusCode";
 }
 
 /*
- * Whether the download failed because the server answered it with a status rather than with
- * a body to install.
- */
-+ (BOOL)isHttpStatusError:(NSError *)err
-{
-    return [self isCodePushError:err] && err.userInfo[CodePushHttpStatusCodeKey] != nil;
-}
-
-/*
  * Whether the request failed because the network did not carry it.
  *
  * A server that answered is not this, however it answered: the connection worked, and

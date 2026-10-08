@@ -10,10 +10,10 @@
  * these words, so they must not be reworded.
  */
 
-/** The bundle inside the app binary could not be opened or read. */
+/** The bundle the patch applies to could not be opened or read. */
 extern NSString *const CodePushArchiveFallbackReasonBaseBundleUnavailable;
 
-/** The bundle inside the app binary is not the one the patch was computed against. */
+/** The bundle the patch applies to is not the one the patch was computed against. */
 extern NSString *const CodePushArchiveFallbackReasonBaseHashMismatch;
 
 /** The manifest is missing, malformed, points outside the archive, or asks for too much. */
@@ -52,7 +52,9 @@ extern NSString *const CodePushArchiveFallbackReasonPackageVerificationFailed;
  *
  * A patch archive holds everything the full archive holds except the JS bundle, which it
  * carries as a patch against the bundle that shipped inside the app binary, plus a
- * manifest describing how to rebuild it. Restoring means applying that patch, verifying
+ * manifest describing how to rebuild it. An asset diff carries its patch against the
+ * bundle of the installed update it was built for instead, which is far closer to the
+ * update than the binary's bundle is. Restoring means applying that patch, verifying
  * the result, moving it to where the bundle belongs and deleting the two patch-only
  * files. What is left is byte for byte the contents of the full archive, so the folder
  * hash check that follows the install is unchanged and stays the last line of defence.
@@ -78,7 +80,9 @@ extern NSString *const CodePushArchiveFallbackReasonPackageVerificationFailed;
  * @param unzippedFolderPath the unzipped archive, which is modified in place
  * @param workingFolderPath  scratch directory for the restored bundle, emptied before
  *                           and after the attempt so an interrupted run leaves nothing
- * @param baseBundleURL      the JS bundle that shipped inside the app binary
+ * @param baseBundleURL      the JS bundle the patch applies to: the one inside the app
+ *                           binary for a patch archive, the installed update's for an
+ *                           asset diff
  * @param failureReason      set to the reason the full archive has to be downloaded
  *                           instead, whenever this returns NO
  */

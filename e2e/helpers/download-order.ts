@@ -13,7 +13,7 @@ import { clearRequestLog, getRequestLog } from "../mock-server/server";
  * An asset diff archive is a third form of the same contents, offered to a client whose
  * installed update is the base it was built against, and told apart the same way: a diff
  * install fetches the diff alone, and a diff that cannot be installed falls back to the
- * patch archive when it failed on its asset side, and to the full archive otherwise.
+ * patch archive.
  */
 export type DownloadedArchive = "binary-patch" | "asset-diff" | "full";
 

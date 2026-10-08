@@ -168,7 +168,7 @@ patch는 대체하려는 archive보다 작을 때만 배포할 가치가 있습�
 patch 번들도 업데이트의 asset을 모두 담지만, 이전 업데이트를 이미 설치한 클라이언트에는 그
 asset이 대부분 남아 있습니다. 그래서 설정 파일에 `bundleDownloader`가 있으면 binary
 patch 릴리스는 최근 릴리스마다 artifact를 하나 더 배포합니다.
-`<packageHash>-diff-<basePackageHash>.zip`은 번들 patch, 그 릴리스에 없는 asset, 삭제해야 하는
+`<packageHash>-diff-<basePackageHash>.zip`은 그 릴리스의 번들을 기준으로 만든 번들 patch, 그 릴리스에 없는 asset, 삭제해야 하는
 파일 목록 manifest만 담습니다. 해당 릴리스를 설치한 클라이언트는 설치된 업데이트를 복사한 뒤
 patch와 manifest를 적용하므로, full 번들과 동일한 `packageHash`가 됩니다.
 

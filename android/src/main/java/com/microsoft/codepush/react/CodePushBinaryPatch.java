@@ -14,7 +14,9 @@ import java.io.OutputStream;
  *
  * A patch archive holds everything the full archive holds except the JS bundle, which it
  * carries as a patch against the bundle that shipped inside the app binary, plus a
- * manifest describing how to rebuild it. Restoring means applying that patch, verifying
+ * manifest describing how to rebuild it. An asset diff carries its patch against the
+ * bundle of the installed update it was built for instead, which is far closer to the
+ * update than the binary's bundle is. Restoring means applying that patch, verifying
  * the result, moving it to where the bundle belongs and deleting the two patch-only
  * files. What is left is byte for byte the contents of the full archive, so the folder
  * hash check that follows the install is unchanged and stays the last line of defence.
@@ -66,6 +68,15 @@ public class CodePushBinaryPatch {
         mPatchApplier = patchApplier;
     }
 
+    /** The bundle one restore patches. */
+    private interface BaseBundleSource {
+        /**
+         * @param bundleArchivePath where the restored bundle sits in the archive, relative to
+         *                          the archive root
+         */
+        byte[] read(String bundleArchivePath) throws IOException;
+    }
+
     /**
      * Turns the contents of a downloaded patch archive into the contents of the full one.
      *
@@ -74,7 +85,45 @@ public class CodePushBinaryPatch {
      *                             and after the attempt so an interrupted run leaves nothing
      * @param baseBundleFileName   name of the JS bundle inside the app binary
      */
-    public ArchiveRestoreResult restoreBundle(String unzippedFolderPath, String workingFolderPath, String baseBundleFileName) {
+    public ArchiveRestoreResult restoreBundle(String unzippedFolderPath, String workingFolderPath, final String baseBundleFileName) {
+        return restoreBundle(unzippedFolderPath, workingFolderPath, new BaseBundleSource() {
+            @Override
+            public byte[] read(String bundleArchivePath) throws IOException {
+                return mBaseBundleProvider.readBaseBundle(baseBundleFileName);
+            }
+        });
+    }
+
+    /**
+     * Turns the contents of a downloaded asset diff into the contents of the full archive,
+     * patching the bundle of the installed update the diff was built against.
+     *
+     * The installed update's folder holds the contents of its full archive, so its bundle is
+     * at the same path the restored one takes in the diff - the bundle the CLI patched.
+     *
+     * @param unzippedFolderPath   the unzipped archive, which is modified in place
+     * @param workingFolderPath    scratch directory for the restored bundle, emptied before
+     *                             and after the attempt so an interrupted run leaves nothing
+     * @param installedFolderPath  the installed update's folder, or null when no update is
+     *                             installed
+     */
+    public ArchiveRestoreResult restoreBundleFromInstalledUpdate(String unzippedFolderPath, String workingFolderPath,
+                                                                 final String installedFolderPath) {
+        return restoreBundle(unzippedFolderPath, workingFolderPath, new BaseBundleSource() {
+            @Override
+            public byte[] read(String bundleArchivePath) throws IOException {
+                File installedBundleFile = installedFolderPath == null
+                        ? null
+                        : resolveInsideFolder(new File(installedFolderPath), bundleArchivePath);
+                if (installedBundleFile == null) {
+                    throw new IOException("No installed update holds " + bundleArchivePath + " to patch.");
+                }
+                return readFile(installedBundleFile);
+            }
+        });
+    }
+
+    private ArchiveRestoreResult restoreBundle(String unzippedFolderPath, String workingFolderPath, BaseBundleSource baseBundleSource) {
         File contentsFolder = resolveContentsFolder(new File(unzippedFolderPath));
         File manifestFile = new File(contentsFolder, CodePushConstants.BINARY_PATCH_MANIFEST_FILE_NAME);
         if (!manifestFile.isFile()) {
@@ -121,7 +170,9 @@ public class CodePushBinaryPatch {
 
             byte[] baseBundle;
             try {
-                baseBundle = mBaseBundleProvider.readBaseBundle(baseBundleFileName);
+                String bundleArchivePath = new File(unzippedFolderPath).getCanonicalFile().toURI()
+                        .relativize(targetBundleFile.toURI()).getPath();
+                baseBundle = baseBundleSource.read(bundleArchivePath);
             } catch (Exception e) {
                 CodePushUtils.log(e);
                 return ArchiveRestoreResult.failure(ArchiveRestoreResult.REASON_BASE_BUNDLE_UNAVAILABLE);

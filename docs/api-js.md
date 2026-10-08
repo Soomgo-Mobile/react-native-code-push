@@ -585,7 +585,7 @@ A release that was also published with asset diff archives records them in its r
 
 Which archive a device starts from follows from that key. When the update currently installed on the device is one of those releases, the diff archive's URL travels as `assetDiffDownloadUrl` and is the archive downloaded first; a device running the bundle inside the binary, or an update this release was not diffed against, gets the plain patch archive alone.
 
-A diff that fails on its asset side falls back to the patch archive, and any failure in the bundle patch both archives carry falls back to the full download. Each fallback downloads another archive, so one update can report up to three of the progress streams described above.
+A diff that fails falls back to the patch archive, and a patch archive that fails falls back to the full download. Each fallback downloads another archive, so one update can report up to three of the progress streams described above.
 
 ###### Methods
 

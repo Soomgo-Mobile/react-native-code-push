@@ -41,6 +41,8 @@ asset diff는 이전에 배포한 OTA 업데이트를 기준으로 산출됩니�
 
 binary patch가 모든 asset을 담는 것과 달리, asset diff에는 기준 업데이트에 없던 asset만 포함됩니다. 기준 업데이트와 새 릴리스의 asset 차이가 작을수록 이 업데이트의 크기도 작아집니다.
 
+JS 번들 patch도 앱 바이너리의 내장 번들이 아니라 기준 업데이트의 번들을 기준으로 만듭니다. binary patch는 바이너리 배포 이후의 변경이 쌓일수록 커지지만, asset diff의 patch에는 기준 업데이트 이후의 변경만 담깁니다.
+
 ## 시작하기 전에 준비할 것
 
 Diff 업데이트를 배포하려면 다음이 필요합니다.
@@ -173,7 +175,7 @@ binary patch를 배포할 때 이전 OTA 업데이트를 기준으로 한 asset 
 
 asset diff에는 다음만 포함됩니다.
 
-- JS 번들 binary patch
+- 기준 업데이트의 번들을 기준으로 만든 JS 번들 patch
 - 기준 업데이트에 없던 새 asset 파일들
 - 삭제할 asset 파일 목록 manifest 파일
 
@@ -212,7 +214,7 @@ bundleDownloader: async (archive, platform, identifier = 'staging') => {
 | 순서 | 아카이브 | 선택 조건 |
 | --- | --- | --- |
 | 1 | asset diff | 현재 실행 중인 OTA 업데이트를 기준으로 한 diff가 있는 경우 |
-| 2 | binary patch | asset diff를 사용할 수 없거나, asset 차이점 적용에 실패한 경우 |
+| 2 | binary patch | asset diff를 사용할 수 없거나 적용에 실패한 경우 |
 | 3 | full | binary patch를 사용할 수 없거나 패치 적용에 실패한 경우 |
 
 ### asset diff를 건너뛰는 경우
@@ -224,14 +226,11 @@ bundleDownloader: async (archive, platform, identifier = 'staging') => {
 
 ### asset diff 실패 시 다음 아카이브를 선택하는 기준
 
-실패 원인에 따라 fallback 경로가 달라집니다.
+asset diff는 설치된 업데이트의 번들을 패치하고, binary patch는 앱 바이너리의 내장 번들을 패치하며 모든 asset을 담습니다. 두 아카이브는 기준 번들도 다운로드 URL도 다르므로, asset diff가 실패했다고 binary patch도 실패하는 것은 아닙니다.
 
 | 실패 상황 | 다음 동작 | 이유 |
 | --- | --- | --- |
-| `asset_merge_failed` | binary patch 시도 | 설치된 업데이트에 asset 차이를 적용하지 못함. 모든 asset을 받아 교체하는 방식은 성공할 수 있음 |
-| `package_verification_failed` | binary patch 시도 | asset diff로 병합한 결과의 최종 hash가 맞지 않음. 모든 asset을 받아 교체하는 방식은 성공할 수 있음 |
-| asset diff 다운로드 URL이 HTTP `400` 이상 응답 | binary patch 시도 | asset diff와 binary patch의 다운로드 URL은 각각 별개이므로, 하나를 받지 못했다고 다른 하나도 받을 수 없는 것은 아님 |
-| bundle patch 적용 실패 | full 아카이브 다운로드 | asset diff와 binary patch는 JS 번들에 동일한 patch를 수행하므로 binary patch로 fallback 해도 실패할 가능성이 높음 |
+| 네트워크 연결 오류를 제외한 모든 실패 (`asset_merge_failed`, `package_verification_failed`, bundle patch 적용 실패, HTTP `400` 이상 응답) | binary patch 시도 | asset diff가 어떤 이유로 실패했든 binary patch는 적용될 수 있음 |
 | 네트워크 연결 오류 | fallback하지 않고 오류 보고 | 다음 방식 역시 동일한 네트워크를 사용하고, full 아카이브는 사이즈도 더 크므로 이어서 시도해도 더 느리게 실패할 가능성이 큼 |
 
 연결 오류와 서버 응답 오류는 다르게 처리합니다. 예를 들어 asset diff 다운로드 URL이 `404`를 반환한 경우에는 서버 연결은 성공한 상태이므로, 다음 수단인 binary patch나 full 아카이브를 건너뛸 이유가 없습니다.

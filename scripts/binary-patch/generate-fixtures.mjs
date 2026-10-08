@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Regenerates the binary patch fixtures used by `cli/utils/binaryPatch.test.ts`.
+ * Regenerates the binary patch fixtures used by `cli/utils/binaryPatch.test.ts` and the
+ * native test suites.
  *
  * The fixtures are committed so the tests can verify the patch format against
  * bytes that were produced once and never change. This script exists so that
@@ -119,6 +120,18 @@ function buildTargetBundle(nextUint32, base) {
     return target;
 }
 
+/**
+ * Builds the bundle of an update installed after the binary shipped: the target with
+ * one stretch rewritten, so it is close to the target and differs from the base. An
+ * asset diff patches this bundle rather than the base, and a client that patched the
+ * wrong one of the two could not rebuild the target.
+ */
+function buildInstalledBundle(target) {
+    const installed = Buffer.from(target);
+    installed.fill(0, BLOCK_SIZE, 2 * BLOCK_SIZE);
+    return installed;
+}
+
 function resolveHdiffz() {
     // Kept in sync with the lookup order in cli/utils/binaryPatch.ts.
     const toolsDir = process.env.HDIFFPATCH_TOOLS_DIR || path.join(repoRoot, '.hdiffpatch-tools');
@@ -142,21 +155,28 @@ function main() {
 
     const base = buildBaseBundle(nextUint32);
     const target = buildTargetBundle(nextUint32, base);
+    const installed = buildInstalledBundle(target);
 
     fs.mkdirSync(fixtureDir, { recursive: true });
     const basePath = path.join(fixtureDir, 'base.bundle');
     const targetPath = path.join(fixtureDir, 'target.bundle');
     const patchPath = path.join(fixtureDir, 'update.patch');
+    const installedPath = path.join(fixtureDir, 'installed.bundle');
+    const installedPatchPath = path.join(fixtureDir, 'installed-update.patch');
     fs.writeFileSync(basePath, base);
     fs.writeFileSync(targetPath, target);
+    fs.writeFileSync(installedPath, installed);
 
     // Must stay identical to the options the CLI release flow uses; a patch made
     // with different options would not exercise the format the appliers support.
     execFileSync(hdiffz, ['-f', '-m-6', '-c-zstd-21-24', basePath, targetPath, patchPath], {
         stdio: 'inherit',
     });
+    execFileSync(hdiffz, ['-f', '-m-6', '-c-zstd-21-24', installedPath, targetPath, installedPatchPath], {
+        stdio: 'inherit',
+    });
 
-    for (const filePath of [basePath, targetPath, patchPath]) {
+    for (const filePath of [basePath, targetPath, patchPath, installedPath, installedPatchPath]) {
         console.log(`${sha256(filePath)}  ${fs.statSync(filePath).size} bytes  ${path.relative(repoRoot, filePath)}`);
     }
 }
