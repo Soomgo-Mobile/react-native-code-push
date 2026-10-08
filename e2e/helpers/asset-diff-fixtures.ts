@@ -1,11 +1,16 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { getMockDataDir, WORK_DIR } from "../config";
 import {
   type Platform,
+  extractBundleFromArchive,
   findFiles,
+  getJsBundleName,
+  readPatchManifest,
   readReleaseHistory,
   rewriteArchive,
+  sha256OfFile,
 } from "./binary-patch-fixtures";
 
 /**
@@ -13,7 +18,8 @@ import {
  * the corruption a client has to survive.
  *
  * A diff archive is the patch archive with everything the base package already holds
- * taken out, plus a manifest naming what the base holds that the update dropped. Whether
+ * taken out and its bundle patched against the base package's bundle instead, plus a
+ * manifest naming what the base holds that the update dropped. Whether
  * a client merged its three sources back together correctly is guarded by the package
  * hash the merged contents have to reproduce, so what these fixtures inspect is the
  * published artifact - and what they corrupt is aimed at exactly that guard.
@@ -114,6 +120,62 @@ export function assertDiffArchiveShape(
   }
 
   console.log(`[assert] ${scenario}: diff archive omits the shared asset and deletes the base's dropped asset`);
+}
+
+/**
+ * Asserts that the diff's bundle patch was computed against the base release's bundle
+ * rather than the one inside the app binary, which the patch archive is computed against.
+ *
+ * The binary's bundle falls further behind with every release while the base release is
+ * one release away, so on real bundles a diff patched against the base has to come out
+ * smaller than the patch archive's patch - the whole point of patching against it.
+ */
+export function assertDiffPatchesBaseRelease(
+  scenario: string,
+  platform: Platform,
+  identifier: string,
+  binaryVersion: string,
+  releaseVersion: string,
+  baseReleaseVersion: string,
+  diffArchivePath: string,
+): void {
+  const history = readReleaseHistory(platform, identifier, binaryVersion);
+  const basePackageHash = history[baseReleaseVersion].packageHash;
+  const bundleDir = path.join(getMockDataDir(platform), "bundles", platform, identifier);
+  const baseFullArchive = path.join(bundleDir, "full-bundle", basePackageHash);
+  // Both releases publish a patch archive, so the update's is picked out by its package hash.
+  const patchArchivePath = path.join(bundleDir, "binary-patch", binaryVersion, history[releaseVersion].packageHash);
+  const baseBundlePath = path.join(WORK_DIR, "asset-diff-base-bundle", platform, getJsBundleName(platform));
+  extractBundleFromArchive(baseFullArchive, getJsBundleName(platform), baseBundlePath);
+  const baseBundleHash = sha256OfFile(baseBundlePath);
+
+  const diffManifest = readPatchManifest(diffArchivePath);
+  const patchManifest = readPatchManifest(patchArchivePath);
+  if (diffManifest.baseBundleHash !== baseBundleHash) {
+    throw new Error(
+      `${scenario}: the diff's bundle patch is computed against ${diffManifest.baseBundleHash}, ` +
+      `not the v${baseReleaseVersion} bundle (${baseBundleHash})`,
+    );
+  }
+  if (diffManifest.baseBundleHash === patchManifest.baseBundleHash) {
+    throw new Error(`${scenario}: the diff's bundle patch is computed against the same bundle as the patch archive's`);
+  }
+
+  const patchFileSize = (archivePath: string, patchFile: string) =>
+    execFileSync("unzip", ["-p", archivePath, `*/${patchFile}`], { maxBuffer: 512 * 1024 * 1024 }).length;
+  const diffPatchSize = patchFileSize(diffArchivePath, diffManifest.patchFile);
+  const binaryPatchSize = patchFileSize(patchArchivePath, patchManifest.patchFile);
+  if (diffPatchSize >= binaryPatchSize) {
+    throw new Error(
+      `${scenario}: the diff's bundle patch (${diffPatchSize} bytes) is not smaller than ` +
+      `the patch archive's (${binaryPatchSize} bytes)`,
+    );
+  }
+
+  console.log(
+    `[assert] ${scenario}: diff patches the v${baseReleaseVersion} bundle ` +
+    `(${diffPatchSize} bytes against the patch archive's ${binaryPatchSize})`,
+  );
 }
 
 /**

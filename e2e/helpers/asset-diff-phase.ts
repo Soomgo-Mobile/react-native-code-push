@@ -5,9 +5,9 @@
  * A release published with asset diffs offers up to three archives of the same update. A
  * client whose installed update is a base the release was diffed against downloads the
  * diff archive alone, and a client the diff cannot serve keeps the patch archive. A diff
- * that fails is fallen back from by where it failed: a failure on its asset side - the
- * one part the patch archive does not share - moves on to the patch archive, and a
- * failure in the bundle patch both archives carry skips the patch for the full one.
+ * that fails is fallen back from to the patch archive whatever the failure: the diff
+ * patches the installed update's bundle and the patch archive the binary's, so neither
+ * the diff's assets nor its bundle patch are shared with the patch archive.
  * All of them end up running identical contents, so - as with the binary patch phase -
  * what tells the cases apart is which archives the app asked the mock server for,
  * together with the result the app's own callback reported.
@@ -17,6 +17,7 @@ import path from "path";
 import { assertArtifactStorageLayout } from "./artifact-storage";
 import {
   assertDiffArchiveShape,
+  assertDiffPatchesBaseRelease,
   assertReleaseOffersDiff,
   corruptDiffArchiveAsset,
   dropDiffArchiveManifestDeletions,
@@ -82,9 +83,9 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
   const installUpdateFlow = path.resolve(__dirname, "../flows-binary-patch/01-install-update.yaml");
   const updateFromInstalledFlow = path.resolve(__dirname, "../flows-asset-diff/01-update-from-installed.yaml");
 
-  // A diff carries the bundle patch of its release, and that patch only applies to the
-  // exact bundle that shipped inside the app binary - extracted from the installed app,
-  // exactly as the binary patch phase does.
+  // Every release of this phase carries a patch archive, and that patch only applies to
+  // the exact bundle that shipped inside the app binary - extracted from the installed
+  // app, exactly as the binary patch phase does.
   const binaryBundlePath = extractBinaryBundle(platform, context.appId);
 
   // Every release of this phase ships the shared asset plus one asset of its own, so a
@@ -136,6 +137,15 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
         addedAssetLabel: scenario.updateVersion,
         deletedAssetLabel: scenario.baseVersion,
       });
+      assertDiffPatchesBaseRelease(
+        scenario.name,
+        platform,
+        releaseIdentifier,
+        BINARY_VERSION,
+        scenario.updateVersion,
+        scenario.baseVersion,
+        findAssetDiffArchive(platform, releaseIdentifier),
+      );
 
       scenario.breakDiff?.();
 
@@ -181,23 +191,21 @@ export async function runAssetDiffPhase(context: AssetDiffPhaseContext): Promise
   });
 
   // A diff whose bundle patch restores a bundle its manifest does not promise failed in
-  // the one part the patch archive carries byte for byte, so the patch is passed over
-  // for the full archive: retrying it could only fail the same way, and a client must
-  // never be walked through two doomed downloads on its way to the full one.
+  // its bundle patch, which the patch archive does not share: that one is computed
+  // against the binary's bundle, so it is the next rung.
   await runDiffScenario({
-    name: "diff that fails in the bundle patch both archives carry skips the patch archive",
+    name: "diff that fails in its bundle patch falls back to the patch archive",
     baseVersion: "1.4.5",
     updateVersion: "1.4.6",
     breakDiff: () => breakRestoredBundleExpectation(findAssetDiffArchive(platform, releaseIdentifier)),
-    expectedDownloads: ["asset-diff", "full"],
-    expectedArchiveResult: "fallback:asset-diff:asset-diff=target_verification_failed",
+    expectedDownloads: ["asset-diff", "binary-patch"],
+    expectedArchiveResult: "applied:binary-patch:asset-diff=target_verification_failed:binary-patch=applied",
   });
 
   // A diff the server does not serve is not a verdict on the archives it does. Diffs are
   // published one per recent version and are the first thing a retention policy clears
   // out, while the patch archive at its own URL stays - so a 404 on the diff must not cost
-  // the patch archive its try. This is the one failure before the bundle is restored that
-  // still reaches the patch archive.
+  // the patch archive its try.
   await runDiffScenario({
     name: "diff the server does not serve falls back to the patch archive",
     baseVersion: "1.4.9",
