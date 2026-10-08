@@ -3,10 +3,13 @@
  *
  * A diff archive is the patch archive of this release with every file the base package
  * already holds byte for byte taken out, plus a manifest naming the files the base holds
- * that the update dropped. A client copies its installed base package, applies the
- * deletions, rebuilds the JS bundle from the patch and overlays what the diff shipped -
- * which leaves it holding exactly the contents of the full archive, and therefore the
- * same `packageHash`. One release can serve a diff per base it was built against.
+ * that the update dropped. Its JS bundle patch is computed against the base package's
+ * bundle rather than the one inside the app binary: the binary's bundle falls further
+ * behind with every release, while the base package is the release just before this one.
+ * A client copies its installed base package, applies the deletions, rebuilds the JS
+ * bundle from the patch and its own bundle, and overlays what the diff shipped - which
+ * leaves it holding exactly the contents of the full archive, and therefore the same
+ * `packageHash`. One release can serve a diff per base it was built against.
  *
  * The diff is derived from the artifacts the release already produced rather than from
  * the bundler, so it costs no extra bundling and cannot drift from what was published.
@@ -15,6 +18,7 @@
 import fs from "fs";
 import path from "path";
 import shell from "shelljs";
+import { generatePatch } from "../utils/binaryPatch.js";
 import { normalizePath } from "../utils/file-utils.js";
 import { walk } from "../utils/promisfied-fs.js";
 import { zipDirectoryContents } from "../utils/zip.js";
@@ -22,6 +26,7 @@ import {
     BINARY_PATCH_MANIFEST_NAME,
     type BinaryPatchManifest,
     extractCodePushBundleContents,
+    hashBundleFile,
 } from "./makeBinaryPatchBundle.js";
 
 /**
@@ -50,6 +55,7 @@ export function assetDiffArchiveName(packageHash: string, basePackageHash: strin
  * Creates the diff archive for a release against one base package.
  *
  * @param patchBundleFilePath {string} Patch archive this release already built
+ * @param fullBundleFilePath {string} Full archive this release already built, which holds the target bundle
  * @param baseBundleFilePath {string} Full archive of the base release, downloaded locally
  * @param bundleDirectory {string} Directory the release artifacts are written to
  * @param packageHash {string} Package hash of this release
@@ -59,12 +65,14 @@ export function assetDiffArchiveName(packageHash: string, basePackageHash: strin
  */
 export async function makeAssetDiffBundle({
     patchBundleFilePath,
+    fullBundleFilePath,
     baseBundleFilePath,
     bundleDirectory,
     packageHash,
     basePackageHash,
 }: {
     patchBundleFilePath: string;
+    fullBundleFilePath: string;
     baseBundleFilePath: string;
     bundleDirectory: string;
     packageHash: string;
@@ -88,6 +96,10 @@ export async function makeAssetDiffBundle({
         const { contentsPath: patchContents } = await extractCodePushBundleContents(
             patchBundleFilePath,
             path.join(tempRoot, 'patch-archive'),
+        );
+        const { contentsPath: fullContents } = await extractCodePushBundleContents(
+            fullBundleFilePath,
+            path.join(tempRoot, 'full-archive'),
         );
         const { contentsPath: baseContents } = await extractCodePushBundleContents(
             baseBundleFilePath,
@@ -123,6 +135,24 @@ export async function makeAssetDiffBundle({
                 fs.rmSync(path.join(stagedContents, relativePath));
             }
         }
+
+        // The patch archive's bundle patch is replaced with one against the base package's
+        // bundle, which is the bundle a client installing this diff already holds.
+        const baseBundle = path.join(baseContents, bundlePath);
+        if (!fs.existsSync(baseBundle)) {
+            throw new Error(`the base package holds no "${bundlePath}" to patch against`);
+        }
+        // The rest of the manifest describes the target, and is kept as the patch archive wrote it.
+        const targetBundle = path.join(fullContents, bundlePath);
+        if (hashBundleFile(targetBundle) !== patchManifest.targetBundleHash) {
+            throw new Error(`the full archive's "${bundlePath}" is not the bundle the patch archive restores`);
+        }
+        generatePatch(baseBundle, targetBundle, path.join(stagedContents, patchFile));
+        const diffPatchManifest: BinaryPatchManifest = { ...patchManifest, baseBundleHash: hashBundleFile(baseBundle) };
+        fs.writeFileSync(
+            path.join(stagedContents, BINARY_PATCH_MANIFEST_NAME),
+            JSON.stringify(diffPatchManifest, null, 2),
+        );
 
         const manifest: AssetDiffManifest = {
             deletedFiles: (await listFilesRelative(baseContents))
