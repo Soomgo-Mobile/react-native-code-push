@@ -10,10 +10,10 @@ package com.microsoft.codepush.react;
  */
 public class ArchiveRestoreResult {
 
-    /** The bundle inside the app binary could not be opened or read. */
+    /** The bundle the patch applies to could not be opened or read. */
     public static final String REASON_BASE_BUNDLE_UNAVAILABLE = "base_bundle_unavailable";
 
-    /** The bundle inside the app binary is not the one the patch was computed against. */
+    /** The bundle the patch applies to is not the one the patch was computed against. */
     public static final String REASON_BASE_HASH_MISMATCH = "base_hash_mismatch";
 
     /** The manifest is missing, malformed, points outside the archive, or asks for too much. */

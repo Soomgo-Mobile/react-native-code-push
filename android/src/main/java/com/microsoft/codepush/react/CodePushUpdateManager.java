@@ -408,12 +408,20 @@ public class CodePushUpdateManager {
             FileUtils.unzipFile(downloadFile, unzippedFolderPath);
             FileUtils.deleteFileOrFolderSilently(downloadFile);
 
+            String diffManifestFilePath = CodePushUtils.appendPathComponent(unzippedFolderPath,
+                    CodePushConstants.DIFF_MANIFEST_FILE_NAME);
+            boolean isDiffUpdate = FileUtils.fileAtPathExists(diffManifestFilePath);
+
             // Rebuild the JS bundle the archive only carries a patch of, which leaves the
-            // contents identical to the ones the full archive would have delivered.
+            // contents identical to the ones the full archive would have delivered. An asset
+            // diff patches the bundle of the installed update it merges into, a patch
+            // archive the bundle inside the app binary.
             if (isBinaryPatchUpdate) {
                 long patchStartTime = System.currentTimeMillis();
-                ArchiveRestoreResult patchResult = mBinaryPatch.restoreBundle(unzippedFolderPath,
-                        getBinaryPatchFolderPath(), expectedBundleFileName);
+                ArchiveRestoreResult patchResult = isDiffUpdate
+                        ? mBinaryPatch.restoreBundleFromInstalledUpdate(unzippedFolderPath,
+                                getBinaryPatchFolderPath(), getCurrentPackageFolderPath())
+                        : mBinaryPatch.restoreBundle(unzippedFolderPath, getBinaryPatchFolderPath(), expectedBundleFileName);
                 if (!patchResult.succeeded()) {
                     return patchResult;
                 }
@@ -424,9 +432,6 @@ public class CodePushUpdateManager {
             }
 
             // Merge contents with current update based on the manifest
-            String diffManifestFilePath = CodePushUtils.appendPathComponent(unzippedFolderPath,
-                    CodePushConstants.DIFF_MANIFEST_FILE_NAME);
-            boolean isDiffUpdate = FileUtils.fileAtPathExists(diffManifestFilePath);
             if (isDiffUpdate) {
                 try {
                     String currentPackageFolderPath = getCurrentPackageFolderPath();

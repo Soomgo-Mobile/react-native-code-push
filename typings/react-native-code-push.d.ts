@@ -93,9 +93,12 @@ export interface UpdateCheckResponse {
  * judged by them whichever platform it is running on.
  */
 export type ArchiveFallbackReason =
-    /** The bundle inside the app binary could not be opened or read. */
+    /**
+     * The bundle the patch applies to could not be opened or read: the one inside the app
+     * binary for a patch archive, the installed update's for an asset diff.
+     */
     | "base_bundle_unavailable"
-    /** The bundle inside the app binary is not the one the patch was computed against. */
+    /** The bundle the patch applies to is not the one the patch was computed against. */
     | "base_hash_mismatch"
     /** The manifest is missing, malformed, points outside the archive, or asks for too much. */
     | "invalid_manifest"

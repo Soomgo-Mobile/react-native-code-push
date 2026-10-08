@@ -390,14 +390,24 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                                             nonFailingError = nil;
                                                         }
                                                         
+                                                        NSString *diffManifestFilePath = [unzippedFolderPath stringByAppendingPathComponent:DiffManifestFileName];
+                                                        BOOL isDiffUpdate = [[NSFileManager defaultManager] fileExistsAtPath:diffManifestFilePath];
+
                                                         // Rebuild the JS bundle the archive only carries a patch of, which leaves the
-                                                        // contents identical to the ones the full archive would have delivered.
+                                                        // contents identical to the ones the full archive would have delivered. An
+                                                        // asset diff patches the bundle of the installed update it merges into, a
+                                                        // patch archive the bundle inside the app binary.
                                                         if (isBinaryPatchUpdate) {
                                                             NSDate *patchStartTime = [NSDate date];
+                                                            NSURL *baseBundleURL = [CodePush binaryBundleURL];
+                                                            if (isDiffUpdate) {
+                                                                NSString *installedBundlePath = [self getCurrentPackageBundlePath:nil];
+                                                                baseBundleURL = installedBundlePath ? [NSURL fileURLWithPath:installedBundlePath] : nil;
+                                                            }
                                                             NSString *patchFailureReason = nil;
                                                             if (![CodePushBinaryPatch restoreBundleInUnzippedFolder:unzippedFolderPath
                                                                                                      workingFolder:[self getBinaryPatchFolderPath]
-                                                                                                     baseBundleURL:[CodePush binaryBundleURL]
+                                                                                                     baseBundleURL:baseBundleURL
                                                                                                      failureReason:&patchFailureReason]) {
                                                                 patchFallbackCallback(patchFailureReason);
                                                                 return;
@@ -408,9 +418,6 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                                             patchAppliedCallback(applyDurationMs);
                                                         }
 
-                                                        NSString *diffManifestFilePath = [unzippedFolderPath stringByAppendingPathComponent:DiffManifestFileName];
-                                                        BOOL isDiffUpdate = [[NSFileManager defaultManager] fileExistsAtPath:diffManifestFilePath];
-                                                        
                                                         if (isDiffUpdate) {
                                                             // A merge that cannot complete has a word of its own, because it says
                                                             // the diff went wrong on its asset side - the one failure the patch
