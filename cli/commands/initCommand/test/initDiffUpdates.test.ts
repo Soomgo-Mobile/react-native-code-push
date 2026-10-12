@@ -81,6 +81,17 @@ describe("diff update init", () => {
         expect(script).toContain(exportScript);
     });
 
+    it("adds the export hook for an app whose AppDelegate is not where the template keeps it", async () => {
+        // An app that moved to a SceneDelegate, say: the hook only needs the Xcode project.
+        fs.unlinkSync(path.join(projectDir, "ios/RN0773/AppDelegate.m"));
+        jest.spyOn(console, "warn").mockImplementation(() => {});
+        await initIos(true);
+        const project = readProject();
+        const script = JSON.parse(project.buildPhaseObject("PBXShellScriptBuildPhase", "Bundle React Native code and images").shellScript);
+        expect(script).toContain(exportScript);
+        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("AppDelegate"));
+    });
+
     it("preserves an existing export hook with a custom path", async () => {
         const gradle = 'apply from: "/custom/codepush-export.gradle"\n';
         fs.writeFileSync(gradlePath, gradle);

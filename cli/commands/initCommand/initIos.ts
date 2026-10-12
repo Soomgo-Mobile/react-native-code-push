@@ -15,12 +15,11 @@ export async function initIos(diffUpdates = false) {
     const projectName = xcodeprojFile.replace('.xcodeproj', '');
     const appDelegatePath = findAppDelegate(path.join(projectDir, projectName));
 
+    // The export hook below lives in the Xcode project alone, so an app that keeps its
+    // bundle URL somewhere other than the template's AppDelegate still gets it.
     if (!appDelegatePath) {
-        console.log('log: Could not find AppDelegate file');
-        return;
-    }
-
-    if (appDelegatePath.endsWith('.swift')) {
+        console.warn('warn: Could not find AppDelegate file. Return `CodePush.bundleURL()` as the JS bundle URL yourself.');
+    } else if (appDelegatePath.endsWith('.swift')) {
         await setupSwift(appDelegatePath, projectDir, projectName);
     } else {
         await setupObjectiveC(appDelegatePath);
