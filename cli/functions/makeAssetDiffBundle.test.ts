@@ -9,7 +9,7 @@ import {
     assetDiffArchiveName,
     makeAssetDiffBundle,
 } from "./makeAssetDiffBundle.js";
-import { BINARY_PATCH_MANIFEST_NAME, makeBinaryPatchBundle } from "./makeBinaryPatchBundle.js";
+import { BINARY_PATCH_MANIFEST_NAME, hashBundleFile, makeBinaryPatchBundle } from "./makeBinaryPatchBundle.js";
 import { makeCodePushBundle } from "./makeCodePushBundle.js";
 import { applyPatch } from "../utils/binaryPatch.js";
 import { generatePackageHashFromDirectory } from "../utils/hash-utils.js";
@@ -45,6 +45,12 @@ const repoRoot = findRepoRoot();
 const fixtureDir = path.join(repoRoot, "cli", "fixtures", "binary-patch");
 const baseFixture = path.join(fixtureDir, "base.bundle");
 const targetFixture = path.join(fixtureDir, "target.bundle");
+/**
+ * The bundle of the base release. It differs from the bundle inside the app binary, the
+ * way a release made after the binary shipped does, so a diff patched against the wrong
+ * one of the two cannot rebuild the update.
+ */
+const installedFixture = path.join(fixtureDir, "installed.bundle");
 
 /**
  * The asset both releases hold. Sized like a real asset rather than a few bytes, because
@@ -74,7 +80,7 @@ function writeUpdateContents(parentDir: string, files: Record<string, Buffer | s
 
 function baseContentFiles(): Record<string, Buffer | string> {
     return {
-        [BUNDLE_NAME]: fs.readFileSync(baseFixture),
+        [BUNDLE_NAME]: fs.readFileSync(installedFixture),
         'assets/keep.png': unchangedAsset,
         'assets/change.png': 'OLD',
         'assets/gone.png': 'GONE',
@@ -97,6 +103,7 @@ type Release = {
     basePackageHash: string;
     baseBundleFilePath: string;
     patchBundleFilePath: string;
+    fullBundleFilePath: string;
 };
 
 /**
@@ -128,6 +135,7 @@ async function stageRelease(name: string, baseFiles: Record<string, Buffer | str
         basePackageHash,
         baseBundleFilePath: path.join(bundleDirectory, basePackageHash),
         patchBundleFilePath,
+        fullBundleFilePath: path.join(bundleDirectory, packageHash),
     };
 }
 
@@ -159,6 +167,7 @@ describe("makeAssetDiffBundle", () => {
 
         const diff = await makeAssetDiffBundle({
             patchBundleFilePath: release.patchBundleFilePath,
+            fullBundleFilePath: release.fullBundleFilePath,
             baseBundleFilePath: release.baseBundleFilePath,
             bundleDirectory: release.bundleDirectory,
             packageHash: release.packageHash,
@@ -180,11 +189,35 @@ describe("makeAssetDiffBundle", () => {
         );
     });
 
+    it("names the base package's bundle as the one its patch applies to", async () => {
+        // The client checks this hash before applying the patch, so a diff that kept the
+        // binary's would fail on every device even though its patch is right.
+        const release = await stageRelease("base-hash", baseContentFiles());
+
+        const diff = await makeAssetDiffBundle({
+            patchBundleFilePath: release.patchBundleFilePath,
+            fullBundleFilePath: release.fullBundleFilePath,
+            baseBundleFilePath: release.baseBundleFilePath,
+            bundleDirectory: release.bundleDirectory,
+            packageHash: release.packageHash,
+            basePackageHash: release.basePackageHash,
+        });
+
+        const extracted = await extractTo(diff!.diffBundleFilePath, path.join(release.caseDir, "extracted"));
+        const patchManifest = JSON.parse(
+            fs.readFileSync(path.join(extracted, CONTENTS_DIR_NAME, BINARY_PATCH_MANIFEST_NAME), 'utf8'),
+        );
+
+        expect(patchManifest.baseBundleHash).toBe(hashBundleFile(installedFixture));
+        expect(patchManifest.targetBundleHash).toBe(hashBundleFile(targetFixture));
+    });
+
     it("lists files the base holds but the update dropped, with the contents prefix", async () => {
         const release = await stageRelease("deletions", baseContentFiles());
 
         const diff = await makeAssetDiffBundle({
             patchBundleFilePath: release.patchBundleFilePath,
+            fullBundleFilePath: release.fullBundleFilePath,
             baseBundleFilePath: release.baseBundleFilePath,
             bundleDirectory: release.bundleDirectory,
             packageHash: release.packageHash,
@@ -202,6 +235,7 @@ describe("makeAssetDiffBundle", () => {
 
         const diff = await makeAssetDiffBundle({
             patchBundleFilePath: release.patchBundleFilePath,
+            fullBundleFilePath: release.fullBundleFilePath,
             baseBundleFilePath: release.baseBundleFilePath,
             bundleDirectory: release.bundleDirectory,
             packageHash: release.packageHash,
@@ -213,10 +247,11 @@ describe("makeAssetDiffBundle", () => {
         const diffDir = await extractTo(diff!.diffBundleFilePath, path.join(release.caseDir, "downloaded"));
         const diffContents = path.join(diffDir, CONTENTS_DIR_NAME);
 
-        // Rebuild the bundle from its patch, then drop the two patch-only files.
+        // Rebuild the bundle from its patch and the installed package's own bundle, then drop
+        // the two patch-only files.
         const patchManifest = JSON.parse(fs.readFileSync(path.join(diffContents, BINARY_PATCH_MANIFEST_NAME), 'utf8'));
         applyPatch(
-            baseFixture,
+            path.join(packageDir, CONTENTS_DIR_NAME, patchManifest.bundlePath),
             path.join(diffContents, patchManifest.patchFile),
             path.join(diffContents, patchManifest.bundlePath),
         );
@@ -251,6 +286,7 @@ describe("makeAssetDiffBundle", () => {
 
         const diff = await makeAssetDiffBundle({
             patchBundleFilePath: release.patchBundleFilePath,
+            fullBundleFilePath: release.fullBundleFilePath,
             baseBundleFilePath: release.baseBundleFilePath,
             bundleDirectory: release.bundleDirectory,
             packageHash: release.packageHash,
@@ -272,6 +308,7 @@ describe("makeAssetDiffBundle", () => {
 
         await makeAssetDiffBundle({
             patchBundleFilePath: release.patchBundleFilePath,
+            fullBundleFilePath: release.fullBundleFilePath,
             baseBundleFilePath: release.baseBundleFilePath,
             bundleDirectory: release.bundleDirectory,
             packageHash: release.packageHash,

@@ -85,12 +85,14 @@ export async function release(
         })
         : null;
 
-    // A diff is the patch archive with what a base package already holds taken out, so it
-    // only exists where a patch does - and only a consumer that can hand back a released
-    // archive can supply the bases to diff against.
+    // A diff is the patch archive with what a base package already holds taken out and its
+    // bundle patched against that package instead, so it only exists where a patch does -
+    // and only a consumer that can hand back a released archive can supply the bases to
+    // diff against.
     const assetDiffArtifacts = binaryPatch && bundleDownloader && diffBaseCount > 0
         ? await makeAssetDiffArtifacts({
             patchBundleFilePath: binaryPatch.patchBundleFilePath,
+            fullBundleFilePath: bundleFilePath,
             releaseHistory: await getReleaseHistory(binaryVersion, platform, identifier),
             diffBaseCount,
             bundleDownloader,
@@ -314,6 +316,7 @@ type AssetDiffArtifact = { basePackageHash: string, filePath: string };
  */
 async function makeAssetDiffArtifacts({
     patchBundleFilePath,
+    fullBundleFilePath,
     releaseHistory,
     diffBaseCount,
     bundleDownloader,
@@ -324,6 +327,7 @@ async function makeAssetDiffArtifacts({
     identifier,
 }: {
     patchBundleFilePath: string;
+    fullBundleFilePath: string;
     releaseHistory: ReleaseHistoryInterface;
     diffBaseCount: number;
     bundleDownloader: NonNullable<CliConfigInterface['bundleDownloader']>;
@@ -355,6 +359,7 @@ async function makeAssetDiffArtifacts({
         try {
             const assetDiff = await makeAssetDiffBundle({
                 patchBundleFilePath,
+                fullBundleFilePath,
                 baseBundleFilePath: base.baseBundleFilePath,
                 bundleDirectory,
                 packageHash,

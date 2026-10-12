@@ -124,13 +124,11 @@ The `full` archive itself is not included in `attempts`.
 
 Most downloads record only one attempt.
 
-A second attempt may be recorded if the asset diff fails while applying the asset differences, or if the asset diff URL returns an HTTP status of 400 or above.
+A second attempt is recorded when the asset diff fails for any reason other than a network connection error.
 
 1. The client tries `asset-diff`.
-2. It tries `binary-patch` if the asset diff could not be merged with the installed update (`asset_merge_failed`), the merged result failed package hash verification (`package_verification_failed`), or the asset diff URL returned an HTTP status of 400 or above.
+2. It tries `binary-patch`. The asset diff patches the installed update's bundle and the binary patch the bundle embedded in the app binary, so however the asset diff failed, the binary patch may still apply.
 3. If `binary-patch` also cannot be applied, the client downloads the full archive.
-
-By contrast, if the shared bundle patch step fails for an asset diff, the binary patch is certain to fail in the same way. The client skips the binary patch and downloads the full archive immediately.
 
 ## `fallbackReason`
 
@@ -138,8 +136,8 @@ Both platforms report fallback reason codes. This allows telemetry to be aggrega
 
 | Reason | Description |
 | --- | --- |
-| `base_bundle_unavailable` | The bundle inside the app binary could not be opened or read. |
-| `base_hash_mismatch` | The bundle inside the app binary differs from the bundle used as the base when the patch was generated. |
+| `base_bundle_unavailable` | The bundle the patch applies to could not be opened or read: the one inside the app binary for a binary patch, the installed update's for an asset diff. |
+| `base_hash_mismatch` | The bundle the patch applies to differs from the bundle used as the base when the patch was generated. |
 | `invalid_manifest` | The manifest is missing or malformed, points outside the archive, or requests an operation beyond the permitted limits. |
 | `unsupported_format` | The patch was generated in a format or with a codec that the client cannot apply. |
 | `patch_apply_failed` | The applier rejected the patch, or the resulting bundle could not be used. |

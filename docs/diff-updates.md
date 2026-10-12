@@ -39,6 +39,8 @@ An asset diff is generated against a previously published OTA update. Therefore,
 
 Unlike a binary patch, which contains every asset, an asset diff contains only assets absent from the base update. The smaller the asset difference between the base update and the new release, the smaller the asset diff will be.
 
+Its JS bundle patch is computed against the base update's bundle as well, not against the bundle embedded in the app binary. A binary patch grows with every change made since the binary shipped, while the asset diff's patch only carries the changes made since the base update.
+
 ## What to prepare before you start
 
 Publishing diff updates requires the following:
@@ -173,11 +175,11 @@ When publishing a binary patch, you can also publish asset diff archives against
 
 An asset diff contains only:
 
-- The JS bundle binary patch
+- A JS bundle patch computed against the base update's bundle
 - New asset files absent from the base update
 - A manifest listing asset files to delete
 
-After downloading the update, the app copies the base OTA update, patches the JS bundle, and deletes unnecessary asset files. The resulting contents are identical to the full archive update.
+After downloading the update, the app copies the base OTA update, patches its JS bundle, and deletes unnecessary asset files. The resulting contents are identical to the full archive update.
 
 ### Publishing conditions
 
@@ -212,7 +214,7 @@ When downloading an update, the app tries the smallest archive first.
 | Order | Archive | Selected when |
 | --- | --- | --- |
 | 1 | asset diff | A diff exists against the OTA update currently running |
-| 2 | binary patch | The asset diff is unavailable or applying the asset differences fails |
+| 2 | binary patch | The asset diff is unavailable or cannot be applied |
 | 3 | full | The binary patch is unavailable or applying the patch fails |
 
 ### When asset diff is skipped
@@ -224,14 +226,11 @@ The app starts with the binary patch when no asset diff is available, including 
 
 ### Choosing the next archive after an asset diff failure
 
-The fallback path depends on the failure:
+The asset diff patches the installed update's bundle, while the binary patch patches the bundle embedded in the app binary and carries every asset. The two share neither their base bundle nor their download URL, so a failed asset diff says nothing about the binary patch.
 
 | Failure | Next action | Reason |
 | --- | --- | --- |
-| `asset_merge_failed` | Try the binary patch | The asset differences could not be applied to the installed update. Replacing all assets may still succeed |
-| `package_verification_failed` | Try the binary patch | The final hash of the contents merged from the asset diff does not match. Replacing all assets may still succeed |
-| The asset diff download URL returns HTTP `400` or higher | Try the binary patch | The asset diff and binary patch use separate download URLs, so failure to download one does not mean the other is unavailable |
-| Applying the bundle patch fails | Download the full archive | The asset diff and binary patch apply the same JS bundle patch, so falling back to the binary patch is likely to fail as well |
+| Any failure other than a network connection error (`asset_merge_failed`, `package_verification_failed`, a failed bundle patch, an HTTP `400` or higher response) | Try the binary patch | The binary patch can still apply whatever went wrong with the asset diff |
 | Network connection error | Report the error without falling back | The next option uses the same network, and the full archive is larger, so another attempt would likely fail more slowly |
 
 Connection errors and server response errors are handled differently. For example, a `404` response from the asset diff download URL means the server was reached, so there is no reason to skip the next option—the binary patch or full archive.
