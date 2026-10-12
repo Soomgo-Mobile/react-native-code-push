@@ -1,4 +1,4 @@
-const { withMainApplication, WarningAggregator } = require('expo/config-plugins');
+const { withMainApplication, withAppBuildGradle, WarningAggregator } = require('expo/config-plugins');
 
 const IMPORT_CODE_PUSH = 'import com.microsoft.codepush.react.CodePush';
 const RN_082_MARKER = 'ExpoReactHostFactory.getDefaultReactHost(';
@@ -87,6 +87,31 @@ const withAndroidMainApplicationDependency = (config) => {
   });
 };
 
+// Resolved through node, the way the Expo template locates its own packages, so the
+// export script is found wherever the package manager put this package - hoisted to
+// a monorepo root included. The script is Groovy, which a Kotlin DSL build applies too.
+const RESOLVE_PACKAGE_JSON = `require.resolve('@bravemobile/react-native-code-push/package.json')`;
+const EXPORT_GRADLE_LINES = {
+  groovy: `apply from: new File(new File(["node", "--print", "${RESOLVE_PACKAGE_JSON}"].execute(null, rootDir).text.trim()).getParentFile(), "android/codepush-export.gradle")`,
+  kt: `apply(from = File(File(providers.exec { workingDir(rootDir); commandLine("node", "--print", "${RESOLVE_PACKAGE_JSON}") }.standardOutput.asText.get().trim()).parentFile, "android/codepush-export.gradle"))`,
+};
+
+const withAndroidDiffUpdates = (config) => {
+  return withAppBuildGradle(config, (action) => {
+    const exportGradleLine = EXPORT_GRADLE_LINES[action.modResults.language];
+    if (!exportGradleLine) {
+      throw new Error(`CodePush diff update setup does not support a "${action.modResults.language}" app build.gradle.`);
+    }
+
+    if (!action.modResults.contents.includes('codepush-export.gradle')) {
+      action.modResults.contents += `\n${exportGradleLine}\n`;
+    }
+
+    return action;
+  });
+};
+
 module.exports = {
   withAndroidMainApplicationDependency,
+  withAndroidDiffUpdates,
 };

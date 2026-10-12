@@ -1,12 +1,17 @@
 const { createRunOncePlugin } = require('expo/config-plugins');
-const { withAndroidMainApplicationDependency } = require('./withCodePushAndroid');
-const { withIosBridgingHeader, withIosAppDelegateDependency } = require('./withCodePushIos');
+const { withAndroidMainApplicationDependency, withAndroidDiffUpdates } = require('./withCodePushAndroid');
+const { withIosBridgingHeader, withIosAppDelegateDependency, withIosDiffUpdates } = require('./withCodePushIos');
 const pkg = require('../../package.json');
 
-const withCodePush = (config) => {
+const withCodePush = (config, { diffUpdates = false } = {}) => {
   config = withAndroidMainApplicationDependency(config);
   config = withIosBridgingHeader(config);
   config = withIosAppDelegateDependency(config);
+
+  if (diffUpdates) {
+    config = withAndroidDiffUpdates(config);
+    config = withIosDiffUpdates(config);
+  }
 
   return config;
 };

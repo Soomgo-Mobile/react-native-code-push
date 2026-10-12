@@ -60,6 +60,8 @@ This command will automatically edit your `AppDelegate` and `MainApplication` fi
 npx code-push init
 ```
 
+To export the embedded JS bundles for [diff update releases](docs/diff-updates.md), use `npx code-push init --diff-updates`.
+
 And run the following command to install CocoaPods dependencies for iOS:
 
 ```bash
@@ -239,6 +241,8 @@ export default {
 ```bash
 npx expo prebuild
 ```
+
+To export the embedded JS bundles for [diff update releases](docs/diff-updates.md), replace the CodePush plugin entry with `["@bravemobile/react-native-code-push", { "diffUpdates": true }]`. The option is disabled by default.
 
 > [!NOTE]
 > The plugin automatically handles all native iOS and Android code modifications. No manual editing of AppDelegate, MainApplication, or gradle files is required.
