@@ -93,9 +93,12 @@ export interface UpdateCheckResponse {
  * judged by them whichever platform it is running on.
  */
 export type ArchiveFallbackReason =
-    /** The bundle inside the app binary could not be opened or read. */
+    /**
+     * The bundle the patch applies to could not be opened or read: the one inside the app
+     * binary for a patch archive, the installed update's for an asset diff.
+     */
     | "base_bundle_unavailable"
-    /** The bundle inside the app binary is not the one the patch was computed against. */
+    /** The bundle the patch applies to is not the one the patch was computed against. */
     | "base_hash_mismatch"
     /** The manifest is missing, malformed, points outside the archive, or asks for too much. */
     | "invalid_manifest"
@@ -181,10 +184,9 @@ export interface UpdateArchiveResult {
      * among them, because it is downloaded only once the patch path has given up.
      *
      * Most downloads leave a single entry. A second one appears when the asset diff failed
-     * after its bundle was restored - an asset-side failure the patch archive is not
-     * implicated in - and the patch archive was tried in its place. A diff that fails before
-     * its bundle is restored skips the patch archive instead, because both archives carry the
-     * same bundle patch and it would fail the same way.
+     * and the patch archive was tried in its place: the diff patches the installed update's
+     * bundle and the patch archive the app binary's, so however the diff failed, the patch
+     * archive may still apply.
      */
     attempts: UpdateArchiveAttempt[];
 }

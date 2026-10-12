@@ -124,13 +124,11 @@ Diff 업데이트라면 full 아카이브 대신 patch 아카이브를 먼저 �
 
 대부분의 다운로드에는 시도 내역 하나만 남습니다.
 
-asset diff가 asset 차이점 적용 범주에서 실패하거나 asset diff URL이 HTTP 400 이상의 응답을 반환하면 두 번째 시도가 생길 수 있습니다.
+asset diff가 네트워크 연결 오류가 아닌 이유로 실패하면 두 번째 시도가 남습니다.
 
 1. `asset-diff`를 시도합니다.
-2. 설치된 업데이트와 병합하지 못했거나(`asset_merge_failed`), 병합 결과가 package hash 검증에 실패했거나(`package_verification_failed`), asset diff URL이 HTTP 400 이상의 응답을 반환하면 `binary-patch`를 시도합니다.
+2. `binary-patch`를 시도합니다. asset diff는 설치된 업데이트의 번들을, binary patch는 앱 바이너리의 내장 번들을 패치하므로 asset diff가 어떤 이유로 실패했든 binary patch는 적용될 수 있습니다.
 3. `binary-patch`도 적용할 수 없으면 full 아카이브를 다운로드합니다.
-
-반대로 asset diff와 binary patch가 공유하는 bundle patch 과정에서 실패한 경우에는 binary patch도 같은 방식으로 실패할 것이 확실합니다. 이때는 binary patch를 건너뛰고 곧바로 full 아카이브를 다운로드합니다.
 
 ## `fallbackReason`
 
@@ -138,8 +136,8 @@ asset diff가 asset 차이점 적용 범주에서 실패하거나 asset diff URL
 
 | 사유 | 설명 |
 | --- | --- |
-| `base_bundle_unavailable` | 앱 바이너리 안의 번들을 열거나 읽을 수 없습니다. |
-| `base_hash_mismatch` | 앱 바이너리 안의 번들이 patch 생성 시 기준으로 사용한 번들과 다릅니다. |
+| `base_bundle_unavailable` | patch를 적용할 번들을 열거나 읽을 수 없습니다. binary patch는 앱 바이너리 안의 번들, asset diff는 설치된 업데이트의 번들이 대상입니다. |
+| `base_hash_mismatch` | patch를 적용할 번들이 patch 생성 시 기준으로 사용한 번들과 다릅니다. |
 | `invalid_manifest` | manifest가 없거나 잘못됐거나, 아카이브 밖의 경로를 가리키거나, 허용 범위를 초과한 작업을 요청합니다. |
 | `unsupported_format` | 클라이언트가 적용할 수 없는 형식 또는 codec으로 patch가 생성됐습니다. |
 | `patch_apply_failed` | applier가 patch 적용을 거부했거나, 적용 결과물 번들을 사용할 수 없습니다. |

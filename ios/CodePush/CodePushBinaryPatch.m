@@ -302,13 +302,13 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
 
     NSString *baseBundlePath = [baseBundleURL path];
     if (baseBundlePath == nil) {
-        CPLog(@"The app binary carries no JS bundle to patch against.");
+        CPLog(@"There is no JS bundle to patch against.");
         return CodePushArchiveFallbackReasonBaseBundleUnavailable;
     }
 
     NSError *error = nil;
     // Applying a patch is the one step that needs a whole bundle at once, and the base
-    // bundle is a read-only file inside the app binary: mapping it hands the applier the
+    // bundle is a file nothing writes to while this runs: mapping it hands the applier the
     // random access it needs without the update ever holding a copy of it.
     // The apply below reads `.bytes` for its whole duration, which is not a use of the
     // NSData itself, so ARC is free to release these two right after their last mention -
@@ -318,7 +318,7 @@ static CodePushBinaryPatchApplyResult CodePushApplyBinaryPatch(const unsigned ch
                                                                                        options:NSDataReadingMappedIfSafe
                                                                                          error:&error];
     if (baseBundle == nil) {
-        CPLog(@"Unable to read the JS bundle inside the app binary: %@", error);
+        CPLog(@"Unable to read the JS bundle to patch against: %@", error);
         return CodePushArchiveFallbackReasonBaseBundleUnavailable;
     }
     if (![baseBundleHash isEqualToString:[CodePushUpdateUtils computeHashForData:baseBundle]]) {

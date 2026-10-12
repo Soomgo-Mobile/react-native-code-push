@@ -70,8 +70,8 @@ static NSString *const UnzippedFolderName = @"unzipped";
 {
     // A release that was published with a binary patch offers up to three archives of the
     // same update. The asset diff is the smallest and is tried first, the patch archive
-    // stands in when the diff fails on its asset side, and the full archive is always
-    // there when none of it works out.
+    // stands in when the diff fails, and the full archive is always there when none of it
+    // works out.
     NSMutableArray<NSDictionary *> *archivesToTry = [NSMutableArray array];
     NSString *assetDiffDownloadUrl = updatePackage[AssetDiffDownloadUrlKey];
     if ([assetDiffDownloadUrl isKindOfClass:[NSString class]] && [assetDiffDownloadUrl length] > 0) {
@@ -114,14 +114,9 @@ static NSString *const UnzippedFolderName = @"unzipped";
 }
 
 /*
- * Tries the first archive of the queue, and decides what a failure of it means for the
- * rest. A failure after the bundle was restored is on the asset side of the archive, so
- * the next archive - which does not share it - is worth trying, and so is one the server
- * never served, which is a verdict on one URL rather than on the archives at the others.
- * A failure between those is in the bundle patch every archive carries byte for byte, or
- * is something no verdict exists for, and either way the remaining archives are passed
- * over: they could only fail the same way, and trying them would put more doomed downloads
- * in front of the full one.
+ * Tries the first archive of the queue, and moves on to the next one when it fails. The
+ * archives patch different bundles - the asset diff the installed update's, the patch
+ * archive the app binary's - so however one of them failed, the next is still worth trying.
  *
  * Every verdict on an archive ends with the update installed - by an archive of the queue
  * or by the full download behind it - so no verdict reaches the caller as an error, and the
@@ -145,9 +140,6 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
     // Set once the applier has restored the bundle, which is also what tells a failure
     // that follows apart from one that came before.
     __block NSNumber *applyDurationMs = nil;
-    // Set when the server answered this archive's URL with a status instead of the archive,
-    // which is a verdict on that URL and not on the archives at the others.
-    __block BOOL archiveWasNotServed = NO;
 
     void (^giveUpAttempt)(NSString *failureReason) = ^(NSString *failureReason) {
         [self deleteBinaryPatchFolder];
@@ -156,7 +148,7 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                       applyDurationMs:applyDurationMs
                                      attemptStartTime:attemptStartTime]];
 
-        if ((applyDurationMs != nil || archiveWasNotServed) && [remainingArchives count] > 0) {
+        if ([remainingArchives count] > 0) {
             [self tryNextArchive:remainingArchives
                    attemptsSoFar:attempts
            firstAttemptStartTime:firstAttemptStartTime
@@ -218,7 +210,6 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                return;
                            }
 
-                           archiveWasNotServed = [CodePushErrorUtils isHttpStatusError:err];
                            CPLog(@"The %@ archive could not be applied (%@). Falling back.", archive, err.localizedDescription);
                            // An error raised after the bundle was restored is the restored
                            // update failing the checks every update passes before it is
@@ -390,14 +381,24 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                                             nonFailingError = nil;
                                                         }
                                                         
+                                                        NSString *diffManifestFilePath = [unzippedFolderPath stringByAppendingPathComponent:DiffManifestFileName];
+                                                        BOOL isDiffUpdate = [[NSFileManager defaultManager] fileExistsAtPath:diffManifestFilePath];
+
                                                         // Rebuild the JS bundle the archive only carries a patch of, which leaves the
-                                                        // contents identical to the ones the full archive would have delivered.
+                                                        // contents identical to the ones the full archive would have delivered. An
+                                                        // asset diff patches the bundle of the installed update it merges into, a
+                                                        // patch archive the bundle inside the app binary.
                                                         if (isBinaryPatchUpdate) {
                                                             NSDate *patchStartTime = [NSDate date];
+                                                            NSURL *baseBundleURL = [CodePush binaryBundleURL];
+                                                            if (isDiffUpdate) {
+                                                                NSString *installedBundlePath = [self getCurrentPackageBundlePath:nil];
+                                                                baseBundleURL = installedBundlePath ? [NSURL fileURLWithPath:installedBundlePath] : nil;
+                                                            }
                                                             NSString *patchFailureReason = nil;
                                                             if (![CodePushBinaryPatch restoreBundleInUnzippedFolder:unzippedFolderPath
                                                                                                      workingFolder:[self getBinaryPatchFolderPath]
-                                                                                                     baseBundleURL:[CodePush binaryBundleURL]
+                                                                                                     baseBundleURL:baseBundleURL
                                                                                                      failureReason:&patchFailureReason]) {
                                                                 patchFallbackCallback(patchFailureReason);
                                                                 return;
@@ -408,15 +409,11 @@ expectedBundleFileName:(NSString *)expectedBundleFileName
                                                             patchAppliedCallback(applyDurationMs);
                                                         }
 
-                                                        NSString *diffManifestFilePath = [unzippedFolderPath stringByAppendingPathComponent:DiffManifestFileName];
-                                                        BOOL isDiffUpdate = [[NSFileManager defaultManager] fileExistsAtPath:diffManifestFilePath];
-                                                        
                                                         if (isDiffUpdate) {
                                                             // A merge that cannot complete has a word of its own, because it says
-                                                            // the diff went wrong on its asset side - the one failure the patch
-                                                            // archive, which carries every asset, is not implicated in. A diff
-                                                            // manifest served outside the patch path keeps failing as the error
-                                                            // it always was.
+                                                            // the diff went wrong on its asset side rather than in its bundle
+                                                            // patch. A diff manifest served outside the patch path keeps
+                                                            // failing as the error it always was.
                                                             void (^mergeFailCallback)(NSError *) = !isBinaryPatchUpdate ? failCallback : ^(NSError *mergeError) {
                                                                 CPLog(@"The asset diff could not be merged (%@).", mergeError.localizedDescription);
                                                                 patchFallbackCallback(CodePushArchiveFallbackReasonAssetMergeFailed);
