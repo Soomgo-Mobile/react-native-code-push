@@ -24,7 +24,7 @@ jest.mock("@expo/config-plugins/build/ios/Paths", () => ({
 
 const withCodePush = require("../withCodePush.js");
 const fixturePath = path.resolve(__dirname, "../../../Examples/RN0773/ios/RN0773.xcodeproj/project.pbxproj");
-const exportScript = '"$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"';
+const exportScript = `"$("$NODE_BINARY" --print "require('path').dirname(require.resolve('@bravemobile/react-native-code-push/package.json')) + '/scripts/export-embedded-bundle.sh'")"`;
 
 describe("Expo diff update setup", () => {
     let config: { gradle: { language: string; contents: string }; project: ReturnType<typeof xcode.project> };
@@ -57,7 +57,7 @@ describe("Expo diff update setup", () => {
         withCodePush(config, { diffUpdates: true });
         expect(config.gradle.contents).toBe(firstGradle);
         expect(config.project.writeSync()).toBe(firstProject);
-        expect(firstGradle).toContain('apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"');
+        expect(firstGradle).toContain(`apply from: new File(new File(["node", "--print", "require.resolve('@bravemobile/react-native-code-push/package.json')"].execute(null, rootDir).text.trim()).getParentFile(), "android/codepush-export.gradle")`);
         expect(JSON.parse(phase.shellScript)).toBe(`set -e\n${originalScript}\n${exportScript}\n`);
     });
 
@@ -95,8 +95,16 @@ describe("Expo diff update setup", () => {
         expect(() => withCodePush(config, { diffUpdates: true })).toThrow("Bundle React Native code and images");
     });
 
-    it("rejects Kotlin Gradle scripts", () => {
-        config.gradle.language = "kotlin";
+    it("applies the export script from a Kotlin DSL build", () => {
+        config.gradle.language = "kt";
+        withCodePush(config, { diffUpdates: true });
+        withCodePush(config, { diffUpdates: true });
+        expect(config.gradle.contents.match(/codepush-export\.gradle/g)).toHaveLength(1);
+        expect(config.gradle.contents).toContain("apply(from = File(File(providers.exec {");
+    });
+
+    it("rejects a build.gradle language it cannot write", () => {
+        config.gradle.language = "unknown";
         expect(() => withCodePush(config, { diffUpdates: true })).toThrow("build.gradle");
     });
 });

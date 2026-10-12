@@ -137,6 +137,11 @@ const withIosBridgingHeader = (config) => {
   });
 };
 
+// Resolved through node the way the Expo bundle phase resolves react-native, so the
+// script is found wherever the package manager put this package. The phase has
+// already sourced .xcode.env, which sets NODE_BINARY.
+const EXPORT_SCRIPT_COMMAND = `"$("$NODE_BINARY" --print "require('path').dirname(require.resolve('@bravemobile/react-native-code-push/package.json')) + '/scripts/export-embedded-bundle.sh'")"`;
+
 const withIosDiffUpdates = (config) => {
   return withXcodeProject(config, (action) => {
     const project = action.modResults;
@@ -154,7 +159,7 @@ const withIosDiffUpdates = (config) => {
     if (!script.includes('export-embedded-bundle.sh')) {
       // Export must not hide a failure of the preceding bundle command.
       const failFastPrefix = /^\s*set -e(?:\r?\n|$)/.test(script) ? '' : 'set -e\n';
-      phase.shellScript = JSON.stringify(`${failFastPrefix}${script}\n"$SRCROOT/../node_modules/@bravemobile/react-native-code-push/scripts/export-embedded-bundle.sh"\n`);
+      phase.shellScript = JSON.stringify(`${failFastPrefix}${script}\n${EXPORT_SCRIPT_COMMAND}\n`);
     }
 
     return action;
