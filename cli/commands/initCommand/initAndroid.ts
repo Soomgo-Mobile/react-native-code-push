@@ -65,12 +65,27 @@ export async function initAndroid(diffUpdates = false) {
     await applyMainApplication();
 
     if (diffUpdates) {
-        const gradlePath = path.join(process.cwd(), 'android', 'app', 'build.gradle');
-        const contents = fs.readFileSync(gradlePath, 'utf-8');
-        if (!contents.includes('codepush-export.gradle')) {
-            fs.writeFileSync(gradlePath, `${contents}${EOL}apply from: "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle"${EOL}`);
-            console.log('log: Configured Android embedded bundle export.');
-        }
+        applyExportGradle();
+    }
+}
+
+const EXPORT_GRADLE_PATH = '../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle';
+
+function applyExportGradle() {
+    const appDir = path.join(process.cwd(), 'android', 'app');
+    // The export script is Groovy, which a Kotlin DSL build applies just as well.
+    const gradleFile = [
+        { path: path.join(appDir, 'build.gradle'), line: `apply from: "${EXPORT_GRADLE_PATH}"` },
+        { path: path.join(appDir, 'build.gradle.kts'), line: `apply(from = "${EXPORT_GRADLE_PATH}")` },
+    ].find(file => fs.existsSync(file.path));
+    if (!gradleFile) {
+        throw new Error('Could not find android/app/build.gradle or android/app/build.gradle.kts.');
+    }
+
+    const contents = fs.readFileSync(gradleFile.path, 'utf-8');
+    if (!contents.includes('codepush-export.gradle')) {
+        fs.writeFileSync(gradleFile.path, `${contents}${EOL}${gradleFile.line}${EOL}`);
+        console.log('log: Configured Android embedded bundle export.');
     }
 }
 

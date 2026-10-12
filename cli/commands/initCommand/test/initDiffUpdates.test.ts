@@ -92,6 +92,22 @@ describe("diff update init", () => {
         expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("AppDelegate"));
     });
 
+    it("applies the export script from a Kotlin DSL build", async () => {
+        fs.unlinkSync(gradlePath);
+        const ktsPath = `${gradlePath}.kts`;
+        fs.writeFileSync(ktsPath, 'plugins {\n    id("com.android.application")\n}\n');
+        await initAndroid(true);
+        await initAndroid(true);
+        const contents = fs.readFileSync(ktsPath, "utf8");
+        expect(contents.match(/codepush-export\.gradle/g)).toHaveLength(1);
+        expect(contents).toContain('apply(from = "../../node_modules/@bravemobile/react-native-code-push/android/codepush-export.gradle")');
+    });
+
+    it("fails clearly when the app has no build.gradle", async () => {
+        fs.unlinkSync(gradlePath);
+        await expect(initAndroid(true)).rejects.toThrow("android/app/build.gradle");
+    });
+
     it("preserves an existing export hook with a custom path", async () => {
         const gradle = 'apply from: "/custom/codepush-export.gradle"\n';
         fs.writeFileSync(gradlePath, gradle);
