@@ -1,6 +1,6 @@
 PODS:
   - boost (1.84.0)
-  - CodePush (13.0.0):
+  - CodePush (13.3.2):
     - RCTRequired
     - RCTTypeSafety
     - React-Core
@@ -1970,7 +1970,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
-  CodePush: 43cb436504305ff35f9c9a0dae804d82bbe05294
+  CodePush: d442011afdddebbf4faf0ea17397fc057b29708e
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: b60fe06f0f15b7d7408f169442176e69e8eeacde

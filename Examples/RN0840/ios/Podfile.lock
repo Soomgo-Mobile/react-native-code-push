@@ -1,12 +1,12 @@
 PODS:
-  - CodePush (13.1.0.4):
+  - CodePush (13.3.2):
     - RCTRequired
     - RCTTypeSafety
     - React-Core
     - ReactCodegen
     - ReactCommon/turbomodule/core
     - SSZipArchive (~> 2.5.5)
-  - CodePush/Tests (13.1.0.4):
+  - CodePush/Tests (13.3.2):
     - RCTRequired
     - RCTTypeSafety
     - React-Core
@@ -2108,7 +2108,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  CodePush: f3b475f11ba84c010c83a1be5510b69ef3a53a1d
+  CodePush: d442011afdddebbf4faf0ea17397fc057b29708e
   FBLazyVector: c12d2108050e27952983d565a232f6f7b1ad5e69
   hermes-engine: 29cff50d2e023efa10c2207eca3a1446cfd31bdc
   RCTDeprecation: 3280799c14232a56e5a44f92981a8ee33bc69fd9
