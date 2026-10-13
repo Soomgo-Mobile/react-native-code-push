@@ -103,9 +103,9 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Select Xcode 26.3
+      - name: Select Xcode 26.4
         run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
           xcodebuild -version
 
       - name: Select iOS simulator

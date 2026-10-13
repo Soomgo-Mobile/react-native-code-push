@@ -10,6 +10,7 @@ End-to-end tests for `react-native-code-push` using [Maestro](https://github.com
 - **iOS**: Xcode with a booted iOS Simulator
 - **Android**: Android SDK with a running emulator or a connected device
 - An example app set up under `Examples/` (e.g. `RN0840`)
+- Expo SDK 54–56 apps require Node.js 20.19+; SDK 57 requires Node.js 22.13+. SDK 56/57 iOS builds need iOS 16.4+ and Xcode 26.4+.
 
 ## Quick Start
 
@@ -27,8 +28,8 @@ npm run e2e -- --app RN0840 --platform both
 ### Expo Example App
 
 ```bash
-# Full run for Expo example app
-npm run e2e -- --app Expo55 --framework expo --platform ios
+# Full run for Expo SDK 57 example app
+npm run e2e -- --app Expo57 --framework expo --platform ios
 
 # Flow-only run for Expo example app
 npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only

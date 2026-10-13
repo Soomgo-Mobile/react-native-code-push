@@ -10,6 +10,7 @@
 - **iOS**: Xcode 및 부팅된 iOS 시뮬레이터
 - **Android**: Android SDK 및 실행 중인 에뮬레이터 또는 연결된 기기
 - `Examples/` 디렉토리에 설정된 예제 앱 (예: `RN0840`)
+- Expo SDK 54–56 앱은 Node.js 20.19 이상, SDK 57은 Node.js 22.13 이상이 필요합니다. SDK 56/57 iOS 빌드에는 iOS 16.4 이상과 Xcode 26.4 이상이 필요합니다.
 
 ## 빠른 시작
 
@@ -27,8 +28,8 @@ npm run e2e -- --app RN0840 --platform both
 ### Expo 예제 앱
 
 ```bash
-# Expo 예제 앱 전체 실행
-npm run e2e -- --app Expo55 --framework expo --platform ios
+# Expo SDK 57 예제 앱 전체 실행
+npm run e2e -- --app Expo57 --framework expo --platform ios
 
 # Expo 예제 앱 플로우만 실행
 npm run e2e -- --app Expo55Beta --framework expo --platform ios --maestro-only

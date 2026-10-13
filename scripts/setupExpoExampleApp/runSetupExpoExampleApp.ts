@@ -44,6 +44,7 @@ type SetupStep = {
 const NPX_BINARY = "npx";
 const NPM_BINARY = "npm";
 const DEFAULT_IOS_MIN_VERSION = "16.0";
+const SDK_56_MIN_IOS_VERSION = "16.4";
 const DEFAULT_WORKING_DIR = path.resolve(process.cwd(), "Examples");
 const TEMPLATE_SYNC_SCRIPT_NAME = "sync-local-library";
 const EXPO_LOCAL_RELEASE_IOS_SCRIPT_NAME = "release:ios-local";
@@ -62,7 +63,7 @@ const program = new Command()
   .description("Expo CodePush test app setup automation")
   .requiredOption(
     "--sdk <version>",
-    "Expo SDK major version (e.g. 54, 55)"
+    "Expo SDK major version (e.g. 54, 55, 56, 57)"
   )
   .option(
     "--beta",
@@ -80,8 +81,7 @@ const program = new Command()
   )
   .option(
     "--ios-min-version <version>",
-    "Minimum iOS deployment target",
-    DEFAULT_IOS_MIN_VERSION
+    "Minimum iOS deployment target; defaults to 16.0 for SDK 54/55 and 16.4 for SDK 56+"
   );
 
 const setupSteps: SetupStep[] = [
@@ -161,7 +161,10 @@ function buildSetupContext(options: SetupCliOptions): SetupContext {
   const workingDir = path.resolve(options.workingDir);
   const sdkVersion = normalizeSdkVersion(options.sdk);
   const isBeta = options.beta ?? false;
-  const iosMinVersion = normalizeIosVersion(options.iosMinVersion);
+  const defaultIosMinVersion = sdkVersion >= 56
+    ? SDK_56_MIN_IOS_VERSION
+    : DEFAULT_IOS_MIN_VERSION;
+  const iosMinVersion = normalizeIosVersion(options.iosMinVersion ?? defaultIosMinVersion);
 
   const projectName = options.projectName ?? buildExpoProjectName(sdkVersion, isBeta);
   const projectPath = path.join(workingDir, projectName);
