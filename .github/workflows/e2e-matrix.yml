@@ -103,9 +103,15 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Select Xcode 26.4
+      - name: Select Xcode
+        env:
+          E2E_APP: ${{ matrix.app }}
         run: |
-          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          case "$E2E_APP" in
+            Expo56|Expo57) XCODE_VERSION=26.4 ;;
+            *) XCODE_VERSION=26.3 ;;
+          esac
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
           xcodebuild -version
 
       - name: Select iOS simulator
