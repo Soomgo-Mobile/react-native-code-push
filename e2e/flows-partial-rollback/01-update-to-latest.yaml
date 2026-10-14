@@ -11,6 +11,12 @@ appId: ${APP_ID}
 - assertVisible: "React Native.*"
 - assertNotVisible: "UPDATED!"
 
+# Wait until the restarted app responds to a native-module request
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_NULL"
+
 # Sync — should update to 1.0.2 (latest enabled)
 - tapOn: "Check for updates"
 - waitForAnimationToEnd:

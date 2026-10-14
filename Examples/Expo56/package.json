@@ -1,0 +1,53 @@
+{
+  "name": "expo56",
+  "main": "expo-router/entry",
+  "version": "1.0.0",
+  "dependencies": {
+    "@bravemobile/react-native-code-push": "latest",
+    "@expo/ui": "~56.0.26",
+    "expo": "~56.0.23",
+    "expo-build-properties": "~56.0.27",
+    "expo-constants": "~56.0.27",
+    "expo-device": "~56.0.4",
+    "expo-font": "~56.0.7",
+    "expo-glass-effect": "~56.0.4",
+    "expo-image": "~56.0.13",
+    "expo-linking": "~56.0.18",
+    "expo-router": "~56.2.21",
+    "expo-splash-screen": "~56.0.15",
+    "expo-status-bar": "~56.0.4",
+    "expo-symbols": "~56.0.7",
+    "expo-system-ui": "~56.0.5",
+    "expo-web-browser": "~56.0.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-gesture-handler": "~2.31.1",
+    "react-native-reanimated": "4.3.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.8.3"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "~19.2.2",
+    "axios": "^1.20.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "reset-project": "node ./scripts/reset-project.js",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "lint": "expo lint",
+    "sync-local-library": "tsx \"../../scripts/setupExampleApp/syncLocalLibrary.ts\"",
+    "release:ios-local": "npx expo run:ios --configuration Release --no-bundler",
+    "release:android-local": "npx expo run:android --variant release --no-bundler",
+    "postinstall": "npm run sync-local-library"
+  },
+  "private": true
+}

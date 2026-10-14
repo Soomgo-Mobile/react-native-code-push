@@ -137,6 +137,26 @@ async function main() {
     // its node_modules, and one machine gains little from compiling both at once.
     const runs: PlatformRunContext[] = [];
     for (const platform of platforms) {
+      const patchToolsDir = path.resolve(
+        appPath,
+        process.env.HDIFFPATCH_TOOLS_DIR || ".hdiffpatch-tools",
+      );
+      const patchToolsReady = ["hdiffz", "hpatchz"].every((tool) => {
+        try {
+          fs.accessSync(path.join(patchToolsDir, tool), fs.constants.X_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+
+      if (patchToolsReady) {
+        console.log(`\n=== [${platform}][prepare-patch-tools: already available] ===`);
+      } else {
+        console.log(`\n=== [${platform}][prepare-patch-tools] ===`);
+        await runCodePushCommand(appPath, platform, ["build-patch-tools"]);
+      }
+
       if (!maestroOnly) {
         console.log(`\n=== [${platform}][build] ===`);
         await buildApp(appPath, platform, options.simulator);

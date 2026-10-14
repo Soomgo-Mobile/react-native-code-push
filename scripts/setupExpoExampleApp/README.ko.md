@@ -12,9 +12,12 @@ scripts/setupExpoExampleApp/
 
 ## 사전 요구사항
 
-- Node.js (>= 18)
+- SDK 54–56은 Node.js 20.19 이상, SDK 57은 Node.js 22.13 이상
 - npm
 - `npx create-expo-app@latest`, `npm install` 실행을 위한 네트워크 접근
+- SDK 56 이상 iOS 빌드에는 iOS 16.4 이상과 Xcode 26.4 이상이 필요합니다.
+
+현재 예제는 Expo SDK 54–57 (React Native 0.81–0.86)을 대상으로 합니다. 이후 버전은 React Native 0.86 이하인지 확인한 다음 추가합니다.
 
 ## 사용법
 
@@ -28,26 +31,31 @@ npm run setup-expo-example-app -- --sdk <sdk-version>
 
 | 플래그 | 설명 | 기본값 |
 |---|---|---|
-| `--sdk <version>` | Expo SDK 메이저 버전 (예: `54`, `55`) | **필수** |
+| `--sdk <version>` | Expo SDK 메이저 버전 (예: `54`, `55`, `56`, `57`) | **필수** |
 | `--beta` | 생성되는 앱 이름에 `Beta` 접미사 추가 | `false` |
 | `--project-name <name>` | 앱 이름 직접 지정 | 자동 생성 |
 | `-w, --working-dir <path>` | 앱 생성 디렉토리 | `./Examples` |
-| `--ios-min-version <version>` | iOS 최소 배포 버전 | `16.0` |
+| `--ios-min-version <version>` | iOS 최소 배포 버전 | SDK 54/55는 `16.0`, SDK 56 이상은 `16.4` |
 
 ### 앱 이름 규칙
 
 - `--sdk 54` -> `Expo54`
 - `--sdk 55 --beta` -> `Expo55Beta`
+- `--sdk 56` -> `Expo56`
+- `--sdk 57` -> `Expo57`
 
 생성 경로:
 - `Examples/Expo54/`
 - `Examples/Expo55Beta/`
+- `Examples/Expo56/`
+- `Examples/Expo57/`
 
 ### 실행 예시
 
 ```bash
-# Expo SDK 55 앱 생성
-npm run setup-expo-example-app -- --sdk 55
+# Expo SDK 56 및 57 앱 생성
+npm run setup-expo-example-app -- --sdk 56
+npm run setup-expo-example-app -- --sdk 57
 
 # Expo SDK 55 beta 앱 생성
 npm run setup-expo-example-app -- --sdk 55 --beta
@@ -87,5 +95,5 @@ npm run setup-expo-example-app -- --sdk 54 -w /tmp/examples
 E2E는 `e2e/run.ts`로 별도 실행하세요:
 
 ```bash
-npm run e2e -- --app Expo55 --framework expo --platform ios
+npm run e2e -- --app Expo57 --framework expo --platform ios
 ```

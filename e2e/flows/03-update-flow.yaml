@@ -46,6 +46,12 @@ appId: ${APP_ID}
 - assertVisible: "Get update metadata"
 - assertNotVisible: "UPDATED!"
 
+# Wait until the restarted app responds to a native-module request
+- tapOn: "Get update metadata"
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: "METADATA_NULL"
+
 # Keep state for next phase — update should be installed again
 - tapOn: "Check for updates"
 - waitForAnimationToEnd:

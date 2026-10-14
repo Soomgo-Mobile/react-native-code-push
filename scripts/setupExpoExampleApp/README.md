@@ -12,9 +12,12 @@ scripts/setupExpoExampleApp/
 
 ## Prerequisites
 
-- Node.js (>= 18)
+- Node.js 20.19+ for SDK 54–56; Node.js 22.13+ for SDK 57
 - npm
 - Network access for `npx create-expo-app@latest` and `npm install`
+- iOS SDK 56+ builds need iOS 16.4+ and Xcode 26.4+.
+
+Current example coverage is Expo SDK 54–57 (React Native 0.81–0.86). Keep new examples at React Native 0.86 or below until later versions are verified.
 
 ## Usage
 
@@ -28,26 +31,31 @@ npm run setup-expo-example-app -- --sdk <sdk-version>
 
 | Flag | Description | Default |
 |---|---|---|
-| `--sdk <version>` | Expo SDK major version (e.g. `54`, `55`) | **Required** |
+| `--sdk <version>` | Expo SDK major version (e.g. `54`, `55`, `56`, `57`) | **Required** |
 | `--beta` | Adds `Beta` suffix to generated app name | `false` |
 | `--project-name <name>` | Override generated app name | auto-generated |
 | `-w, --working-dir <path>` | Directory where the app will be created | `./Examples` |
-| `--ios-min-version <version>` | Minimum iOS deployment target | `16.0` |
+| `--ios-min-version <version>` | Minimum iOS deployment target | `16.0` for SDK 54/55; `16.4` for SDK 56+ |
 
 ### App Name Rule
 
 - `--sdk 54` -> `Expo54`
 - `--sdk 55 --beta` -> `Expo55Beta`
+- `--sdk 56` -> `Expo56`
+- `--sdk 57` -> `Expo57`
 
 Generated path:
 - `Examples/Expo54/`
 - `Examples/Expo55Beta/`
+- `Examples/Expo56/`
+- `Examples/Expo57/`
 
 ### Examples
 
 ```bash
-# Create Expo SDK 55 app
-npm run setup-expo-example-app -- --sdk 55
+# Create Expo SDK 56 and 57 apps
+npm run setup-expo-example-app -- --sdk 56
+npm run setup-expo-example-app -- --sdk 57
 
 # Create Expo SDK 55 beta app
 npm run setup-expo-example-app -- --sdk 55 --beta
@@ -87,5 +95,5 @@ This setup script only creates/configures the example app.
 Run E2E separately via `e2e/run.ts`:
 
 ```bash
-npm run e2e -- --app Expo55 --framework expo --platform ios
+npm run e2e -- --app Expo57 --framework expo --platform ios
 ```
