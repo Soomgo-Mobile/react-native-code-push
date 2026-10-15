@@ -143,6 +143,7 @@ type ReleaseOverrides = {
     bundleDownloader?: CliConfigInterface['bundleDownloader'];
     diffBaseCount?: number;
     minimumBackgroundDuration?: number;
+    diffRetentionCount?: number;
 };
 
 async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}) {
@@ -178,6 +179,7 @@ async function runRelease(staged: StagedBundle, overrides: ReleaseOverrides = {}
         overrides.bundleDownloader,
         overrides.diffBaseCount,
         overrides.minimumBackgroundDuration,
+        overrides.diffRetentionCount,
     );
 
     return { uploads, releaseHistories: history.saved, uploadCountsWhenHistorySaved };
@@ -740,6 +742,27 @@ describe("release with asset diff bases", () => {
         expect(fs.existsSync(path.join(staged.bundleDirectory, diffFileName))).toBe(true);
     });
 
+    it("keeps the diff archives of the release being published when only one release keeps them", async () => {
+        const staged = await stageBundleOutput("retention-of-one", updateFiles());
+        const base = await stageBaseRelease("retention-of-one");
+        const previousRelease = {
+            ...releaseHistoryOf(base)[PREVIOUS_APP_VERSION],
+            diffPackages: { 'older-hash': 'https://cdn.example.com/released/previous-diff.zip' },
+        };
+
+        const { uploads, releaseHistories } = await runRelease(staged, {
+            binaryBundlePath: baseFixture,
+            releaseHistory: { [PREVIOUS_APP_VERSION]: previousRelease },
+            bundleDownloader: recordingDownloader([base], []),
+            diffRetentionCount: 1,
+        });
+
+        expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
+            [base.packageHash]: uploads[2].downloadUrl,
+        });
+        expect(releaseHistories[0][PREVIOUS_APP_VERSION]).not.toHaveProperty('diffPackages');
+    });
+
     it("publishes without diff archives when the config has no bundle downloader", async () => {
         const staged = await stageBundleOutput("no-downloader", updateFiles());
         const base = await stageBaseRelease("no-downloader");
@@ -788,6 +811,32 @@ describe("release with asset diff bases", () => {
         expect(releaseHistories[0][APP_VERSION].diffPackages).toEqual({
             [base.packageHash]: uploads[2].downloadUrl,
         });
+    });
+
+    it.each([
+        ['keeps the diff archives of every release when no retention count is given', undefined, ['9.9.6', '9.9.7', '9.9.8', '9.9.9']],
+        ['drops the diff archives of releases older than the chosen number of newest releases', 3, ['9.9.8', '9.9.9']],
+    ])("%s", async (_caseName, diffRetentionCount, expectedVersions) => {
+        const staged = await stageBundleOutput("stale-diffs");
+        const releaseWithDiff = (version: string) => ({
+            enabled: true,
+            mandatory: false,
+            downloadUrl: `https://cdn.example.com/released/${version}.zip`,
+            packageHash: `hash-${version}`,
+            diffPackages: { 'older-hash': `https://cdn.example.com/released/${version}-diff.zip` },
+        });
+
+        const { releaseHistories } = await runRelease(staged, {
+            releaseHistory: Object.fromEntries(
+                ['9.9.6', '9.9.7', '9.9.8', '9.9.9'].map((version) => [version, releaseWithDiff(version)]),
+            ),
+            diffRetentionCount,
+        });
+
+        const versionsWithDiffs = Object.entries(releaseHistories[0])
+            .filter(([, releaseInfo]) => releaseInfo.diffPackages !== undefined)
+            .map(([version]) => version);
+        expect(versionsWithDiffs).toEqual(expectedVersions);
     });
 
     it("releases the diffs that uploaded when one of them is rejected", async () => {

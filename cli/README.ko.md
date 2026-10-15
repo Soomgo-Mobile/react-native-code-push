@@ -120,6 +120,7 @@ npx code-push release [options]
 | `--binary-bundle-path <string>` | 대상 바이너리에 포함된 JS 번들 경로. 이 번들에 대한 binary patch 번들을 함께 배포하고, Hermes 컴파일을 이 번들에 정렬합니다 | — |
 | `--on-oversized-patch <policy>` | patch 번들이 full 번들보다 작지 않을 때의 동작: `skip`은 full 번들만 배포하고, `fail`은 업로드 전에 릴리스를 중단합니다 | `skip` |
 | `--diff-base-count <number>` | [asset diff archive](#asset-diff-archive)를 만들 최근 릴리스 개수 (`0`이면 배포하지 않음). 설정 파일의 `bundleDownloader`와 `--binary-bundle-path` 릴리스가 필요합니다 | `3` |
+| `--diff-retention-count <number>` | 릴리스 히스토리에 asset diff archive 기록을 유지할 최신 릴리스 개수 (`1` 이상). 나머지 항목에서는 `diffPackages`를 지우며, 지정하지 않으면 모든 항목에 유지합니다 | — |
 
 `--binary-bundle-path`를 사용하면 플랫폼별로 `packageHash` 이름의 full 번들과 바이너리에 포함된
 번들과의 차이만 담은 `<packageHash>-patch.zip` patch 번들, 두 개의 artifact를 업로드합니다.
@@ -183,6 +184,29 @@ base는 경고를 남기고 건너뛰며, patch 번들보다 작지 않은 diff�
 바이너리를 실행 중이거나 이 릴리스가 diff를 만들지 않은 업데이트라면 patch 번들을 내려받고,
 내려받은 archive를 적용할 수 없으면 full 번들을 내려받습니다.
 
+#### 오래된 diff 기록 정리
+
+릴리스마다 자기 히스토리 항목에 diff archive를 최대 `--diff-base-count`개 기록하므로,
+히스토리는 릴리스할 때마다 커집니다. 클라이언트는 자신이 설치할 릴리스의 `diffPackages`만
+읽습니다. 설치할 릴리스는 다음과 같이 정해집니다.
+
+- 최신 enabled 릴리스
+- 클라이언트가 최신 릴리스의 rollout 대상이 아니면 그 직전 enabled 릴리스
+
+`--diff-retention-count <n>`을 지정하면 disabled 릴리스를 포함한 최신 릴리스 `n`개만
+`diffPackages`를 유지하고, 나머지 항목에서는 지웁니다. 지정하지 않으면 모든 항목에 유지합니다.
+
+| `n` | diff archive를 계속 받을 수 있는 경우 |
+| --- | --- |
+| `1` | 최신 릴리스가 enabled이고 전체 배포된 경우 |
+| `2` | 최신 릴리스가 부분 rollout 중이거나 disabled인 경우 |
+| `3` | 최신 릴리스가 disabled이고 그 직전 릴리스가 부분 rollout 중인 경우 |
+
+`n`이 큰 행은 위에 있는 행의 경우를 모두 포함합니다.
+
+설치할 릴리스가 최신 `n`개에 들지 않는 클라이언트는 diff archive 대신 patch 번들을 내려받습니다.
+`n`을 너무 작게 잡으면 다운로드 크기가 커질 뿐, 업데이트가 실패하지는 않습니다.
+
 **예시:**
 
 ```bash
@@ -209,6 +233,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/mai
 
 # 최근 릴리스 5개를 base로 삼아 asset diff archive까지 배포 (`bundleDownloader` 필요)
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-base-count 5
+
+# 히스토리의 diff 기록은 최신 릴리스 3개에만 유지
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-retention-count 3
 ```
 
 ---
@@ -376,7 +403,8 @@ npx code-push show-history -b 1.0.0 -p ios
 
 `diffPackages`는 binary patch 릴리스가 [asset diff archive](#asset-diff-archive)까지 배포했을 때만
 기록되며, archive마다 한 항목씩 담습니다. 키는 diff 대상 릴리스의 `packageHash`, 값은 그
-archive를 내려받을 수 있는 URL입니다. diff archive 없이 배포한 릴리스에는 이 필드도 없습니다.
+archive를 내려받을 수 있는 URL입니다. diff archive 없이 배포한 릴리스에는 이 필드도 없으며,
+[`--diff-retention-count`](#오래된-diff-기록-정리)를 지정하면 오래된 항목에서 이 필드를 지웁니다.
 
 ## 일반적인 워크플로우
 

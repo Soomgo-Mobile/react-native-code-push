@@ -50,6 +50,7 @@ export async function release(
     bundleDownloader?: CliConfigInterface['bundleDownloader'],
     diffBaseCount: number = DEFAULT_DIFF_BASE_COUNT,
     minimumBackgroundDuration?: number,
+    diffRetentionCount?: number,
 ): Promise<void> {
     if (baseBundlePath) {
         // Checked before the bundler runs, so the wrong base bundle costs a second rather
@@ -171,6 +172,7 @@ export async function release(
         rollout,
         Object.keys(diffPackages).length > 0 ? diffPackages : undefined,
         minimumBackgroundDuration,
+        diffRetentionCount,
     )
 
     if (!skipCleanup) {

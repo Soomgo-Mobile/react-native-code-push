@@ -118,6 +118,7 @@ npx code-push release [options]
 | `--binary-bundle-path <string>` | JS bundle of the target binary. Releases an additional binary patch bundle against it, and aligns the Hermes compilation with it | — |
 | `--on-oversized-patch <policy>` | What to do when the patch bundle is not smaller than the full bundle: `skip` releases the full bundle only, `fail` stops the release before any upload | `skip` |
 | `--diff-base-count <number>` | How many of the most recent releases to build [asset diff archives](#asset-diff-archives) against (`0` disables them). Needs `bundleDownloader` in the config file and a `--binary-bundle-path` release | `3` |
+| `--diff-retention-count <number>` | How many of the newest releases keep their asset diff archives in the release history (`1` or greater). Older entries lose `diffPackages`; every entry keeps them when this is not set | — |
 
 With `--binary-bundle-path`, the release uploads two artifacts per platform - plus one per
 [asset diff archive](#asset-diff-archives) when those are enabled: the full bundle named
@@ -189,6 +190,29 @@ archive built against the update it is running, the patch bundle when it is runn
 binary or an update this release was not diffed against, and the full bundle whenever what
 it downloaded cannot be applied.
 
+#### Trimming old diff entries
+
+Every release records up to `--diff-base-count` diff archives in its own history entry, so
+the history grows with every release. A client only reads `diffPackages` from the release it
+is about to install:
+
+- the newest enabled release, or
+- the enabled release before it, when the client is outside the newest release's rollout.
+
+`--diff-retention-count <n>` removes `diffPackages` from every entry but the `n` newest
+releases, disabled ones included. Without the option every entry keeps its diffs.
+
+| `n` | Diff archives still reach clients when |
+| --- | --- |
+| `1` | the newest release is enabled and fully rolled out |
+| `2` | the newest release is in a partial rollout, or is disabled |
+| `3` | the newest release is disabled and the one before it is in a partial rollout |
+
+Each count also covers the cases of the counts above it.
+
+A client whose release falls outside `n` downloads the patch bundle instead, so a count that
+is too small costs download size, not updates.
+
 ```bash
 # Standard iOS release
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios
@@ -213,6 +237,9 @@ npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/mai
 
 # Also publish asset diff archives against the 5 most recent releases (needs `bundleDownloader`)
 npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-base-count 5
+
+# Keep diff entries in the history only on the 3 newest releases
+npx code-push release -b 1.0.0 -v 1.0.1 -p ios --binary-bundle-path ./binary/main.jsbundle --diff-retention-count 3
 ```
 
 ---
@@ -376,7 +403,8 @@ before binary patches existed stays valid as it is.
 `diffPackages` is only written when a binary patch release also published
 [asset diff archives](#asset-diff-archives), and holds one entry per archive: the
 `packageHash` of the release the archive was diffed against, and the URL the archive can be
-downloaded from. A release published without them leaves the field out the same way.
+downloaded from. A release published without them leaves the field out the same way, and
+[`--diff-retention-count`](#trimming-old-diff-entries) removes it from older entries.
 
 ## Typical Workflow
 
