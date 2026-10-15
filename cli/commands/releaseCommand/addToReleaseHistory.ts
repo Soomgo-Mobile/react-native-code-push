@@ -1,3 +1,4 @@
+import semver from "semver";
 import type { CliConfigInterface } from "../../../typings/react-native-code-push.d.ts";
 import { stageReleaseHistoryFile } from "../../functions/stageReleaseHistoryFile.js";
 
@@ -16,6 +17,7 @@ export async function addToReleaseHistory(
     rollout: number | undefined,
     diffPackages: Record<string, string> | undefined,
     minimumBackgroundDuration: number | undefined,
+    diffRetentionCount: number | undefined,
 ): Promise<void> {
     const releaseHistory = await getReleaseHistory(binaryVersion, platform, identifier);
 
@@ -44,6 +46,23 @@ export async function addToReleaseHistory(
     // diff archive for.
     if (diffPackages && Object.keys(diffPackages).length > 0) {
         newReleaseHistory[appVersion].diffPackages = diffPackages;
+    }
+
+    // Every release adds up to --diff-base-count entries, and a client reads them only from
+    // the release it is about to install, so the entries of older releases can be dropped
+    // to keep the history from growing with every release.
+    if (typeof diffRetentionCount === 'number') {
+        const versionsKeepingDiffs = new Set(
+            Object.keys(newReleaseHistory)
+                .filter((version) => semver.valid(version))
+                .sort(semver.rcompare)
+                .slice(0, diffRetentionCount),
+        );
+        for (const [version, releaseInfo] of Object.entries(newReleaseHistory)) {
+            if (!versionsKeepingDiffs.has(version)) {
+                delete releaseInfo.diffPackages;
+            }
+        }
     }
 
     if (typeof rollout === 'number') {

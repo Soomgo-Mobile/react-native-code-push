@@ -33,6 +33,7 @@ const ARG_INDEX = {
     bundleDownloader: 21,
     diffBaseCount: 22,
     minimumBackgroundDuration: 23,
+    diffRetentionCount: 24,
 } as const;
 
 /**
@@ -143,6 +144,34 @@ describe("release command options", () => {
         }) as never);
 
         await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--diff-base-count', value]))
+            .rejects.toThrow('process.exit(1)');
+
+        const { release } = await import("./release.js");
+        expect(jest.mocked(release)).not.toHaveBeenCalled();
+    });
+
+    it("leaves the diff retention count unset when the option is not given, so no diff archive is dropped", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1']);
+
+        expect(args[ARG_INDEX.diffRetentionCount]).toBeUndefined();
+    });
+
+    it("passes the chosen diff retention count through to the release", async () => {
+        const args = await runReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--diff-retention-count', '5']);
+
+        expect(args[ARG_INDEX.diffRetentionCount]).toBe(5);
+    });
+
+    it.each([
+        ['is zero, which would drop the diffs of the release being published', '0'],
+        ['is not a number at all', 'all'],
+    ])("rejects a diff retention count that %s", async (_caseName, value) => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+            throw new Error(`process.exit(${code})`);
+        }) as never);
+
+        await expect(parseReleaseCommand(['-b', '1.0.0', '-v', '1.0.1', '--diff-retention-count', value]))
             .rejects.toThrow('process.exit(1)');
 
         const { release } = await import("./release.js");
