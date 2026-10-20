@@ -77,4 +77,15 @@ public class DownloadProgressEventDispatcherTest {
 
         assertEquals(Collections.emptyList(), mEmittedBytes);
     }
+
+    @Test
+    public void reportsTheLastFileSizeWithoutEmittingProgress() {
+        mDispatcher.record(new DownloadProgress(1000, 1000));
+        mDispatcher.reset();
+        mDispatcher.record(new DownloadProgress(-1, 250));
+        mDispatcher.record(new DownloadProgress(-1, 500));
+
+        assertEquals(500L, mDispatcher.getDownloadBytes());
+        assertEquals(Collections.emptyList(), mEmittedBytes);
+    }
 }

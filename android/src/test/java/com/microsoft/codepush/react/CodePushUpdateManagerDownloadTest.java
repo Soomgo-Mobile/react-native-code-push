@@ -515,6 +515,65 @@ public class CodePushUpdateManagerDownloadTest {
                 Arrays.asList((long) ERROR_PAGE.length, (long) fullArchive.length), completedBytes);
     }
 
+    @Test
+    public void reportsTheFullFileSizeWithoutProgressEvents() throws IOException {
+        byte[] fullArchive = zipOf(fullArchiveContents());
+        String fullUrl = serve("/full.zip", fullArchive);
+        assertDownloadBytes(fullUpdatePackage(mPackageHash, fullUrl), fullArchive.length);
+    }
+
+    @Test
+    public void reportsThePatchFileSizeWithoutProgressEvents() throws IOException {
+        byte[] patchArchive = zipOf(patchArchiveContents());
+        String patchUrl = serve("/patch.zip", patchArchive);
+        String fullUrl = serve("/full.zip", zipOf(fullArchiveContents()));
+        assertDownloadBytes(updatePackage(fullUrl, patchUrl), patchArchive.length);
+        assertEquals(Arrays.asList("/patch.zip"), mServer.requestedPaths());
+    }
+
+    @Test
+    public void reportsOnlyTheFullFileSizeAfterFallbackWithoutProgressEvents() throws IOException {
+        byte[] fullArchive = zipOf(fullArchiveContents());
+        String patchUrl = serve("/patch.zip", ERROR_PAGE);
+        String fullUrl = serve("/full.zip", fullArchive);
+        assertDownloadBytes(updatePackage(fullUrl, patchUrl), fullArchive.length);
+        assertEquals(Arrays.asList("/patch.zip", "/full.zip"), mServer.requestedPaths());
+    }
+
+    @Test
+    public void reportsTheFileSizeWithoutContentLength() throws IOException {
+        byte[] fullArchive = zipOf(fullArchiveContents());
+        String fullUrl = mServer.serveWithoutContentLength("/full.zip", fullArchive);
+        assertDownloadBytes(fullUpdatePackage(mPackageHash, fullUrl), fullArchive.length);
+    }
+
+    /**
+     * The callback below mirrors the one the native module passes, without its JS event
+     * scheduling: the module needs a React context and native maps this suite cannot create.
+     * So this pins what the update manager reports, not that the module records the progress
+     * before checking whether JS asked for events.
+     */
+    private void assertDownloadBytes(JSONObject updatePackage, long expectedBytes) throws IOException {
+        DownloadProgressEventDispatcher dispatcher = new DownloadProgressEventDispatcher(progress -> {
+            fail("measuring download size must not require progress events");
+        });
+        updateManager(applierWriting(TARGET_BUNDLE)).downloadPackage(
+                updatePackage, BUNDLE_FILE_NAME, new DownloadProgressCallback() {
+                    @Override
+                    public void onDownloadStart() {
+                        dispatcher.reset();
+                    }
+
+                    @Override
+                    public void call(DownloadProgress progress) {
+                        dispatcher.record(progress);
+                    }
+                });
+
+        assertEquals(expectedBytes, dispatcher.getDownloadBytes());
+        assertInstalledContents();
+    }
+
     /** The result of a download the update had to be downloaded in full for. */
     private static void assertFallbackResult(JSONObject patchResult, String expectedReason) {
         assertEquals("fallback", patchResult.optString("status", null));
