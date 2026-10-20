@@ -361,15 +361,15 @@ public class CodePushNativeModule extends NativeCodePushSpec {
             public void run() {
                 try {
                     JSONObject mutableUpdatePackage = CodePushUtils.convertReadableToJsonObject(updatePackage);
+                    final DownloadProgressEventDispatcher progressEventDispatcher = new DownloadProgressEventDispatcher(
+                            new DownloadProgressEventDispatcher.EventEmitter() {
+                                @Override
+                                public void emit(DownloadProgress downloadProgress) {
+                                    emitDownloadProgressEvent(downloadProgress);
+                                }
+                            });
                     JSONObject updateArchiveResult = mUpdateManager.downloadPackage(mutableUpdatePackage, mCodePush.getAssetsBundleFileName(), new DownloadProgressCallback() {
                         private volatile boolean hasScheduledNextFrame = false;
-                        private final DownloadProgressEventDispatcher progressEventDispatcher = new DownloadProgressEventDispatcher(
-                                new DownloadProgressEventDispatcher.EventEmitter() {
-                                    @Override
-                                    public void emit(DownloadProgress downloadProgress) {
-                                        emitDownloadProgressEvent(downloadProgress);
-                                    }
-                                });
 
                         @Override
                         public void onDownloadStart() {
@@ -378,11 +378,14 @@ public class CodePushNativeModule extends NativeCodePushSpec {
 
                         @Override
                         public void call(DownloadProgress downloadProgress) {
-                            if (!notifyProgress || downloadProgress == null) {
+                            if (downloadProgress == null) {
+                                return;
+                            }
+                            progressEventDispatcher.record(downloadProgress);
+                            if (!notifyProgress) {
                                 return;
                             }
 
-                            progressEventDispatcher.record(downloadProgress);
                             // If the download is completed, synchronously send the last event.
                             if (downloadProgress.isCompleted()) {
                                 progressEventDispatcher.dispatchLatest();
@@ -414,6 +417,7 @@ public class CodePushNativeModule extends NativeCodePushSpec {
 
                     JSONObject newPackage = mUpdateManager.getPackage(CodePushUtils.tryGetString(updatePackage, CodePushConstants.PACKAGE_HASH_KEY));
                     WritableMap downloadedPackage = CodePushUtils.convertJsonObjectToWritable(newPackage);
+                    downloadedPackage.putDouble("downloadBytes", progressEventDispatcher.getDownloadBytes());
                     if (updateArchiveResult != null) {
                         // The result describes this download rather than the update, so it is
                         // put on what this call resolves with and nowhere else: the metadata

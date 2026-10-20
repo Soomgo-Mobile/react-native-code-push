@@ -64,12 +64,13 @@ function diffRelease() {
  *        which only a download that had an archive to try comes back with.
  * @param installedPackage the CodePush update the app is running, if any.
  */
-function createNativeBridge({ updateArchiveResult, installedPackage, statusReport } = {}) {
+function createNativeBridge({ updateArchiveResult, downloadBytes, installedPackage, statusReport } = {}) {
   return {
     addDownloadProgressListener: jest.fn(() => ({ remove: jest.fn() })),
     downloadUpdate: jest.fn(async (updatePackage) => ({
       ...updatePackage,
       ...(updateArchiveResult ? { updateArchiveResult } : {}),
+      ...(downloadBytes !== undefined ? { downloadBytes } : {}),
     })),
     // Without an installed CodePush update, the app runs the bundle of its binary.
     getUpdateMetadata: jest.fn(async () => installedPackage ?? null),
@@ -95,10 +96,10 @@ function createNativeBridge({ updateArchiveResult, installedPackage, statusRepor
  * Callback options left after the bridge setup values are removed are registered on the
  * decorator, the same way an app registers them.
  */
-function loadCodePush({ releaseHistory = {}, updateChecker, updateArchiveResult, installedPackage, statusReport, ...codePushOptions } = {}) {
+function loadCodePush({ releaseHistory = {}, updateChecker, updateArchiveResult, downloadBytes, installedPackage, statusReport, ...codePushOptions } = {}) {
   jest.resetModules();
   const CodePush = require('./CodePush');
-  const nativeBridge = createNativeBridge({ updateArchiveResult, installedPackage, statusReport });
+  const nativeBridge = createNativeBridge({ updateArchiveResult, downloadBytes, installedPackage, statusReport });
 
   CodePush.setUpTestDependencies(
     null,
@@ -573,7 +574,7 @@ describe('telemetry callback errors', () => {
     await Promise.resolve();
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
-    expect(onDownloadSuccess).toHaveBeenCalledWith(LABEL);
+    expect(onDownloadSuccess).toHaveBeenCalledWith(LABEL, { baseVersion: BINARY_VERSION, downloadBytes: null });
     expect(nativeBridge.installUpdate).toHaveBeenCalledTimes(1);
   });
 
@@ -704,5 +705,68 @@ describe('the minimum background duration an update is installed with', () => {
 
     expect(syncStatus).toBe(CodePush.SyncStatus.UPDATE_INSTALLED);
     expect(installedMinimumBackgroundDuration(nativeBridge)).toBe(0);
+  });
+});
+
+describe('download size telemetry', () => {
+  it('reports the full file size when starting from the embedded bundle', async () => {
+    const onDownloadSuccess = jest.fn();
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: fullOnlyRelease(),
+      downloadBytes: 4096,
+      onDownloadSuccess,
+    });
+
+    await CodePush.sync();
+
+    expect(onDownloadSuccess).toHaveBeenCalledWith(LABEL, {
+      baseVersion: BINARY_VERSION,
+      downloadBytes: 4096,
+    });
+    expect(nativeBridge.installUpdate.mock.calls[0][0]).not.toHaveProperty('downloadBytes');
+  });
+
+  it('reports the running version and final file size after a fallback', async () => {
+    const onDownloadSuccess = jest.fn();
+    const { CodePush } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      installedPackage: { label: '1.0.0-ota.1', appVersion: BINARY_VERSION, packageHash: INSTALLED_HASH },
+      updateArchiveResult: { status: 'fallback', archive: 'binary-patch', attempts: [] },
+      downloadBytes: 8192,
+      onDownloadSuccess,
+    });
+
+    await CodePush.sync();
+
+    expect(onDownloadSuccess).toHaveBeenCalledWith(LABEL, {
+      baseVersion: '1.0.0-ota.1',
+      downloadBytes: 8192,
+    });
+  });
+
+  it('reports only the patch file size without subscribing to progress', async () => {
+    const onDownloadSuccess = jest.fn();
+    const { CodePush, nativeBridge } = loadCodePush({
+      releaseHistory: patchedRelease(),
+      downloadBytes: 512,
+      updateArchiveResult: { status: 'applied', archive: 'binary-patch', attempts: [] },
+      onDownloadSuccess,
+    });
+
+    await CodePush.sync();
+
+    expect(onDownloadSuccess).toHaveBeenCalledWith(LABEL, { baseVersion: BINARY_VERSION, downloadBytes: 512 });
+    expect(nativeBridge.addDownloadProgressListener).not.toHaveBeenCalled();
+  });
+
+  it('keeps the file size on a package the app downloads itself without saving it on install', async () => {
+    const { CodePush, nativeBridge } = loadCodePush({ releaseHistory: fullOnlyRelease(), downloadBytes: 4096 });
+
+    const remotePackage = await CodePush.checkForUpdate();
+    const localPackage = await remotePackage.download();
+    await localPackage.install();
+
+    expect(localPackage.downloadBytes).toBe(4096);
+    expect(nativeBridge.installUpdate.mock.calls[0][0]).not.toHaveProperty('downloadBytes');
   });
 });

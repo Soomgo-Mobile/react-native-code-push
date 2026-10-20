@@ -23,6 +23,10 @@ class DownloadProgressEventDispatcher {
         mLatestDownloadProgress = downloadProgress;
     }
 
+    synchronized long getDownloadBytes() {
+        return mLatestDownloadProgress == null ? 0 : mLatestDownloadProgress.getReceivedBytes();
+    }
+
     synchronized void dispatchLatest() {
         if (mLatestDownloadProgress == null || mLatestDownloadProgress.getReceivedBytes() <= mLastDispatchedBytes) {
             return;

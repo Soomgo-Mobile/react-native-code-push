@@ -62,6 +62,9 @@ module.exports = (NativeCodePush) => {
     async install(installMode = NativeCodePush.InstallMode.ON_NEXT_RESTART, minimumBackgroundDuration = 0, updateInstalledCallback) {
       const localPackage = this;
       const localPackageCopy = Object.assign({}, localPackage); // In dev mode, React Native deep freezes any object queued over the bridge
+      // Download size belongs to this transfer, not the persisted update metadata. It stays on
+      // the package the app holds, which `download()` resolved with, and is left out only here.
+      delete localPackageCopy.downloadBytes;
       await NativeCodePush.installUpdate(localPackageCopy, installMode, minimumBackgroundDuration);
       updateInstalledCallback && updateInstalledCallback();
       if (installMode == NativeCodePush.InstallMode.IMMEDIATE) {
