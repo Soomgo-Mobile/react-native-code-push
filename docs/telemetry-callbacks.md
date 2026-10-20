@@ -17,7 +17,7 @@ See `CodePushOptions` for the other available options.
 | Callback | Called when | Receives | Notes |
 | --- | --- | --- | --- |
 | `onDownloadStart` | The download of an available update begins | `(label)` | Indicates only that the download has started. |
-| `onDownloadSuccess` | The download of an available update finishes | `(label)` | Installation and successful execution are not guaranteed yet. |
+| `onDownloadSuccess` | The download of an available update finishes | `(label, details)` | Installation and successful execution are not guaranteed yet. |
 | `onUpdateArchiveResult` | A binary patch or asset diff update has finished downloading, before installation | `(label, result)` | Shows which archive was used and whether patch fallback occurred. |
 | `onUpdateSuccess` | An installed update runs and is confirmed successful through `notifyAppReady` | `(label)` | This is the point to record an actual update success. |
 | `onUpdateRollback` | An installed update fails to run and rolls back to the previous version | `(label)` | This is separate from download or installation success. |
@@ -27,6 +27,24 @@ See `CodePushOptions` for the other available options.
 `label` is the release being reported. (Example: `"1.0.3"`) If `sync()` fails before a release is resolved, `onSyncError` receives `"unknown"`.
 
 > **Note:** The type definition for `onRolloutSkipped` includes a second `error` parameter, but the runtime passes no value for it, so it is always `undefined`.
+
+## Recording download file size by version
+
+`onDownloadSuccess` receives the target OTA label as its first argument and `{ baseVersion, downloadBytes }` as its second:
+
+```ts
+onDownloadSuccess: (targetVersion, { baseVersion, downloadBytes }) => {
+  console.log("codepush_download_success", {
+    baseVersion,
+    targetVersion,
+    downloadBytes,
+  });
+},
+```
+
+`downloadBytes` is the size in bytes of the final downloaded file used for the update, including any assets in the archive. A successful patch reports its patch file size; a full fallback reports only the full file size, excluding earlier attempts.
+
+`baseVersion` is the OTA label running before the download, or the native app version (`appVersion`) for the embedded bundle.
 
 ## How to record errors
 
