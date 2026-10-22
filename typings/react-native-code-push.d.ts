@@ -237,7 +237,7 @@ export interface CodePushOptions extends SyncOptions {
     /**
      * Callback function that is called when download finished successfully.
      */
-    onDownloadSuccess?: (label: string) => void | Promise<void>;
+    onDownloadSuccess?: (label: string, details: DownloadSuccessDetails) => void | Promise<void>;
     /**
      * Callback function that is called when sync process failed.
      */
@@ -246,6 +246,16 @@ export interface CodePushOptions extends SyncOptions {
      * Callback function that is called when rollout is skipped.
      */
     onRolloutSkipped?: (label: string, error: Error) => void | Promise<void>;
+}
+
+export interface DownloadSuccessDetails {
+    /** Running OTA label before downloading, or the native app version for the embedded bundle. */
+    baseVersion: string;
+
+    /** Final downloaded file size in bytes, excluding earlier fallback attempts.
+     * Null when running native code that predates download size reporting.
+     */
+    downloadBytes: number | null;
 }
 
 export interface DownloadProgress {
@@ -263,6 +273,14 @@ export interface DownloadProgress {
 }
 
 export interface LocalPackage extends Package {
+    /**
+     * Size in bytes of the final file `RemotePackage.download` used, excluding earlier fallback attempts.
+     * Only set on the package that call resolves with: it is not persisted in update metadata, so
+     * `getCurrentPackage` and `getUpdateMetadata` never return it. Undefined on native code that
+     * predates download size reporting.
+     */
+    downloadBytes?: number;
+
     /**
      * Installs the update by saving it to the location on disk where the runtime expects to find the latest version of the app.
      *

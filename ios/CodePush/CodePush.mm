@@ -788,12 +788,14 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
         _lastProgressEventTime = 0;
     }
 
+    __block long long downloadBytes = 0;
     [CodePushPackage
         downloadPackage:mutableUpdatePackage
         expectedBundleFileName:[bundleResourceName stringByAppendingPathExtension:bundleResourceExtension]
         operationQueue:_methodQueue
         // The download is progressing forward
         progressCallback:^(long long expectedContentLength, long long receivedContentLength) {
+            downloadBytes = receivedContentLength;
             // Received bytes only run backwards when a new download starts a stream of its
             // own - the next archive after a binary patch fallback. The pause left over
             // from the finished download would swallow that whole stream, so frame
@@ -830,17 +832,17 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary*)updatePackage
                 return reject([NSString stringWithFormat: @"%ld", (long)err.code], err.localizedDescription, err);
             }
 
+            NSMutableDictionary *downloadedPackage = [newPackage mutableCopy];
+            downloadedPackage[@"downloadBytes"] = @(downloadBytes);
             if (updateArchiveResult) {
                 // The result describes this download rather than the update, so it is put on
                 // what this call resolves with and nowhere else: the metadata that was
                 // written for the update knows nothing about it, and whoever asked for the
                 // download decides what the result is worth.
-                NSMutableDictionary *downloadedPackage = [newPackage mutableCopy];
                 downloadedPackage[UpdateArchiveResultKey] = updateArchiveResult;
-                return resolve(downloadedPackage);
             }
 
-            resolve(newPackage);
+            resolve(downloadedPackage);
         }
         // The download failed
         failCallback:^(NSError *err) {

@@ -17,7 +17,7 @@
 | 콜백 | 호출 시점 | 전달값 | 주의할 점 |
 | --- | --- | --- | --- |
 | `onDownloadStart` | 사용 가능한 업데이트 다운로드를 시작할 때 | `(label)` | 다운로드 자체의 시작을 의미합니다. |
-| `onDownloadSuccess` | 사용 가능한 업데이트 다운로드를 마쳤을 때 | `(label)` | 아직 설치 또는 정상 실행이 보장된 것은 아닙니다. |
+| `onDownloadSuccess` | 사용 가능한 업데이트 다운로드를 마쳤을 때 | `(label, details)` | 아직 설치 또는 정상 실행이 보장된 것은 아닙니다. |
 | `onUpdateArchiveResult` | binary patch / asset diff 업데이트 다운로드가 끝난 뒤, 설치 전에 | `(label, result)` | 어떤 아카이브를 사용했고 patch fallback이 있었는지 확인합니다. |
 | `onUpdateSuccess` | 설치한 업데이트가 실행되고 `notifyAppReady`로 성공을 확정했을 때 | `(label)` | 실제 업데이트 성공을 기록할 시점입니다. |
 | `onUpdateRollback` | 설치한 업데이트 실행에 실패해 이전 버전으로 롤백할 때 | `(label)` | 다운로드 성공이나 설치 성공과는 별개입니다. |
@@ -27,6 +27,23 @@
 `label`은 보고 대상 릴리스입니다. (예시: `"1.0.3"`) 릴리스가 결정되기 전에 `sync()`가 실패하면 `onSyncError`에는 `"unknown"`이 전달됩니다.
 
 > **참고:** `onRolloutSkipped`의 타입 정의에는 두 번째 `error` 매개변수가 존재하지만, 실제로는 아무것도 전달하지 않아 항상 `undefined` 값을 갖습니다.
+
+## 버전별 다운로드 파일 크기 기록하기
+
+`onDownloadSuccess`의 첫 번째 인자는 목표 OTA 버전입니다. 두 번째 인자에는 다운로드 전 실행 중이던 OTA 버전인 `baseVersion`과, 최종적으로 사용한 파일 하나의 크기인 `downloadBytes`가 전달됩니다.
+
+```ts
+onDownloadSuccess: (targetVersion, { baseVersion, downloadBytes }) => {
+  console.log("codepush_download_success", {
+    baseVersion,
+    targetVersion,
+    downloadBytes,
+  });
+},
+```
+
+- `downloadBytes`는 바이트 단위입니다. patch 성공이면 patch 파일, full fallback이면 최종 full 파일의 크기이며 앞서 실패한 파일은 합산하지 않습니다. 번들만의 크기가 아니라 다운로드한 아카이브 전체의 크기입니다.
+- 내장 번들을 실행 중이었다면 `baseVersion`은 네이티브 앱 버전(`appVersion`)입니다.
 
 ## 오류를 기록하는 방법
 

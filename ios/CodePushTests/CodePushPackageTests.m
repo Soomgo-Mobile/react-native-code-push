@@ -21,6 +21,21 @@
 + (NSString *)getCodePushPath;
 @end
 
+// The bridge entry point is tested without starting a JavaScript runtime.
+@interface CodePush (DownloadTestAccess)
+- (void)downloadUpdate:(NSDictionary *)package notifyProgress:(BOOL)notifyProgress
+              resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject;
+@end
+
+@interface CPDownloadTestModule : CodePush
+@end
+
+@implementation CPDownloadTestModule
+- (void)dispatchDownloadProgressEvent {
+    // Event delivery belongs to React Native; the download and its result remain real.
+}
+@end
+
 static NSString *const ExpectedBundleFileName = @"main.jsbundle";
 /* The metadata the install writes last, which is not part of the contents the hash is for. */
 static NSString *const UpdateMetadataFileName = @"app.json";
@@ -745,6 +760,60 @@ static NSData *CPTestBytes(NSString *text) {
     // The sentinel sits beside the test packages rather than inside them, so clearing the
     // updates does not take it away.
     [[NSFileManager defaultManager] removeItemAtPath:sentinelPath error:nil];
+}
+
+#pragma mark - Download size returned through the native module
+
+- (void)assertModuleDownload:(NSDictionary *)package hasFileSizeAtURL:(NSString *)archiveURL {
+    XCTestExpectation *finished = [self expectationWithDescription:@"native module download"];
+    CPDownloadTestModule *module = [CPDownloadTestModule new];
+    dispatch_queue_t queue = dispatch_queue_create("codepush.test.module-download", DISPATCH_QUEUE_SERIAL);
+    [module setValue:queue forKey:@"methodQueue"];
+    __block NSDictionary *result = nil;
+    [module downloadUpdate:package notifyProgress:NO resolve:^(id value) {
+        result = value;
+        [finished fulfill];
+    } reject:^(NSString *code, NSString *message, NSError *error) {
+        XCTFail(@"download failed: %@ %@", code, message);
+        [finished fulfill];
+    }];
+    [self waitForExpectations:@[finished] timeout:10];
+
+    NSDictionary *attributes = [[NSFileManager defaultManager]
+        attributesOfItemAtPath:[[NSURL URLWithString:archiveURL] path] error:nil];
+    XCTAssertNotNil(result);
+    XCTAssertNotNil(attributes[NSFileSize]);
+    XCTAssertEqualObjects(result[@"downloadBytes"], attributes[NSFileSize]);
+    NSError *error = nil;
+    NSDictionary *metadata = [CodePushPackage getPackage:package[@"packageHash"] error:&error];
+    XCTAssertNil(error);
+    XCTAssertNil(metadata[@"downloadBytes"]);
+}
+
+- (void)testModuleReturnsFullFileSizeWithoutProgressSubscription {
+    NSString *staging = [self stageFullArchiveContents];
+    NSString *fullURL = [self serveArchive:staging named:@"full.zip"];
+    [self assertModuleDownload:@{ @"packageHash": CPTestFolderHash(staging), @"downloadUrl": fullURL }
+             hasFileSizeAtURL:fullURL];
+}
+
+- (void)testModuleReturnsPatchFileSizeWithoutProgressSubscription {
+    NSString *staging = [self stageFullArchiveContents];
+    NSString *patchURL = [self serveArchive:[self stagePatchArchiveContents] named:@"patch.zip"];
+    [self assertModuleDownload:@{
+        @"packageHash": CPTestFolderHash(staging),
+        @"downloadUrl": [self urlOfMissingFileNamed:@"unused-full.zip"],
+        @"binaryPatchDownloadUrl": patchURL,
+    } hasFileSizeAtURL:patchURL];
+}
+
+- (void)testModuleReturnsOnlyFullFileSizeAfterFallbackWithoutProgressSubscription {
+    NSString *staging = [self stageFullArchiveContents];
+    NSString *fullURL = [self serveArchive:staging named:@"full.zip"];
+    [self assertModuleDownload:@{
+        @"packageHash": CPTestFolderHash(staging), @"downloadUrl": fullURL,
+        @"binaryPatchDownloadUrl": [self serveBytes:CPTestBytes(@"invalid patch archive") named:@"patch.zip"],
+    } hasFileSizeAtURL:fullURL];
 }
 
 #pragma mark - Reporting the download

@@ -629,6 +629,9 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
     remotePackageLabel = remotePackage?.label;
 
     const doDownloadAndInstall = async () => {
+      const runningPackage = await CodePush.getUpdateMetadata(CodePush.UpdateState.RUNNING);
+      const baseVersion = runningPackage?.label ?? (await getConfiguration("sync")).appVersion;
+
       syncStatusChangeCallback(CodePush.SyncStatus.DOWNLOADING_PACKAGE);
       invokeTelemetryCallback('onDownloadStart', sharedCodePushOptions.onDownloadStart, remotePackageLabel);
 
@@ -637,7 +640,10 @@ async function syncInternal(options = {}, syncStatusChangeCallback, downloadProg
         onUpdateArchiveResult && ((result) => onUpdateArchiveResult(remotePackageLabel, result)),
       );
 
-      invokeTelemetryCallback('onDownloadSuccess', sharedCodePushOptions.onDownloadSuccess, remotePackageLabel);
+      invokeTelemetryCallback('onDownloadSuccess', sharedCodePushOptions.onDownloadSuccess, remotePackageLabel, {
+        baseVersion,
+        downloadBytes: localPackage.downloadBytes ?? null,
+      });
 
       // Determine the correct install mode based on whether the update is mandatory or not.
       resolvedInstallMode = localPackage.isMandatory ? syncOptions.mandatoryInstallMode : syncOptions.installMode;
@@ -763,8 +769,8 @@ let CodePush;
  *   onDownloadStart: (label: string) => void | Promise<void> | undefined,
  *   setOnDownloadStart(onDownloadStartFunction: (label: string) => void | Promise<void> | undefined): void,
  *
- *   onDownloadSuccess: (label: string) => void | Promise<void> | undefined,
- *   setOnDownloadSuccess(onDownloadSuccessFunction: (label: string) => void | Promise<void> | undefined): void,
+ *   onDownloadSuccess: (label: string, details: DownloadSuccessDetails) => void | Promise<void> | undefined,
+ *   setOnDownloadSuccess(onDownloadSuccessFunction: (label: string, details: DownloadSuccessDetails) => void | Promise<void> | undefined): void,
  *
  *   onSyncError: (label: string, error: Error) => void | Promise<void> | undefined,
  *   setOnSyncError(onSyncErrorFunction: (label: string, error: Error) => void | Promise<void> | undefined): void,
