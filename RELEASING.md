@@ -11,10 +11,9 @@ GitHub Actions와 npm Trusted Publishing(OIDC)으로 배포합니다. 장기 npm
 3. `version_type`에서 `patch`, `minor`, `major` 중 하나를 선택합니다.
 4. beta 버전을 배포하려면 `beta`를 선택한 뒤 워크플로를 실행합니다.
 5. 생성된 `release/v<version>` PR에서 `Approve workflows to run`을 선택합니다. `Unit Test`가 통과하면 PR을 병합합니다.
-6. PR을 병합하면 Release 워크플로가 태그와 Draft GitHub Release를 만들고 패키지를 검증합니다.
-7. Draft GitHub Release에 작성된 릴리즈 노트를 검토하고 필요한 내용을 편집합니다.
-8. 문제가 없다면 Release 워크플로에서 `npm-release` 배포를 승인합니다.
-9. npm 배포가 끝나면 Draft GitHub Release에서 `Publish release`를 선택해 직접 공개합니다.
+6. PR을 병합하면 Release 워크플로가 패키지를 검증하고 태그와 Draft GitHub Release를 만든 뒤, 별도 승인 없이 npm에 자동 배포합니다.
+7. npm 배포가 끝나면 Draft GitHub Release에 작성된 릴리즈 노트를 검토하고 필요한 내용을 편집합니다.
+8. Draft GitHub Release에서 `Publish release`를 선택해 직접 공개합니다.
 
 정식 버전은 npm의 `latest` dist-tag로 배포합니다. beta 버전은 `beta` dist-tag와 GitHub prerelease로 배포합니다.
 선택한 버전이 현재 `beta` dist-tag보다 낮으면 워크플로가 배포를 중단합니다. `beta` dist-tag가 이전 버전으로 돌아가는 상황을 막기 위한 검사입니다.
