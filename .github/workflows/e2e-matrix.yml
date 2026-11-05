@@ -98,10 +98,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-${{ matrix.app }}-
 
-      - name: Install Maestro CLI
+      - name: Install Speedrun PoC
+        env:
+          SPEEDRUN_POC_DIR: ${{ runner.temp }}/speedrun-poc
         run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/hubastard/speedrun/v0.4.4/install.sh -o "$RUNNER_TEMP/install-speedrun.sh"
+          SPEEDRUN_VERSION=v0.4.4 SPEEDRUN_DIR="$SPEEDRUN_POC_DIR" SPEEDRUN_NO_MODIFY_PATH=1 bash "$RUNNER_TEMP/install-speedrun.sh"
+          python3 e2e/speedrun-ci-poc.py
+          echo "SPEEDRUN_POC_DIR=$SPEEDRUN_POC_DIR" >> "$GITHUB_ENV"
+          echo "$SPEEDRUN_POC_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Select Xcode
         env:
@@ -161,12 +166,20 @@ jobs:
             npm run e2e -- --app "${{ matrix.app }}" --platform ios --simulator "${{ steps.boot-simulator.outputs.simulator_udid }}" --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG
           fi
 
+      - name: Upload Speedrun debug output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedrun-ios-${{ matrix.app }}-debug
+          path: ${{ runner.temp }}/speedrun-poc/debug
+          if-no-files-found: ignore
+
   e2e-android:
     if: ${{ inputs.run_android }}
     needs: resolve-app-matrix
     name: e2e-android (${{ matrix.app }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -214,20 +227,15 @@ jobs:
           E2E_EXPO_ANDROID_OVERRIDE_ENABLED: ${{ startsWith(matrix.app, 'Expo') }}
           E2E_EXPO_ANDROID_APP_JSON_PATH: Examples/${{ matrix.app }}/app.json
 
-      - name: Install maestro-runner
+      - name: Install Speedrun PoC
+        env:
+          SPEEDRUN_POC_DIR: ${{ runner.temp }}/speedrun-poc
         run: |
-          for attempt in 1 2 3; do
-            if curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Failed to install maestro-runner after 3 attempts."
-              exit 1
-            fi
-            echo "maestro-runner install failed (attempt $attempt/3). Retrying in 10s..."
-            sleep 10
-          done
-          echo "$HOME/.maestro-runner/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/hubastard/speedrun/v0.4.4/install.sh -o "$RUNNER_TEMP/install-speedrun.sh"
+          SPEEDRUN_VERSION=v0.4.4 SPEEDRUN_DIR="$SPEEDRUN_POC_DIR" SPEEDRUN_NO_MODIFY_PATH=1 bash "$RUNNER_TEMP/install-speedrun.sh"
+          python3 e2e/speedrun-ci-poc.py
+          echo "SPEEDRUN_POC_DIR=$SPEEDRUN_POC_DIR" >> "$GITHUB_ENV"
+          echo "$SPEEDRUN_POC_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Run Android E2E
         env:
@@ -240,3 +248,11 @@ jobs:
           profile: pixel_7
           emulator-boot-timeout: 900
           script: TIMING_SENSITIVE_ARG=$([ "${{ inputs.exclude_timing_sensitive }}" = "true" ] && echo "--exclude-timing-sensitive" || echo ""); if [ "${{ startsWith(matrix.app, 'Expo') }}" = "true" ]; then npm run e2e -- --app "${{ matrix.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG; else npm run e2e -- --app "${{ matrix.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG; fi
+
+      - name: Upload Speedrun debug output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedrun-android-${{ matrix.app }}-debug
+          path: ${{ runner.temp }}/speedrun-poc/debug
+          if-no-files-found: ignore

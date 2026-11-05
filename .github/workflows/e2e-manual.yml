@@ -108,7 +108,7 @@ jobs:
 
       - name: Run iOS E2E
         env:
-          E2E_RETRY_COUNT: "1"
+          E2E_RETRY_COUNT: "3"
           E2E_RETRY_DELAY_SEC: "30"
           E2E_EXCLUDE_TIMING_SENSITIVE: ${{ inputs.exclude_timing_sensitive }}
         run: |
@@ -124,7 +124,7 @@ jobs:
           fi
 
       - name: Upload Speedrun debug output
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: speedrun-ios-debug
@@ -190,7 +190,7 @@ jobs:
 
       - name: Run Android E2E
         env:
-          E2E_RETRY_COUNT: "1"
+          E2E_RETRY_COUNT: "3"
           E2E_RETRY_DELAY_SEC: "30"
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -201,7 +201,7 @@ jobs:
           script: TIMING_SENSITIVE_ARG=$([ "${{ inputs.exclude_timing_sensitive }}" = "true" ] && echo "--exclude-timing-sensitive" || echo ""); if [ "${{ inputs.expo }}" = "true" ]; then npm run e2e -- --app "${{ inputs.app }}" --platform android --framework expo --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG; else npm run e2e -- --app "${{ inputs.app }}" --platform android --retry-count "$E2E_RETRY_COUNT" --retry-delay-sec "$E2E_RETRY_DELAY_SEC" $TIMING_SENSITIVE_ARG; fi
 
       - name: Upload Speedrun debug output
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: speedrun-android-debug
